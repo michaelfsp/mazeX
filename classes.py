@@ -45,12 +45,4 @@ class SquareMaze(nx.classes.graph.Graph):
 			
 		return adj_list
 		
-	
-
-class Task():
-	pass
-
-class Agent():
-	pass
-
 
