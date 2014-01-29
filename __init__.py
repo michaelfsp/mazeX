@@ -35,7 +35,7 @@ del sys
 from mazex.exception import *
 
 # MazeX classes
-from mazex.classes import *
+from mazex.mazes import *
 
 # Release data
 from networkx import release
