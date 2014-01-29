@@ -10,7 +10,7 @@ class SquareMaze(nx.classes.graph.Graph):
 		G = nx.Graph()
 		
 		for i in np.ndindex((size, size)):
-			G.add_node(G.number_of_nodes(), attr_dict={'pos':i})
+			G.add_node(i, attr_dict={'pos':i})
 
 		super(SquareMaze, self).__init__(G)
 	
