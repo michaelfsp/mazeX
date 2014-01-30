@@ -17,6 +17,9 @@ Using
     >>> G.add_node(42)
 
 """
+__author__   = "Michael Pereira"
+
+__version__ = "0.0.1_git"
 
 import sys
 if sys.version_info[:2] < (3, 0):
@@ -31,18 +34,9 @@ elif (3, 0) <= sys.version_info[:2] < (3, 3):
 
 del sys
 
-# MazeX exceptions
-from mazex.exception import *
-
-# MazeX classes
-from mazex.mazes import *
-
-# Release data
-from networkx import release
-
-__author__   = "Michael Pereira"
-
-__version__ = "0.0.1_git"
+"""
+These imports are here for now only for debugging purposes.
+"""
 
 #These are import orderwise
 from networkx.exception import  *
@@ -72,8 +66,19 @@ from networkx.algorithms import *
 import networkx.linalg
 
 from networkx.linalg import *
-from mazex.exception import  *
 
 import networkx.drawing
 from networkx.drawing import *
 
+"""
+And here we have the imports we really need.
+"""
+
+# MazeX exceptions
+from mazex.exceptions import *
+
+# MazeX classes
+from mazex.mazes import *
+
+# Drawing capabilities
+from mazex.drawing import *
