@@ -2,8 +2,6 @@ import numpy as np
 import networkx as nx
 import random
 
-import pdb
-
 class SquareMaze(nx.classes.graph.Graph):
 	"""Generic class of for square mazes.
 	"""
@@ -94,3 +92,15 @@ class RandomSquareMaze(SquareMaze):
 
 		return maze
 
+class RandomButConnectedSquareMaze(SquareMaze):
+	"""Generator for a random maze where all nodes are connected.
+
+	Parameters:
+	-----------
+	size : int
+		Maze size. Number of nodes will be size*size.
+
+	connectedness : float [0,1]
+		Fraction of all possible connections that actually exist.
+		"""
+	

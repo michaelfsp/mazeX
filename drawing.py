@@ -7,8 +7,6 @@ from mazex.mazes import SquareMaze
 from mazex.exceptions import *
 from mazex.task import *
 
-import pdb
-
 def draw(M, ax=None, hold=None, **kwds):
 	"""Represent a maze configuration.
 	
