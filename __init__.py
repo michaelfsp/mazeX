@@ -74,6 +74,10 @@ from networkx.drawing import *
 And here we have the imports we really need.
 """
 
+"""
+I believe we don't need these imports.
+
+
 # MazeX exceptions
 from mazex.exceptions import *
 
@@ -82,3 +86,7 @@ from mazex.mazes import *
 
 # Drawing capabilities
 from mazex.drawing import *
+
+# Task related stuff
+from mazex.task import *
+"""
