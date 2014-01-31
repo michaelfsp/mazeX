@@ -1,5 +1,8 @@
 import numpy as np
 import networkx as nx
+import random
+
+import pdb
 
 class SquareMaze(nx.classes.graph.Graph):
 	
@@ -21,10 +24,24 @@ class SquareMaze(nx.classes.graph.Graph):
 
 	@property
 	def possible_edges(self):
-		pass
+		"""List possible connections for given node.
+
+		Parameters:
+		-----------
+		node : node
+			Node to check for possible edges
+		"""
+		possible_edges = []
+
+		for n in self.nodes():
+			for nbr in self.adjacent_neighbors(n):
+				if nbr[0]>n[0] or nbr[1]>n[1]:
+					possible_edges.append((n, nbr))
+		return possible_edges
+
 	def adjacent_neighbors(self, n):
 		"""Returns a list of nodes located in the immediate physical
-		vicinity of node n.
+		vicinity of node n. It does not include "diagonal" neighbours.
 
 		Parameters
 		----------
@@ -36,17 +53,38 @@ class SquareMaze(nx.classes.graph.Graph):
 		nlist : list
 			A list of nodes physically adjacent to n
 		"""
-		adj_list = []
-		nodes = [c for c in self.pos.items()]
+		adj_list = ((n[0]-1, n[1]), (n[0], n[1]-1), (n[0]+1, n[1]),
+				(n[0], n[1]+1))
+		adj_neighbors = []	
 
-		for n in nodes:
-			pass	
-			
-		return adj_list
-		
+		for n in adj_list:
+			if n in self.nodes():
+				adj_neighbors.append(n)
+
+		return adj_neighbors
+
 class RandomSquareMaze(SquareMaze):
 
-	def __init__(self, size):
-		super(RandomSquareMaze, self).__init_(size)
-		
-	
+	def __new__(self, size, connectedness):
+		"""Generates a SquareMaze with random connectivity of
+		given connectedness.
+
+		Parameters:
+		-----------
+		size : int
+			Maze size. Number of nodes will be size*size.
+
+		connectedness : float [0,1]
+			Fraction of all possible connections that actually exist.
+		"""
+		maze = SquareMaze(size)
+
+		possible_edges = maze.possible_edges
+
+		edges_to_add = random.sample(possible_edges, round(len(
+			possible_edges)*connectedness)) 
+
+		maze.add_edges_from(edges_to_add)
+
+		return maze
+
