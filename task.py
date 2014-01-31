@@ -1,3 +1,5 @@
+from mazex.mazes import SquareMaze
+
 class Trial:
 	def __init__(self, maze, goal, start):
 		self.maze = maze
@@ -5,11 +7,6 @@ class Trial:
 		self.start = start
 		self.loc = start
 		self.steps = []
-
-	def check_path_seg(self, loc, path_seg):
-		"""Check if the path the agent wants to take is a valid one,
-		i.e. doesn't violate the maze configuration
-		"""
 
 	def solve(self, agent):
 		loc = self.loc
@@ -20,9 +17,24 @@ class Trial:
 			loc = next_path_seg[-1]
 
 class Step:
-	def __init__(self):
-		pass
+	def __init__(self, maze, current_loc, goal_loc, heading=None):
+		"""
 
+		Parameters:
+		-----------
+
+		heading : string
+			this is the direction the agent is heading toward. It
+			should be derived from the last agent's position by some
+			external method. It can assume values '^', '>', '<',
+			'v'
+		"""
+
+		if isinstance(maze, SquareMaze):
+			self.maze = maze
+		self.current_loc = current_loc
+		self.goal_loc = goal_loc
+		self.heading = heading
 
 class Session:
 	def __init__(self, start, agent, trials=None):
