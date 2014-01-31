@@ -44,4 +44,9 @@ class SquareMaze(nx.classes.graph.Graph):
 			
 		return adj_list
 		
+class RandomSquareMaze(SquareMaze):
 
+	def __init__(self, size):
+		super(RandomSquareMaze, self).__init_(size)
+		
+	
