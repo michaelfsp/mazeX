@@ -5,9 +5,13 @@ import random
 import pdb
 
 class SquareMaze(nx.classes.graph.Graph):
-	
+	"""Generic class of for square mazes.
+	"""
 	def __init__(self, size):
-		
+		"""Generates a square maze of given size and no connections.
+		Total number of nodes will size**2.
+		"""
+
 		# TODO: Check whether the graph instance is a possible maze
 		# configuration
 		G = nx.Graph()
@@ -63,8 +67,10 @@ class SquareMaze(nx.classes.graph.Graph):
 
 		return adj_neighbors
 
-class RandomSquareMaze(SquareMaze):
 
+class RandomSquareMaze(SquareMaze):
+	"""Generator of SuqareMaze with random connections.
+	"""
 	def __new__(self, size, connectedness):
 		"""Generates a SquareMaze with random connectivity of
 		given connectedness.
