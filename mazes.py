@@ -2,6 +2,8 @@ import numpy as np
 import networkx as nx
 import random
 
+from mazex.exceptions import *
+
 class SquareMaze(nx.classes.graph.Graph):
 	"""Generic class of for square mazes.
 	"""
@@ -26,12 +28,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
 	@property
 	def possible_edges(self):
-		"""List possible connections for given node.
-
-		Parameters:
-		-----------
-		node : node
-			Node to check for possible edges
+		"""List all possible connections for given maze.
 		"""
 		possible_edges = []
 
@@ -43,6 +40,25 @@ class SquareMaze(nx.classes.graph.Graph):
 		possible_edges.sort()
 
 		return possible_edges
+	
+	@property
+	def absent_edges(self):
+		"""List edges that could exist but do not in the maze's
+		current state.
+		"""
+		absent_edges = self.possible_edges
+
+		for e in self.edges():
+			try:
+				absent_edges.remove(e)
+			except ValueError:
+				absent_edges.remove((e[1],e[0]))
+
+		return absent_edges
+
+	@property
+	def n_possible_edges(self):
+		return 2*((self.maze_size**2)-self.maze_size)
 
 	def adjacent_neighbors(self, n):
 		"""Returns a list of nodes located in the immediate physical
@@ -86,10 +102,8 @@ class RandomSquareMaze(SquareMaze):
 		"""
 		maze = SquareMaze(size)
 
-		possible_edges = maze.possible_edges
-
-		edges_to_add = random.sample(possible_edges, round(len(
-			possible_edges)*connectedness)) 
+		edges_to_add = random.sample(maze.possible_edges, round(
+			maze.n_possible_edges*connectedness)) 
 
 		maze.add_edges_from(edges_to_add)
 
@@ -105,5 +119,42 @@ class RandomButConnectedSquareMaze(SquareMaze):
 
 	connectedness : float [0,1]
 		Fraction of all possible connections that actually exist.
+	"""
+	def __new__(self, size, n_connections):
+		"""Generates a SquareMaze with random connectivity of
+		given connectedness.
+		
+		Note: This method is not very smart and could be easily
+		optimized.
+
+		Parameters:
+		-----------
+		size : int
+			Maze size. Number of nodes will be size*size.
+
+		n_connections : int [(size**2)-1, 2*((size**2)-size)]
+			Number of connections
 		"""
-	
+		if n_connections < (size**2)-1 or n_connections > 2*(
+				(size**2)-size):
+			raise NumberEdgesException
+
+		maze = SquareMaze(size)
+
+		maze.add_edges_from(maze.possible_edges)
+		
+		edges_to_remove = random.sample(maze.edges(),
+				maze.n_possible_edges-n_connections)
+
+		maze.remove_edges_from(edges_to_remove)
+
+		while not nx.is_connected(maze):
+			connection_to_remove = random.choice(
+					maze.edges())
+			connection_to_add = random.choice(
+					maze.absent_edges)
+			maze.remove_edge(*connection_to_remove)
+			maze.add_edge(*connection_to_add)
+
+		return maze
+
