@@ -5,5 +5,9 @@ class MazeXException(nx.exception.NetworkXException):
 	pass
 
 class DrawException(MazeXException):
-	def __init__(self):
-		self.message = "Don't know how to draw this object"
+	def __str__(self):
+		return "Don't know how to draw this object."
+
+class NumberEdgesException(MazeXException):
+	def __str__(self):
+		return "Invalid number of edges. Please review your input."
