@@ -39,6 +39,9 @@ class SquareMaze(nx.classes.graph.Graph):
 			for nbr in self.adjacent_neighbors(n):
 				if nbr[0]>n[0] or nbr[1]>n[1]:
 					possible_edges.append((n, nbr))
+		# This is optional but makes the output pretier
+		possible_edges.sort()
+
 		return possible_edges
 
 	def adjacent_neighbors(self, n):
