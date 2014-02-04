@@ -6,21 +6,28 @@ def softmax(beta, values):
 	Parameters:
 	-----------
 	beta : float, [0, inf+]
-		The temperature parameter of the softmax function. A very high
-		value causes greedy action, whereas a low value very stochastic
-		action selection (more exploration).
+		The inverse temperature parameter of the softmax function. A
+		very high value causes greedy action, whereas a low value very
+		stochastic action selection (more exploration).
 
-	values : list
+	values : list or numpy.array
 		The list of values of the actions available to the agent.
 	"""
+	# Reduce dimensionality of values to 1, if it is an array, else
+	# transform it into an array
+	try:
+		values.ravel() #will fail if it is not a numpy array
+	except AttributeError:
+		values = np.array([values])
+
 	#this is the calculation of the numerator of the equation
-	exp_elements = [exp_elements.append(np.exp(beta*v)) for v in values]
+	exp_elements = np.exp(beta*values)
 
 	#this is the calculation of the denominator of the equation
 	denominator = np.sum(exp_elements)	
 
 	#and here we compute the action probabilities
-	probs = [n/denominator for n in exp_elements] 	
+	probs = exp_elements/denominator 	
 
 	return probs
 
