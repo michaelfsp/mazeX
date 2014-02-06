@@ -209,7 +209,7 @@ class Agent:
 
 		
 class HeuristicAgent(Agent):
-	def __init__(self, loc, beta, kappa, gamma, heading=None):
+	def __init__(self, loc, beta, kappa, xi, heading=None):
 		"""Creates an agent that follows a directional heuristic.
 
 		Parameters:
@@ -217,12 +217,13 @@ class HeuristicAgent(Agent):
 		kappa : float
 			Concentration parameter for the von Mises distribution.
 
-		gamma : float
-			Cost parameter for recently performed actions
+		xi : float
+			Cost parameter for recently performed actions. From
+			the greek xanazõ, to relive ;)
 		"""
 		super(HeuristicAgent, self).__init__(loc, beta, heading)
 		self.kappa = kappa
-		self.gamma = gamma
+		self.xi = xi
 		# we are using an OrderedDict to store the last visited edges
 		# because it will make it easier to make the agent forget the
 		# older entries by using self._edge_visit_cache.popitem(
