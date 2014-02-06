@@ -112,8 +112,8 @@ class Agent:
 		# we will use the property decorator to turn self.loc into
 		# a smart property that agents with position memory will make
 		# use of
-		self._loc = loc 
-	
+		if assert_is_node(loc):
+			self._loc = loc 
 	
 	loc = property(_get_loc, _set_loc)
 
@@ -268,7 +268,7 @@ class HeuristicAgent(Agent):
 		values = vonmises.pdf(angles, kappa=self.kappa)
 
 class DirectedRandomAgent(Agent):
-	def __init__(self, conc, direction=0):
+	def __init__(self, loc, beta, conc, heading=None, direction=0):
 		"""Creates an agent that follows semi-random motion.
 		The choice probabilities of this agent follow
 		the circular von Mises distribution.
@@ -282,6 +282,7 @@ class DirectedRandomAgent(Agent):
 			Direction (location parameter for the von Mises
 			distribution in radians off the center.
 		"""
+		super(DirectedRandomAgent, self).__init__(loc, beta, heading)
 		self.direction = direction
 		self.conc = conc
 
