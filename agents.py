@@ -5,6 +5,13 @@ from collections import OrderedDict
 
 from mazex.exceptions import *
 
+def _get_loc(self):
+	return self._loc
+
+def _set_loc(self, node):
+	if assert_nodes_adjacent(self.loc, node):
+		self._loc = node
+
 def angle_between_nodes(loc, node1, node2):
 	"""A common function that determines the angle between a given edge and
 	the goal.
@@ -41,7 +48,9 @@ def assert_nodes_adjacent(node1, node2):
 	"""Determine whether node1 and node2 are in the immediate vicinity,
 	simply using Euclidian distance. Note that it does not check whether
 	this node exists on the maze nor whether the path between node1 and
-	node2 is free"""
+	node2 is free.
+	Note that transition to same node (staying in place) is not allowed.
+	"""
 	assert_is_node(node1)
 	assert_is_node(node2)
 	if np.sqrt((node2[0] - node1[0])**2 + (node2[1] - node1[1])**2) == 1:
@@ -104,12 +113,24 @@ class Agent:
 		# a smart property that agents with position memory will make
 		# use of
 		self._loc = loc 
+	
+	
+	loc = property(_get_loc, _set_loc)
 
-	@property
-	def loc(self):
-		"""The location property"""
-		return self._loc
+	def __reset_loc_to__(self, loc):
+		"""Since setting the agent's location for proximity checks for
+		adjacency and complains if the nodes are not adjacent, this
+		method can be called to force reset location to a specific one.
 
+		Parameters:
+		-----------
+
+		loc : node
+			New location
+		"""
+		if assert_is_node(loc):
+			self._loc = loc
+			
 	def angle_to_goal(self, node, goal):
 		"""A common function that determines the angle between a given edge and
 		the goal.
@@ -209,18 +230,16 @@ class HeuristicAgent(Agent):
 		self._edge_visit_cache = OrderedDict()
 		self.step_count = 0
 
-	@property
-	def loc(self):
-		"""The location property"""
-		return self._loc
+	def set_loc(self, node):
+		old_loc = self.loc
+		new_loc = node
 
-	@loc.setter
-	def loc(self, node):
-		assert_nodes_adjacent(self.loc, node)
+		_set_loc(self, new_loc)
+
 		# I am calling it a directed edge because our edges normally
 		# have a specific node order specification but here we care
 		# about node order in that it specifies a direction
-		directed_edge = (self.loc, node)
+		directed_edge = (old_loc, new_loc)
 
 		if directed_edge in self._edge_visit_cache:
 			# popitem() deletes the entry AND spits an output we
@@ -231,9 +250,8 @@ class HeuristicAgent(Agent):
 			self._edge_visit_cache.popitem(edge);
 
 		self._edge_visit_cache[directed_edge] = self.step_count
-		
-		# and here we finally set the location to the desired one
-		self._loc = node
+	
+	loc = property(_get_loc, set_loc)
 
 	def evaluate(self, nodeslist, goal):
 		"""Returns a vector with the edge values of each edge given as
