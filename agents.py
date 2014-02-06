@@ -262,13 +262,31 @@ class HeuristicAgent(Agent):
 		
 		Parameters:
 		-----------
-		nodes_list : list of np.array, dim=1
+		nodeslist : list of np.array, dim=1
 			Nodes for which the transition to is to be evaluated.
+
+		goal : node
+			Location of goal.
 		"""
 		angles = [angle_between_nodes(
 			self.loc, self.goal, n) for n in nodeslist] 
 		
 		values = vonmises.pdf(angles, kappa=self.kappa)
+
+		edgeslist = [(self.loc, node) for n in nodeslist]
+		
+		step_count_at_last_visit = []
+
+		for e in edgeslist:
+			if e in self._edge_visit_cache:
+				step_count_at_last_visit.append(
+						self._edge_visit_cache[e])
+			else:
+				# nodes that have never been visited we will
+				# assume they have been visited in "step -1"
+				# the value -1 doesn't play any actual role
+				# as these steps will have no penalization
+				step_count_at_last_visit.append(-1)
 
 class DirectedRandomAgent(Agent):
 	def __init__(self, loc, beta, conc, heading=None, direction=0):
