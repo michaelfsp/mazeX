@@ -250,6 +250,8 @@ class HeuristicAgent(Agent):
 			self._edge_visit_cache.popitem(edge);
 
 		self._edge_visit_cache[directed_edge] = self.step_count
+
+		self.step_count += 1
 	
 	loc = property(_get_loc, set_loc)
 
