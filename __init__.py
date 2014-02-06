@@ -19,7 +19,7 @@ Using
 """
 __author__   = "Michael Pereira"
 
-__version__ = "0.0.1_git"
+__version__ = "dev_git"
 
 import sys
 if sys.version_info[:2] < (3, 0):
@@ -73,7 +73,10 @@ from networkx.drawing import *
 """
 And here we have the imports we really need.
 """
-# MazeX classes
+# Agents
+from mazex.agents import *
+
+# Mazes
 from mazex.mazes import *
 
 # Drawing capabilities

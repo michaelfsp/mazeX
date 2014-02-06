@@ -1,4 +1,53 @@
 import numpy as np
+import random
+from scipy.stats import vonmises
+from collections import OrderedDict
+
+from mazex.exceptions import *
+
+def angle_between_nodes(loc, node1, node2):
+	"""A common function that determines the angle between a given edge and
+	the goal.
+
+	Parameters:
+	-----------
+	node : node or tuple
+		Node on the maze we want to evaluate the angle of
+	
+	loc : node or tuple
+		The current node
+	
+	goal : node or turple
+		The node of the ,y coordinates of the goal location.
+	"""
+	node1_vec = np.array(node1) - np.array(loc)
+	node2_vec = np.array(node2) - np.array(loc)
+	
+	return np.arccos(np.dot(node1_vec, node2_vec) / (np.linalg.norm(
+		node1_vec)*np.linalg.norm(node2_vec)))
+
+def assert_is_node(node):
+	# test the node follows our node naming convention
+	if not len(node) == 2:
+		raise InvalidNode
+	elif not type(node[0]) is int or not type(node[1]) is int:
+		raise InvalidNode
+	elif node[0] < 0 or node[1] < 0:
+		raise InvalidNode
+	else:
+		return True
+
+def assert_nodes_adjacent(node1, node2):
+	"""Determine whether node1 and node2 are in the immediate vicinity,
+	simply using Euclidian distance. Note that it does not check whether
+	this node exists on the maze nor whether the path between node1 and
+	node2 is free"""
+	assert_is_node(node1)
+	assert_is_node(node2)
+	if np.sqrt((node2[0] - node1[0])**2 + (node2[1] - node1[1])**2) == 1:
+		return True
+	else:
+		raise IlegalStep
 
 def softmax(beta, values):
 	"""A Softmax function.
@@ -26,44 +75,180 @@ def softmax(beta, values):
 	#this is the calculation of the denominator of the equation
 	denominator = np.sum(exp_elements)	
 
-	#and here we compute the action probabilities
+	#and hnndore we compute the action probabilities
 	probs = exp_elements/denominator 	
 
 	return probs
 
-def edge_angle(edge_vec, loc_coord, goal_coord):
-	"""A common function that determines the angle between a given edge and
-	the goal.
-	
-	Parameters:
-	-----------
-	edge_vec : list
-		List of edge vector x,y lengths with respect to the agent
-
-	loc_coord : tuple or list with 2 elements
-		The x,y coordinates of the current location.	
-	
-	goal_coord : tuple or list with 2 elements
-		The x,y coordinates of the goal location.
-	"""
-	loc_coord = np.array(loc_coord)
-	goal_coord = np.array(goal_coord)
-	
-	#reference goal location with respect to the agent's current position
-	goal_vec = goal_coord - loc_coord	
-	
-	return np.cross(edge_vec, goal_vec)/(np.linalg.norm(edge_vec)*
-			np.linalg.norm(goal_vec)) 
-
 
 class Agent:
-	def __init__(self):
-		self._step_cache = []
+	def __init__(self, loc, beta, heading=None):
+		"""Parameters:
+		-----------
 
-	def edge_angle_from_heading(self, loc, heading, edge):
+		beta : float
+			The inverse temperature parameter for the softmax
+			decision rule
+
+		heading : string
+			this is the direction the agent is heading toward. It
+			should be derived from the last agent's position by some
+			external method. It can assume values '^', '>', '<',
+			'v'
 		"""
-		"""	
+		self._step_cache = [] #for an agent that plans multiple steps
+		# at once
+		self.beta = beta
+		self.heading = heading
+		# we will use the property decorator to turn self.loc into
+		# a smart property that agents with position memory will make
+		# use of
+		self._loc = loc 
+
+	@property
+	def loc(self):
+		"""The location property"""
+		return self._loc
+
+	def angle_to_goal(self, node, goal):
+		"""A common function that determines the angle between a given edge and
+		the goal.
+		
+		Parameters:
+		-----------
+		node : node or tuple
+			Node on the maze we want to evaluate the angle of
+
+		goal : node or turple
+			The node of the ,y coordinates of the goal location.
 	
+		Output:
+		-------
+		angle : float
+			In radians
+		"""
+		
+		return angle_between_nodes(self.loc, node, goal)
+
+	def angle_to_heading(self, node):
+		"""Determines the angle formed between the vector pointing to
+		the the node 'node' and the vector pointing toward heading
+		direction.
+
+		Parameters:
+		-----------
+		node : node or tuple
+			The node for which direction the angle is to be
+			calculated.
+
+		Output:
+		-------
+		angle : float
+			In radians
+		"""	
+		#TODO: verify that this is the way coordinates are specified
+		
+		"""We will create a virtual heading_node which corresponds to
+		the node the agent is facing in order to facilitate
+		calculation by reusing the method anglet_between_nodes().
+		However do note that heading_note might have coordinates that 
+		are outside of the maze. This should still be OK.
+		"""
+		if not self.heading:
+			raise NoHeading
+		elif self.heading == '^':
+			heading_node = (self.loc[0], self.loc[1]+1)
+		elif self.heading == 'v':
+			heading_node = (self.loc[0], self.loc[1]-1)
+		elif self.heading == '<':
+			heading_node = (self.loc[0]-1, self.loc[1])
+		elif self.heading == '>':
+			heading_node = (self.loc[0]+1, self.loc[1])
+		else:
+			raise InvalidHeading
+
+		return angle_between_nodes(self.loc, node, heading_node)
+
+	def choose_edge_index(self, values):
+		"""Choose one edge using softmax decision rule based on the
+		edges values
+
+		Output:
+		-------
+		index : int
+			Index of the chosen edge
+		"""
+		choice_prob = softmax(self.beta, self.evaluate(values))
+
+		cum_prob = np.cumsum(choice_prob)
+		
+		random_number = random.uniform(0, cum_prob[-1])
+
+		return np.argmax(cum_prob >= random_number)
+
+		
+class HeuristicAgent(Agent):
+	def __init__(self, loc, beta, kappa, gamma, heading=None):
+		"""Creates an agent that follows a directional heuristic.
+
+		Parameters:
+		-----------
+		kappa : float
+			Concentration parameter for the von Mises distribution.
+
+		gamma : float
+			Cost parameter for recently performed actions
+		"""
+		super(HeuristicAgent, self).__init__(loc, beta, heading)
+		self.kappa = kappa
+		self.gamma = gamma
+		# we are using an OrderedDict to store the last visited edges
+		# because it will make it easier to make the agent forget the
+		# older entries by using self._edge_visit_cache.popitem(
+		# last=False)
+		self._edge_visit_cache = OrderedDict()
+		self.step_count = 0
+
+	@property
+	def loc(self):
+		"""The location property"""
+		return self._loc
+
+	@loc.setter
+	def loc(self, node):
+		assert_nodes_adjacent(self.loc, node)
+		# I am calling it a directed edge because our edges normally
+		# have a specific node order specification but here we care
+		# about node order in that it specifies a direction
+		directed_edge = (self.loc, node)
+
+		if directed_edge in self._edge_visit_cache:
+			# popitem() deletes the entry AND spits an output we
+			# want to silence with the ;
+			# it's necessary to delete the item with popitem()
+			# and readd it because only then it assumes the
+			# desired order in the ordered dictionary
+			self._edge_visit_cache.popitem(edge);
+
+		self._edge_visit_cache[directed_edge] = self.step_count
+		
+		# and here we finally set the location to the desired one
+		self._loc = node
+
+	def evaluate(self, nodeslist, goal):
+		"""Returns a vector with the edge values of each edge given as
+		input.
+		
+		Parameters:
+		-----------
+		nodes_list : list of np.array, dim=1
+			Nodes for which the transition to is to be evaluated.
+		"""
+		angles = [angle_between_nodes(
+			self.loc, self.goal, n) for n in nodeslist] 
+		
+		values = vonmises.pdf(angles, kappa=self.kappa)
+
 class DirectedRandomAgent(Agent):
 	def __init__(self, conc, direction=0):
 		"""Creates an agent that follows semi-random motion.
@@ -91,19 +276,9 @@ class DirectedRandomAgent(Agent):
 		edges : list
 			List of edges to evaluate
 		"""
+		pass
+
 	def next_path_seg(self, loc, goal, mazemodel, memory=None):
 		"""Calculates the position the agent wants to visit next.
 		"""
-
-class DirectionalHeuristicAgent(Agent):
-	def __init__(self, kappa, gamma, beta):
-		"""Creates an agent that follows a directional heuristic.
-
-		Parameters:
-		-----------
-		kappa : float
-			Concentration parameter for the von Mises distribution.
-
-		gamma : float
-			Cost parameter for recently performed actions
-	
+		pass
