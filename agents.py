@@ -82,18 +82,26 @@ def softmax(beta, values):
 	# Reduce dimensionality of values to 1, if it is an array, else
 	# transform it into an array
 	try:
-		values.ravel() #will fail if it is not a numpy array
+		values = values.ravel() #will fail if it is not a numpy array
 	except AttributeError:
-		values = np.array([values])
+		values = np.array(values)
 
-	#this is the calculation of the numerator of the equation
-	exp_elements = np.exp(beta*values)
+	if beta == float('inf'):
+		probs = np.zeros(len(values))
+		probs[np.argmax(values)] = 1
 
-	#this is the calculation of the denominator of the equation
-	denominator = np.sum(exp_elements)	
+	elif beta == float('-inf'):
+		probs = np.ones(len(values)) * 1/(len(values))
+	
+	else:
+		#this is the calculation of the numerator of the equation
+		exp_elements = np.exp(beta*values)
 
-	#and hnndore we compute the action probabilities
-	probs = exp_elements/denominator 	
+		#this is the calculation of the denominator of the equation
+		denominator = np.sum(exp_elements)	
+
+		#and hnndore we compute the action probabilities
+		probs = exp_elements/denominator 	
 
 	return probs
 
