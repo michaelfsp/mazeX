@@ -1,7 +1,9 @@
 from mazex.mazes import SquareMaze
+import copy
+from random import choice
 
 class Step:
-	def __init__(self, maze, current_loc, goal_loc, heading=None):
+	def __init__(self, maze, loc, goal, heading=None):
 		"""Initializes the Step.
 		
 		Parameters:
@@ -15,44 +17,60 @@ class Step:
 		if isinstance(maze, SquareMaze):
 			self.maze = maze
 
-		self.current_loc = current_loc
-		self.goal_loc = goal_loc
+		self.loc = loc
+		self.goal = goal
 		self.heading = heading
 
 
 class Trial:
-	def __init__(self, maze, start, goal, agent, max_steps=0, goal_reached=True):
-		self.maze = maze
-		self.goal = goal
-		self.start = start
-		self.loc = start
-		self.steps = []
-		self.step = Step(maze, start, goal, agent.heading)
+	def __init__(self, steps, agent, max_steps=0, goal_reached=True):
+		self.steps = [steps]
+
+		self.agent = agent
+
+		# Trial termination conditions
 		self.max_steps = max_steps
 		self.goal_reached = goal_reached
+	
+	@property
+	def loc(self):
+		return self.agent.loc
 
-	def __iter__(self):
-		return self
+	@property
+	def step(self):
+		return self.steps[-1]
 
-	def __next__(self):
-		if self._termination_condition():
-			raise StopIteration
+#	def __iter__(self):
+#		return self
+#
+#	def __next__(self):
+#		if self._termination_condition():
+#			raise StopIteration
 
-		else:
-			next_pos = self.agent.choose(self.step)	
-			self.step = Step(self.maze, next_pos, self.goal,
-				self.agent.heading)
-			return self.step	
+#		else:
+#			next_pos = self.agent.choose(self.step)	
+#			self.step = Step(self.maze, next_pos, self.goal,
+#				self.agent.heading)
+#			return self.step	
 
-	def solve(self, agent):
-		loc = self.loc
-		path = []
-		while loc != goal:
-			next_path_seg = agent.next_path_seg(loc, goal)
-			path.append(next_path_seg)
-			loc = next_path_seg[-1]
+	def go_to_next_step(self):
+		available_nodes = self.step.maze.neighbors(self.agent.loc)
 
-	def _termination_condition(self):
+		values = self.agent.evaluate(available_nodes, self.step.goal)
+
+		next_node = available_nodes[self.agent.choose_edge_index(
+			values)]
+
+		self.agent.loc = next_node
+
+		self.steps.append(Step(copy.deepcopy(self.step.maze),
+			self.agent.loc, self.step.goal, self.agent.heading))
+
+	def solve(self):
+		while not self.termination_condition():
+			self.go_to_next_step()
+		
+	def termination_condition(self):
 		"""This is a helper function for the simmulation methods.
 
 		Parameters:
@@ -66,10 +84,10 @@ class Trial:
 			In the most usual scenario, goal_reached=True, means
 			the trial is over when the agent has reached the goal
 		"""
-		if max_steps and len(self.steps) >= max_steps:
+		if self.max_steps and len(self.steps) >= self.max_steps:
 			return True
 
-		elif goal_reached and self.loc == self.goal:
+		elif self.goal_reached and self.agent.loc == self.step.goal:
 			return True
 
 		else:
@@ -91,17 +109,41 @@ class Session:
 
 		self.agent = agent
 		self.trials = trials
-		self.trial = trials[0]
-		self.step = self.trial.step
 
-	def __iter__(self):
-		return self	
+	@property
+	def trial(self):
+		return self.trials[-1]
 
-	def __next__(self):
-		if self.trial == self.trials[-1]:
-			raise StopIteration
-		
-		else:
-			self.step = self.trial.__next__()
-			return self.step
+#	def __iter__(self):
+#		return self	
+
+#	def __next__(self):
+#		if self.trial == self.trials[-1]:
+#			raise StopIteration
+#		
+#		else:
+#			self.step = self.trial.__next__()
+#			return self.step
+
+class SessionWithRandomTrials(Session):
+	def __init__(cls, agent, trials, trial_limit):
+		"""
+
+		Parameters:
+		-----------
+		number : int
+			Total number or trials
+		"""
+		super(SessionWithRandomTrials, self).__init__(agent, trials)
+		self.trial_limit = trial_limit
+
+	def go_to_new_random_trial(self):
+		new_trial = copy.deepcopy(self.trial)
+
+		new_goal = choice(new_trial.maze.nodes)
+
+		new_trial.goal = new_goal
+		new_trial = Trial(self.agent.loc, new_goal, self.agent,
+				self.Trial.max_steps, self.Trial.goal_reached)
+		self.trials.append(new_trial)
 

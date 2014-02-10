@@ -10,6 +10,14 @@ def _get_loc(self):
 
 def _set_loc(self, node):
 	if assert_nodes_adjacent(self.loc, node):
+		if node[1] > self.loc[1]:
+			self.heading = '^'
+		elif node[1] < self.loc[1]:
+			self.heading = 'v'
+		elif node[0] > self.loc[0]:
+			self.heading = '>'
+		elif node[0] < self.loc[0]:
+			self.heading = '<'
 		self._loc = node
 
 def angle_between_nodes(loc, node1, node2):
@@ -63,7 +71,7 @@ def softmax(beta, values):
 
 	Parameters:
 	-----------
-	beta : float, [0, inf+]
+	beta : float, [0+, inf+]
 		The inverse temperature parameter of the softmax function. A
 		very high value causes greedy action, whereas a low value very
 		stochastic action selection (more exploration).
@@ -94,10 +102,10 @@ class Agent:
 	def __init__(self, loc, beta, heading=None):
 		"""Parameters:
 		-----------
-
-		beta : float
-			The inverse temperature parameter for the softmax
-			decision rule
+		beta : float, [0+, inf+]
+			The inverse temperature parameter of the softmax function. A
+			very high value causes greedy action, whereas a low value very
+			stochastic action selection (more exploration).
 
 		heading : string
 			this is the direction the agent is heading toward. It
@@ -199,7 +207,7 @@ class Agent:
 		index : int
 			Index of the chosen edge
 		"""
-		choice_prob = softmax(self.beta, self.evaluate(values))
+		choice_prob = softmax(self.beta, values)
 
 		cum_prob = np.cumsum(choice_prob)
 		
@@ -226,9 +234,9 @@ class HeuristicAgent(Agent):
 		self.xi = xi
 		# we are using an OrderedDict to store the last visited edges
 		# because it will make it easier to make the agent forget the
-		# older entries by using self._edge_visit_cache.popitem(
+		# older entries by using self.edge_visit_cache.popitem(
 		# last=False)
-		self._edge_visit_cache = OrderedDict()
+		self.edge_visit_cache = OrderedDict()
 		self.step_count = 0
 
 	def set_loc(self, node):
@@ -242,15 +250,15 @@ class HeuristicAgent(Agent):
 		# about node order in that it specifies a direction
 		directed_edge = (old_loc, new_loc)
 
-		if directed_edge in self._edge_visit_cache:
+		if directed_edge in self.edge_visit_cache:
 			# popitem() deletes the entry AND spits an output we
 			# want to silence with the ;
 			# it's necessary to delete the item with popitem()
 			# and readd it because only then it assumes the
 			# desired order in the ordered dictionary
-			self._edge_visit_cache.popitem(edge);
+			self.edge_visit_cache.popitem(directed_edge);
 
-		self._edge_visit_cache[directed_edge] = self.step_count
+		self.edge_visit_cache[directed_edge] = self.step_count
 
 		self.step_count += 1
 	
@@ -268,19 +276,27 @@ class HeuristicAgent(Agent):
 		goal : node
 			Location of goal.
 		"""
-		angles = [angle_between_nodes(
-			self.loc, self.goal, n) for n in nodeslist] 
-		
-		values = vonmises.pdf(angles, kappa=self.kappa)
+		# this little trick makes the method work even if not a list
+		# but a single node is passed
+		try:
+			assert_is_node(nodeslist)
+			nodeslist = [nodeslist]
+		except InvalidNode:
+			pass
 
-		edgeslist = [(self.loc, node) for n in nodeslist]
+		angles = [angle_between_nodes(
+			self.loc, goal, n) for n in nodeslist] 
+		
+		values = np.array(vonmises.pdf(angles, kappa=self.kappa))
+
+		edgeslist = [(self.loc, n) for n in nodeslist]
 		
 		step_count_at_last_visit = []
 
 		for e in edgeslist:
-			if e in self._edge_visit_cache:
+			if e in self.edge_visit_cache:
 				step_count_at_last_visit.append(
-						self._edge_visit_cache[e])
+						self.edge_visit_cache[e])
 			else:
 				# nodes that have never been visited we will
 				# assume they have been visited in "step -1"
@@ -288,6 +304,33 @@ class HeuristicAgent(Agent):
 				# as these steps will have no penalization
 				step_count_at_last_visit.append(-1)
 
+		# This is the number of edges for which there is a visit
+		# record
+		
+		step_count_at_last_visit = np.array(step_count_at_last_visit)
+
+		n_visited_edges = np.count_nonzero(
+				step_count_at_last_visit > 0)
+
+		penalties = np.zeros(len(edgeslist))
+
+
+		while n_visited_edges > 0:
+			max_step_count = max(step_count_at_last_visit)
+			index_max_step_count = np.where(step_count_at_last_visit
+					== max_step_count)
+
+			penalties[index_max_step_count] = n_visited_edges * self.xi
+			# very dumb way of having max() finding the second
+			# max in the next iteration
+			step_count_at_last_visit[index_max_step_count] = -1
+			
+			n_visited_edges -= 1
+
+		values -= penalties
+
+		return values
+		
 class DirectedRandomAgent(Agent):
 	def __init__(self, loc, beta, conc, heading=None, direction=0):
 		"""Creates an agent that follows semi-random motion.
