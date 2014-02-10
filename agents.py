@@ -20,6 +20,10 @@ def _set_loc(self, node):
 			self.heading = '<'
 		self._loc = node
 
+	if self._step_cache and self._step_cache[0] == node:
+		self._step_cache.pop(0);
+	
+
 def angle_between_nodes(loc, node1, node2):
 	"""A common function that determines the angle between a given edge and
 	the goal.
