@@ -5,6 +5,8 @@ from collections import OrderedDict
 
 from mazex.exceptions import *
 
+from networkx.algorithms.shortest_paths import astar_path
+
 def _get_loc(self):
 	return self._loc
 
@@ -342,7 +344,42 @@ class HeuristicAgent(Agent):
 		values -= penalties
 
 		return values
+
+class OmniscientAgent(Agent):
+	def __init__(self, loc, maze, heading=None):
+		"""Creates an agent that has full knowledge of the maze and
+		uses Graph Theory algorithms to determine the shortest path
+		to goal"""
+		beta = float('inf')
+		super(OmniscientAgent, self).__init__(loc, beta, heading) 
+		self.maze = maze
+
+	def evaluate(self, nodeslist, goal):
+		"""Gets the next node in the node cache"""
+		if not self._step_cache:
+			self.plan_path(goal, self.maze);
+
+		values = []
+
+		for n in nodeslist:
+			if n == self._step_cache[0]:
+				values.append(1)
+			else:
+				values.append(0)
+
+		return values
+
+	def plan_path(self, goal, maze):
+		"""Populates _step_cache with a series of nodes along the
+		A* shortest path to goal and outputs that list"""
+		path = astar_path(maze, self.loc, goal)
+
+		# we discard the first node which is the start location
+		self._step_cache = path[1:]
+
+		return path
 		
+
 class DirectedRandomAgent(Agent):
 	def __init__(self, loc, beta, conc, heading=None, direction=0):
 		"""Creates an agent that follows semi-random motion.
