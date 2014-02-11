@@ -30,3 +30,11 @@ class InvalidNode(MazeXException):
 	def __str__(self):
 		return ("Invalid node specification. Nodes are of the format "
 				"(x, y).")
+
+class InvalidMaze(MazeXException):
+	def __str__(self):
+		return "Invalid maze specification."
+
+class InvalidAgent(MazeXException):
+	def __str__(self):
+		return "Invalid agent specification"
