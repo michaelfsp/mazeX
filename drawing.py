@@ -6,9 +6,37 @@ import pylab as pl
 import networkx as nx
 from mazex.mazes import SquareMaze
 from mazex.exceptions import *
-from mazex.task import *
+from mazex.task import Step, Trial
 
-def draw(M, ax=None, hold=None, **kwds):
+import pdb
+
+def draw_maze(M, ax=None, hold=None, **kwds):
+	"""Draw a maze configuration.
+	"""
+	if not isinstance(M, SquareMaze):
+		raise DrawException
+	if not ax:
+		ax = pl.gca()
+	# Makes sure the drawings are square and not rectangular
+	ax.set_aspect('equal')
+
+	# Passing kwds from function to function causes kwds to look like
+	# kwds = {'kwds': ...}
+	# Here we try to unzip that
+	try:
+		kwds = kwds['kwds']
+	except KeyError:
+		pass
+
+	#pdb.set_trace()
+
+	kwds['node_color'] = 'gray'
+ 	
+	if isinstance(M, SquareMaze):
+		nx.draw(M, pos=M.pos, ax=ax, hold=hold,	**kwds)
+
+
+def draw_step(S, ax=None, hold=None, **kwds):
 	"""Represent a maze configuration.
 	
 	Parameters:
@@ -20,59 +48,66 @@ def draw(M, ax=None, hold=None, **kwds):
 	   Additional parameters to be passed onto 
 	   newtworkx.draw()
 	"""
-	#if not ax:
-		#		ax = pl.gca()
-		# Makes sure the drawings are square and not rectangular
-		#ax.set_aspect('equal')
-
-	if isinstance(M, SquareMaze):
-		nx.draw(M, pos=M.pos, ax=ax, hold=hold, node_color='gray', **kwds)
-	
-	elif isinstance(M, Step):
-		# First we obtain a list of the nodes that are neither current
-		# nor goal location
-		normal_nodes = M.maze.nodes()
-		# And then we remove current and goal location nodes because
-		# those will be plotted differently
-		normal_nodes.remove(M.loc)
-		if M.goal != M.loc:
-			normal_nodes.remove(M.goal)
-		nx.draw(M.maze, pos=M.maze.pos, ax=ax, hold=True, node_color='gray',
-				nodelist=normal_nodes, kwds=kwds)
-		# Then we draw the nodes correspoding to current location
-		#  we use the heading to shape the arrow, if present
-		if M.heading:
-			shape = M.heading
-		else:
-			shape = '8'
-		nx.draw_networkx_nodes(M.maze, pos=M.maze.pos,
-				nodelist=[M.loc], node_color='b',
-				node_shape=shape)
-		# ... and goal location 
-		nx.draw_networkx_nodes(M.maze, pos=M.maze.pos,
-				nodelist=[M.goal], node_color='r',
-				node_shape='h') 
-
-	else:
+	if not isinstance(S, Step):
 		raise DrawException
+	# First we obtain a list of the nodes that are neither current
+	# nor goal location
+	normal_nodes = S.maze.nodes()
+	# And then we remove current and goal location nodes because
+	# those will be plotted differently
+	normal_nodes.remove(S.loc)
+	if S.goal != S.loc:
+		normal_nodes.remove(S.goal)
 
-	ax = pl.gca()
+	# Unzip kwds in case it is necessary from another function calling it
+	try:
+		kwds = kwds['kwds']
+	except KeyError:
+		pass
 
-	ax.set_aspect('equal')
+	#pdb.set_trace()	
 
-def draw_path(trial):
-	path = [s.loc for s in trial.steps]
-	path.append(trial.step.goal)
+	kwds['nodelist'] = normal_nodes
+	draw_maze(S.maze, ax=ax, hold=True, kwds=kwds)
+	# Then we draw the nodes correspoding to current location
+	#  we use the heading to shape the arrow, if present
+	if S.heading:
+		shape = S.heading
+	else:
+		shape = '8'
+	nx.draw_networkx_nodes(S.maze, pos=S.maze.pos,
+			nodelist=[S.loc], node_color='b',
+			node_shape=shape)
+	# ... and goal location 
+	nx.draw_networkx_nodes(S.maze, pos=S.maze.pos,
+			nodelist=[S.goal], node_color='r',
+			node_shape='h') 
 
+def draw_trial(T, ax=None, hold=None, **kwds):
+	"""Draw a Trial. Will represent the taken path if that is available.
+	"""
 	edges = []
 
-	for i in np.arange(len(path) -1):
-		edges.append((path[i], path[i+1]))
+	for i in range(len(T.path)-1):
+		edges.append((T.path[i], T.path[i+1]))
 
-	edges.append((path[-1], trial.step.goal))
+	#pdb.set_trace()
+	draw_step(T.steps[0], ax=ax, hold=True, kwds=kwds)
 
-	draw(trial.steps[0])
+	nx.draw_networkx_edges(T.step.maze, pos=T.step.maze.pos,
+			edgelist=edges, edge_color='g', width=4)
 
-	nx.draw_networkx_edges(trial.step.maze, pos=trial.step.maze.pos,
-			edgelist=edges, edge_color='g', width=3)
 
+def draw(M, ax=None, hold=None, **kwds):
+	"""Meta function. Calls the write draw function.
+	"""
+	if isinstance(M, SquareMaze):
+		draw_maze(M, ax=ax, hold=hold, kwds=kwds)
+	
+	elif isinstance(M, Step):
+		draw_step(M, ax=ax, hold=hold, kwds=kwds)
+	
+	elif isinstance(M, Trial):
+		draw_trial(M, ax=ax, hold=hold, kwds=kwds)
+	else:
+		raise DrawException
