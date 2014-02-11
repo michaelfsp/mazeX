@@ -40,6 +40,10 @@ class Trial:
 	def step(self):
 		return self.steps[-1]
 
+	@property
+	def path(self):
+		return [s.loc for s in self.steps]
+
 #	def __iter__(self):
 #		return self
 #
