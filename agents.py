@@ -265,12 +265,12 @@ class HeuristicAgent(Agent):
 		directed_edge = (old_loc, new_loc)
 
 		if directed_edge in self.edge_visit_cache:
-			# popitem() deletes the entry AND spits an output we
+			# pop() deletes the entry AND spits an output we
 			# want to silence with the ;
-			# it's necessary to delete the item with popitem()
-			# and readd it because only then it assumes the
+			# it's necessary to delete the item with pop()
+			# and re-add it because only then it assumes the
 			# desired order in the ordered dictionary
-			self.edge_visit_cache.popitem(directed_edge);
+			self.edge_visit_cache.pop(directed_edge);
 
 		self.edge_visit_cache[directed_edge] = self.step_count
 
