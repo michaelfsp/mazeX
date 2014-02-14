@@ -12,8 +12,8 @@ Using
 
     >>> import maze as mx
     >>> S=mx.SquareMaze(5)
-	#TODO: correct the following lines
-	>>> G.add_edge(1,2)
+    #TODO: correct the following lines
+    >>> G.add_edge(1,2)
     >>> G.add_node(42)
 
 """
