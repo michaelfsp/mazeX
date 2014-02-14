@@ -20,7 +20,7 @@ class SquareMaze(nx.classes.graph.Graph):
             G.add_node(i, attr_dict={'pos':i})
 
         super(SquareMaze, self).__init__(G)
-        self.maze_size = size
+        self.size = size
     
     @property
     def pos(self):
@@ -58,7 +58,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
     @property
     def n_possible_edges(self):
-        return 2*((self.maze_size**2)-self.maze_size)
+        return 2*((self.size**2)-self.size)
 
     def adjacent_neighbors(self, n):
         """Returns a list of nodes located in the immediate physical
