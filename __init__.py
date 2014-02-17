@@ -85,6 +85,8 @@ from mazex.drawing import *
 # Task related stuff
 from mazex.task import *
 
+# Analysis related stuff
+import mazex.analysis
 """
 I believe we don't need these imports.
 
