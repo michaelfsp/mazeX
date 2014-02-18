@@ -212,6 +212,11 @@ class Agent:
 
         return angle_between_nodes(self.loc, node, heading_node)
 
+    def choice_probs(self, values):
+        """Return choice probabilities given edge_values.
+        """
+        return softmax(self.beta, values)
+
     def choose_edge_index(self, values):
         """Choose one edge using softmax decision rule based on the
         edges values

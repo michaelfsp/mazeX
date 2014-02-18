@@ -1,6 +1,25 @@
 from mazex.mazes import SquareMaze
-import copy
-from random import choice
+from mazex.exceptions import *
+import random
+import numpy as np
+
+import pdb
+
+def choose(probs):
+    """Choose one edge using softmax decision rule based on the
+    edges values
+
+    Output:
+    -------
+    index : int
+        Index of the chosen edge
+    """
+    # This function is 5X faster than numpy.random.choice!!
+    cum_prob = np.cumsum(probs)
+
+    random_number = random.uniform(0, cum_prob[-1])
+
+    return np.argmax(cum_prob >= random_number)
 
 class Step:
     def __init__(self, maze, loc, goal, heading=None):
@@ -16,11 +35,18 @@ class Step:
         """
         if isinstance(maze, SquareMaze):
             self.maze = maze
+        else:
+            raise InvalidMaze
 
         self.loc = loc
         self.goal = goal
         self.heading = heading
+        self.values = []
+        self.probs = []
 
+    @property
+    def available_nodes(self):
+        return self.maze.neighbors(self.loc)
 
 class Trial:
     def __init__(self, steps, agent, max_steps=0, goal_reached=True):
@@ -58,17 +84,17 @@ class Trial:
 #           return self.step    
 
     def go_to_next_step(self):
-        available_nodes = self.step.maze.neighbors(self.agent.loc)
+        self.step.values = self.agent.evaluate(
+            self.step.available_nodes, self.step.goal)
+        
+        self.step.probs = self.agent.choice_probs(self.step.values)
 
-        values = self.agent.evaluate(available_nodes, self.step.goal)
-
-        next_node = available_nodes[self.agent.choose_edge_index(
-            values)]
+        next_node = self.step.available_nodes[choose(self.step.probs)]
 
         self.agent.loc = next_node
 
-        self.steps.append(Step(copy.deepcopy(self.step.maze),
-            self.agent.loc, self.step.goal, self.agent.heading))
+        self.steps.append(Step(self.step.maze, self.agent.loc,
+            self.step.goal, self.agent.heading))
 
     def solve(self):
         while not self.termination_condition():
@@ -91,7 +117,7 @@ class Trial:
         if self.max_steps and len(self.steps) >= self.max_steps:
             return True
 
-        elif self.goal_reached and self.agent.loc == self.step.goal:
+        elif self.goal_reached and self.step.loc == self.step.goal:
             return True
 
         else:
@@ -144,7 +170,7 @@ class SessionWithRandomTrials(Session):
     def go_to_new_random_trial(self):
         new_trial = copy.deepcopy(self.trial)
 
-        new_goal = choice(new_trial.maze.nodes)
+        new_goal = random.choice(new_trial.maze.nodes)
 
         new_trial.goal = new_goal
         new_trial = Trial(self.agent.loc, new_goal, self.agent,

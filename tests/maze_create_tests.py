@@ -1,2 +1,3 @@
-class TestCreateSquareMaze:
+"""Test Maze generation.
+"""
 
