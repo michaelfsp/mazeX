@@ -7,6 +7,7 @@ import networkx as nx
 from mazex.mazes import SquareMaze
 from mazex.exceptions import *
 from mazex.task import Step, Trial
+from mazex.analysis import distances_plot
 
 import pdb
 
@@ -96,6 +97,11 @@ def draw_trial(T, ax=None, hold=None, **kwds):
 
     nx.draw_networkx_edges(T.step.maze, pos=T.step.maze.pos,
             edgelist=edges, edge_color='g', width=4)
+
+
+def draw_distances_path(T):
+    distances_plot(T.step.maze, T.step.goal)
+
 
 
 def draw(M, ax=None, hold=None, **kwds):
