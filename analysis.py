@@ -31,25 +31,30 @@ def distances_plot(maze, goal):
     max_maze_distance = nx.algorithms.distance_measures.eccentricity(
             maze, goal)
     max_manhattan_distance = 2 * (maze.size-1)
-    distances = np.zeros((max_manhattan_distance+1, max_maze_distance+1))
-
+    
+    distances = np.zeros((max_maze_distance+1, max_manhattan_distance+1))
     
     for n in maze.nodes():
        maze_dist = nx.algorithms.shortest_path_length(maze, n, goal) 
        manhattan_dist = abs(goal[0] - n[0]) + abs(goal[1] - n[1])
        point = (manhattan_dist, maze_dist) 
-       distances[point] += 1
+
+       new_coord = to_dist_coord(n, maze, goal)
+       #import pdb; pdb.set_trace()
+       distances[new_coord] += 1
 
     # This turns every element of d into an int
     distances = distances.astype(int)
 
     shape = distances.shape
     mesh = np.meshgrid(range(shape[1]), range(shape[0]))
-    x, y = mesh
+    y, x = mesh
     x = x.flatten()
     y = y.flatten()
     ax = pl.gca()
     ax.set_aspect('equal')
+    # we create a mask that selects only the nonzero elements of the distances
+    # matrix so that the "0" points don't ruin the legend
     for i in np.unique(distances)[np.unique(distances)>0]:
         mask = distances.flatten()==i
         pl.scatter(x.flatten()[mask], y.flatten()[mask],
