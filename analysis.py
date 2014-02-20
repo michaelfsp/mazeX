@@ -23,7 +23,7 @@ class Map:
         self.goal = goal
         self._mapping = None
 
-def distances_plot(maze, goal):
+def distances_plot(maze, goal, **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.
     """
@@ -58,12 +58,14 @@ def distances_plot(maze, goal):
     for i in np.unique(distances)[np.unique(distances)>0]:
         mask = distances.flatten()==i
         pl.scatter(x.flatten()[mask], y.flatten()[mask],
-                s=15*np.pi*distances.flatten()[mask], c='k', label='%i'%i)
+                s=15*np.pi*distances.flatten()[mask], c='k', label='%i'%i,
+                **kwargs)
     pl.xlim([-0.5, max_maze_distance+0.5])
     pl.ylim([-0.5, max_manhattan_distance+0.5])
     pl.xticks(range(0, max_maze_distance+1))
     pl.yticks(range(0, max_manhattan_distance+1))
     pl.grid()
+    ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
     pl.xlabel('Maze distance to goal')
     pl.ylabel('Manhattan distance to goal')
     pl.legend(loc='upper left', scatterpoints=1)
@@ -72,8 +74,13 @@ def distances_plot(maze, goal):
 def distances_plot_path(trial):
     """Plot paths overlayed onto the distances plot.
     """
-    distances_plot(trial.step.maze, trial.step.goal)
-    for i in range(len(trial.path)):
-        if trial.path[i+1]:
-            pl.plot([trial.path[i][0], trial.path[i+1][0]],
-                    [trial.path[i][1], trial.path[i+1][1]])
+    distances_plot(trial.step.maze, trial.step.goal, zorder=10)
+    for i in range(len(trial.path)-2):
+        first_node = to_dist_coord(trial.path[i], trial.step.maze,
+                trial.step.goal)
+        second_node = to_dist_coord(trial.path[i+1], trial.step.maze,
+                trial.step.goal)
+        # zorder=1 sends the lines to the 'bottom layer'
+        pl.plot([first_node[0], second_node[0]], [first_node[1],
+            second_node[1]], 'g', linewidth=4, zorder=1)
+
