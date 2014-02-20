@@ -21,21 +21,9 @@ def draw_maze(M, ax=None, hold=None, **kwds):
     # Makes sure the drawings are square and not rectangular
     ax.set_aspect('equal')
 
-    # Passing kwds from function to function causes kwds to look like
-    # kwds = {'kwds': ...}
-    # Here we try to unzip that
-    try:
-        kwds = kwds['kwds']
-    except KeyError:
-        pass
-
-    #pdb.set_trace()
-
-    kwds['node_color'] = 'gray'
-    
     if isinstance(M, SquareMaze):
-        nx.draw(M, pos=M.pos, ax=ax, hold=hold, **kwds)
-
+        nx.draw(M, pos=M.pos, ax=ax, hold=hold, node_color='gray',
+                **kwds)
 
 def draw_step(S, ax=None, hold=None, **kwds):
     """Represent a maze configuration.
@@ -60,16 +48,7 @@ def draw_step(S, ax=None, hold=None, **kwds):
     if S.goal != S.loc:
         normal_nodes.remove(S.goal)
 
-    # Unzip kwds in case it is necessary from another function calling it
-    try:
-        kwds = kwds['kwds']
-    except KeyError:
-        pass
-
-    #pdb.set_trace()    
-
-    kwds['nodelist'] = normal_nodes
-    draw_maze(S.maze, ax=ax, hold=True, kwds=kwds)
+    draw_maze(S.maze, ax=ax, hold=True, nodelist=normal_nodes, **kwds)
     # Then we draw the nodes correspoding to current location
     #  we use the heading to shape the arrow, if present
     if S.heading:
@@ -92,28 +71,21 @@ def draw_trial(T, ax=None, hold=None, **kwds):
     for i in range(len(T.path)-1):
         edges.append((T.path[i], T.path[i+1]))
 
-    #pdb.set_trace()
-    draw_step(T.steps[0], ax=ax, hold=True, kwds=kwds)
+    draw_step(T.steps[0], ax=ax, hold=True, **kwds)
 
     nx.draw_networkx_edges(T.step.maze, pos=T.step.maze.pos,
             edgelist=edges, edge_color='g', width=4)
-
-
-def draw_distances_path(T):
-    distances_plot(T.step.maze, T.step.goal)
-
-
 
 def draw(M, ax=None, hold=None, **kwds):
     """Meta function. Calls the write draw function.
     """
     if isinstance(M, SquareMaze):
-        draw_maze(M, ax=ax, hold=hold, kwds=kwds)
+        draw_maze(M, ax=ax, hold=hold, **kwds)
     
     elif isinstance(M, Step):
-        draw_step(M, ax=ax, hold=hold, kwds=kwds)
+        draw_step(M, ax=ax, hold=hold, **kwds)
     
     elif isinstance(M, Trial):
-        draw_trial(M, ax=ax, hold=hold, kwds=kwds)
+        draw_trial(M, ax=ax, hold=hold, **kwds)
     else:
         raise DrawException
