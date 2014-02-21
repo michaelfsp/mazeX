@@ -22,7 +22,7 @@ def choose(probs):
     return np.argmax(cum_prob >= random_number)
 
 class Step:
-    def __init__(self, maze, loc, goal, heading=None):
+    def __init__(self, maze, loc, goal, heading=None, previous=None):
         """Initializes the Step.
         
         Parameters:
@@ -32,6 +32,9 @@ class Step:
             should be derived from the last agent's position by some
             external method. It can assume values '^', '>', '<',
             'v'
+
+        previous : Step
+            Previous step.
         """
         if isinstance(maze, SquareMaze):
             self.maze = maze
@@ -43,10 +46,25 @@ class Step:
         self.heading = heading
         self.values = []
         self.probs = []
+        self.previous = previous
 
     @property
     def available_nodes(self):
         return self.maze.neighbors(self.loc)
+
+    @property
+    def path(self):
+        """Calculates  path until current step by iterating over the previous
+        step's locations.
+        """
+        path = [self.loc]
+        previous_step = self.previous
+
+        while previous_step:
+            path.insert(0, previous_step.loc)
+            previous_step = previous_step.previous
+        return path
+
 
 class Trial:
     def __init__(self, steps, agent, max_steps=0, goal_reached=True):
@@ -68,7 +86,7 @@ class Trial:
 
     @property
     def path(self):
-        return [s.loc for s in self.steps]
+        return self.step.path
 
 #   def __iter__(self):
 #       return self
@@ -94,7 +112,7 @@ class Trial:
         self.agent.loc = next_node
 
         self.steps.append(Step(self.step.maze, self.agent.loc,
-            self.step.goal, self.agent.heading))
+            self.step.goal, self.agent.heading, self.step))
 
     def solve(self):
         while not self.termination_condition():
