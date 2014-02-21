@@ -50,3 +50,15 @@ def assert_nodes_adjacent(node1, node2):
     else:
         raise IlegalStep
 
+def check_elements_equal(lst):
+    """Check that all elements of list are identical.
+
+    Solution from # http://stackoverflow.com/q/3844948/
+    pointed out at (together with more solutions): 
+    http://stackoverflow.com/questions/3844801/check-if-all-elements-in-a-list
+    -are-identical
+
+    This implementation is the most efficient of the ones there listed for the
+    uses we are giving it.
+    """
+    return not lst or lst.count(lst[0]) == len(lst)

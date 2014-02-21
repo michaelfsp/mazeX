@@ -1,9 +1,8 @@
 from mazex.mazes import SquareMaze
 from mazex.exceptions import *
+from mazex.utils import check_elements_equal
 import random
 import numpy as np
-
-import pdb
 
 def choose(probs):
     """Choose one edge using softmax decision rule based on the
@@ -88,18 +87,29 @@ class Trial:
     def path(self):
         return self.step.path
 
-#   def __iter__(self):
-#       return self
-#
-#   def __next__(self):
-#       if self._termination_condition():
-#           raise StopIteration
+    @property
+    def maze(self):
+        """If all steps have the same maze, return that maze, else return a
+        list of mazes. This might not be after some refactoring to be done in 
+        a future incarnation.
+        """
+        mazes = [s.maze for s in self.steps]
+        if check_elements_equal(mazes):
+            return mazes[0]
+        else:
+            return mazes
 
-#       else:
-#           next_pos = self.agent.choose(self.step) 
-#           self.step = Step(self.maze, next_pos, self.goal,
-#               self.agent.heading)
-#           return self.step    
+    @property
+    def goal(self):
+        """If all steps have the same goal, return that goal, else return a
+        list of goals. This might not be after some refactoring to be done in 
+        a future incarnation.
+        """
+        goals = [s.goal for s in self.steps]
+        if check_elements_equal(goals):
+            return goals[0]
+        else:
+            return goals
 
     def go_to_next_step(self):
         self.step.values = self.agent.evaluate(
@@ -162,16 +172,6 @@ class Session:
     def trial(self):
         return self.trials[-1]
 
-#   def __iter__(self):
-#       return self 
-
-#   def __next__(self):
-#       if self.trial == self.trials[-1]:
-#           raise StopIteration
-#       
-#       else:
-#           self.step = self.trial.__next__()
-#           return self.step
 
 class SessionWithRandomTrials(Session):
     def __init__(cls, agent, trials, trial_limit):
