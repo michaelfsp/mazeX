@@ -51,6 +51,30 @@ class Map:
         self.goal = goal
         self._mapping = None
 
+
+def avg_dist_dir_prob(session):
+    """Calculate the average direction of choices in distances metric.
+    """
+    moves = np.zeros(4)
+    availability = np.zeros(4)
+
+    for t in session.trials:
+        # just to save on text we will save here the parameters we need to
+        # call the function to_dist_coord()
+        for i in range(len(t.steps)-1): # len(t.steps)-1 to exclude the goal
+            step = t.steps[i]
+            next_step = t.steps[i+1]
+            dist_params = (step.loc, t.maze, t.goal)
+            for a in step.available_nodes:
+                                availability[to_dist_direction(a,
+                                    *dist_params)] += 1
+            moves[to_dist_direction(next_step.loc, *dist_params)] += 1
+        
+        prob = moves/availability
+
+    return prob
+
+
 def distances_plot(maze, goal, **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.
