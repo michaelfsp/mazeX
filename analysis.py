@@ -123,7 +123,7 @@ def distances_plot(maze, goal, **kwargs):
     pl.xlabel('Maze distance to goal')
     pl.ylabel('Manhattan distance to goal')
     pl.legend(loc='upper left', scatterpoints=1)
-    return distances, mesh
+    return distances, x, y
 
 def distances_plot_path(trial):
     """Plot paths overlayed onto the distances plot.
