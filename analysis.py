@@ -45,6 +45,8 @@ def to_dist_coord(n, maze, goal):
 class Map:
     """Mapping between X,Y coordinates into Manhattan vs Shortest
     Path Distance coordinates.
+    
+    Not in use at the moment.
     """
     def __init__(self, maze, goal):
         self.maze = maze

@@ -192,7 +192,7 @@ class Session:
 
 
 class SessionWithRandomTrials(Session):
-    def __init__(cls, agent, trials, trial_limit):
+    def __init__(cls, agent, n_trials, first_trial, gen_func):
         """
 
         Parameters:
@@ -200,8 +200,9 @@ class SessionWithRandomTrials(Session):
         number : int
             Total number or trials
         """
+        trials = [first_trial] + (n_trials-1)*[None]
         super(SessionWithRandomTrials, self).__init__(agent, trials)
-        self.trial_limit = trial_limit
+        self.gen_func = gen_func
 
     def go_to_new_random_trial(self):
         new_trial = copy.deepcopy(self.trial)
