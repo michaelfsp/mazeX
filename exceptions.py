@@ -38,3 +38,7 @@ class InvalidMaze(MazeXException):
 class InvalidAgent(MazeXException):
     def __str__(self):
         return "Invalid agent specification"
+
+class WeirdDirection(MazeXException):
+    def __str__(self):
+        return "I didn't now transitions in this direction were possible!"
