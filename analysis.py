@@ -1,9 +1,37 @@
 """
 Analysis methods that don't rely on fitting should come here
 """
+from mazex.exceptions import *
 import networkx as nx
 import numpy as np
 import pylab as pl
+
+def to_dist_direction(n, loc, maze, goal):
+    """Calculate the direction in the distances space of a given transition
+    from loc to n.
+    
+    I am not sure if it is possible to have something other than
+    the 4 possible transitions I have identified so I will make
+    conditions very explicit in order to detect eventual
+    exceptions
+    """
+    loc = to_dist_coord(loc, maze, goal)
+    n = to_dist_coord(n, maze, goal)
+
+    if n[0]>loc[0] and n[1]>loc[1]:
+        "NE transition in our convention for the axis on this diagram"
+        return 0
+    elif n[0]>loc[0] and n[1]<loc[1]:
+        "SE transition in our convention for the axis on this diagram"
+        return 1
+    elif n[0]<loc[0] and n[1]<loc[1]:
+        "SW transition in our convention for the axis on this diagram"
+        return 2
+    elif n[0]<loc[0] and n[1]>loc[1]:
+        "NW transition in our convention for the axis on this diagram"
+        return 3
+    else:
+        raise WeirdDirection
 
 def to_dist_coord(n, maze, goal):
     """Returns the coordinates of node n in distance coordinates.
