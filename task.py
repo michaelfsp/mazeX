@@ -171,6 +171,24 @@ class Session:
     def trial(self):
         return self.trials[self.current_trial]
 
+    def next_trial(self):
+        return self.trials[self.current_trial+1]
+
+    def run(self):
+        """Runs the Session's trials sequentially. Note that it will solve
+        it again even if it has already been solved.
+        """
+        self.current_trial = 0
+        
+        # This statement only checks if the pointer self.current_trial is the
+        # same as the index of the current trial, and not for object identity
+        # (==) because it will allow for trials to be created on the fly.
+        while not self.current_trial == len(self.trial)-1:
+            self.trial.solve()
+            self.current_trial += 1
+
+        # solve the last trial
+        self.trial.solve()
 
 
 class SessionWithRandomTrials(Session):
