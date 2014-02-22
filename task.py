@@ -67,8 +67,7 @@ class Step:
 
 class Trial:
     def __init__(self, steps, agent, max_steps=0, goal_reached=True):
-        self.steps = [steps]
-
+        self.steps = steps
         self.agent = agent
 
         # Trial termination conditions
