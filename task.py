@@ -163,13 +163,14 @@ class Session:
         trials : list
             List of trials to be presented to the Agent
         """
-
         self.agent = agent
         self.trials = trials
+        self.current_trial = 0
 
     @property
     def trial(self):
-        return self.trials[-1]
+        return self.trials[self.current_trial]
+
 
 
 class SessionWithRandomTrials(Session):
