@@ -54,7 +54,7 @@ class Map:
         self._mapping = None
 
 
-def avg_dist_dir_prob(session):
+def avg_dist_dir_prob(session, plot=False):
     """Calculate the average direction of choices in distances metric.
     """
     moves = np.zeros(4)
@@ -74,10 +74,34 @@ def avg_dist_dir_prob(session):
         
         prob = moves/availability
 
-    return prob
+    if plot:
+        # we will use these signs to make the arrows point in the right
+        # direction
+        dx_sign = (1, 1, -1, -1)
+        dy_sign = (1, -1, -1, 1)
+        # Will be used for the plotting: hold until the last arrow is drawn
+        # and then stop the holding
+        hold = (True, True, True, False)
+        for i in range(len(prob)):
+            # we calculate the distance on x/y axis
+            proj_axis = np.sqrt(prob[i]**2/2)
+            dx = dx_sign[i] * proj_axis
+            dy = dy_sign[i] * proj_axis
+            pl.arrow(0, 0, dx, dy, hold[i], lw=2)
+
+        pl.xlim(-1.2, 1.2)
+        pl.ylim(-1.2, 1.2)
+        ax = pl.gca()
+        ax.set_aspect('equal')
+        pl.xlabel('$\Delta$Z')
+        pl.ylabel('$\Delta$M')
+        pl.tight_layout()
+
+    else:
+        return prob
 
 
-def distances_plot(maze, goal, **kwargs):
+def distances_plot(maze, goal, plot=True, **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.
     """
@@ -105,24 +129,27 @@ def distances_plot(maze, goal, **kwargs):
     y, x = mesh
     x = x.flatten()
     y = y.flatten()
-    ax = pl.gca()
-    ax.set_aspect('equal')
-    # we create a mask that selects only the nonzero elements of the distances
-    # matrix so that the "0" points don't ruin the legend
-    for i in np.unique(distances)[np.unique(distances)>0]:
-        mask = distances.flatten()==i
-        pl.scatter(x.flatten()[mask], y.flatten()[mask],
-                s=15*np.pi*distances.flatten()[mask], c='k', label='%i'%i,
-                **kwargs)
-    pl.xlim([-0.5, max_maze_distance+0.5])
-    pl.ylim([-0.5, max_manhattan_distance+0.5])
-    pl.xticks(range(0, max_maze_distance+1))
-    pl.yticks(range(0, max_manhattan_distance+1))
-    pl.grid()
-    ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
-    pl.xlabel('Maze distance to goal')
-    pl.ylabel('Manhattan distance to goal')
-    pl.legend(loc='upper left', scatterpoints=1)
+
+    if plot:
+        ax = pl.gca()
+        ax.set_aspect('equal')
+        # we create a mask that selects only the nonzero elements of the distances
+        # matrix so that the "0" points don't ruin the legend
+        for i in np.unique(distances)[np.unique(distances)>0]:
+            mask = distances.flatten()==i
+            pl.scatter(x.flatten()[mask], y.flatten()[mask],
+                    s=15*np.pi*distances.flatten()[mask], c='k', label='%i'%i,
+                    **kwargs)
+        pl.xlim([-0.5, max_maze_distance+0.5])
+        pl.ylim([-0.5, max_manhattan_distance+0.5])
+        pl.xticks(range(0, max_maze_distance+1))
+        pl.yticks(range(0, max_manhattan_distance+1))
+        pl.grid()
+        ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
+        pl.xlabel('Maze distance to goal')
+        pl.ylabel('Manhattan distance to goal')
+        pl.legend(loc='upper left', scatterpoints=1)
+
     return distances, x, y
 
 def distances_plot_path(trial):
