@@ -42,3 +42,8 @@ class InvalidAgent(MazeXException):
 class WeirdDirection(MazeXException):
     def __str__(self):
         return "I didn't now transitions in this direction were possible!"
+
+class NotBoundToParent(MazeXException):
+    def __str__(self):
+        return ("This object is not bound to any parent which causes this"
+                " mehod to not be available")
