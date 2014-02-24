@@ -62,11 +62,11 @@ def avg_dist_dir_prob(session, plot=False):
             next_step = t.steps[i+1]
             dist_params = (step.loc, t.maze, t.goal)
             for a in step.available_nodes:
-                                availability[to_dist_direction(a,
-                                    *dist_params)] += 1
+                availability[to_dist_direction(a, *dist_params)] += 1
+
             moves[to_dist_direction(next_step.loc, *dist_params)] += 1
         
-        prob = moves/availability
+    prob = moves/availability
 
     if plot:
         # we will use these signs to make the arrows point in the right
