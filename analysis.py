@@ -61,8 +61,13 @@ def avg_dist_dir_prob(session, plot=False):
             step = t.steps[i]
             next_step = t.steps[i+1]
             dist_params = (step.loc, t.maze, t.goal)
+
+            availability_indices = []
             for a in step.available_nodes:
-                availability[to_dist_direction(a, *dist_params)] += 1
+                availability_indices.append(to_dist_direction(a, *dist_params))
+            availability_indices = list(set(availability_indices))
+            # [[]] activates advanced indexing
+            availability[[availability_indices]] += 1
 
             moves[to_dist_direction(next_step.loc, *dist_params)] += 1
         
