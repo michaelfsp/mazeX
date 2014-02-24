@@ -43,10 +43,35 @@ def to_dist_coord(n, maze, goal):
 
     return (maze_dist, manhattan_dist)
 
-def avg_eucl_dir_prob(session):
-    """Calculate the average direction of choices relative to heading.
+def dist_dir_prob(session, point):
+    """Calculate the average direction of choices in distances metric for a
+    single point on the distances space.
+
+    It outputs n_times_choice / n_times_available
     """
-    pass
+    moves = np.zeros(4)
+    availability = np.zeros(4)
+
+    for t in session.trials:
+        # just to save on text we will save here the parameters we need to
+        # call the function to_dist_coord()
+        for i in range(len(t.steps)-1): # len(t.steps)-1 to exclude the goal
+            step = t.steps[i]
+            if to_dist_coord(step.loc, t.maze, t.goal) == point:
+                next_step = t.steps[i+1]
+                dist_params = (step.loc, t.maze, t.goal)
+
+                availability_indices = []
+                for a in step.available_nodes:
+                    availability_indices.append(to_dist_direction(a, *dist_params))
+                availability_indices = list(set(availability_indices))
+                # [[]] makes use of advanced indexing
+                availability[[availability_indices]] += 1
+                moves[to_dist_direction(next_step.loc, *dist_params)] += 1
+        
+    prob = moves/availability
+
+    return prob
 
 def avg_dist_dir_prob(session, plot=False):
     """Calculate the average direction of choices in distances metric.
