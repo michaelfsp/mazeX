@@ -2,6 +2,7 @@
 Analysis methods that don't rely on fitting should come here
 """
 from mazex.exceptions import *
+import mazex.utils as utils
 import networkx as nx
 import numpy as np
 import pylab as pl
@@ -42,17 +43,10 @@ def to_dist_coord(n, maze, goal):
 
     return (maze_dist, manhattan_dist)
 
-class Map:
-    """Mapping between X,Y coordinates into Manhattan vs Shortest
-    Path Distance coordinates.
-    
-    Not in use at the moment.
+def avg_eucl_dir_prob(session):
+    """Calculate the average direction of choices relative to heading.
     """
-    def __init__(self, maze, goal):
-        self.maze = maze
-        self.goal = goal
-        self._mapping = None
-
+    pass
 
 def avg_dist_dir_prob(session, plot=False):
     """Calculate the average direction of choices in distances metric.
@@ -100,32 +94,59 @@ def avg_dist_dir_prob(session, plot=False):
     else:
         return prob
 
+def max_distances(maze, goal=None):
+    if not goal:
+        max_maze_distance = nx.algorithms.distance_measures.diameter(maze)
+        max_manhattan_distance = 2 * (maze.size-1)
 
-def distances_plot(maze, goal, plot=True, **kwargs):
+    else:
+        max_maze_distance = nx.algorithms.distance_measures.eccentricity(maze,
+                goal)
+        # find largest x distance to this goal
+        max_x_dist = max((goal[0], maze.size-1 - goal[0]))
+        # same for y
+        max_y_dist = max((goal[1], maze.size-1 - goal[1]))
+        max_manhattan_distance = max_x_dist + max_y_dist
+
+    return (max_maze_distance, max_manhattan_distance)
+        
+def distances_plot(maze, goals=None, plot=True, **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.
     """
-    # Finds the longest distance to the goal in this particular maze and goal
-    max_maze_distance = nx.algorithms.distance_measures.eccentricity(
-            maze, goal)
-    max_manhattan_distance = 2 * (maze.size-1)
-    
-    distances = np.zeros((max_maze_distance+1, max_manhattan_distance+1))
-    
-    for n in maze.nodes():
-       maze_dist = nx.algorithms.shortest_path_length(maze, n, goal) 
-       manhattan_dist = abs(goal[0] - n[0]) + abs(goal[1] - n[1])
-       point = (manhattan_dist, maze_dist) 
+    # If no goal is specified, consider every node as a possible goal location
+    if not goals:
+        goals = maze.nodes()
 
-       new_coord = to_dist_coord(n, maze, goal)
-       #import pdb; pdb.set_trace()
-       distances[new_coord] += 1
+    # In case only one goal was passed as argument
+    # TODO: This is very hacky. improve...
+    try:
+        utils.assert_is_node(goals)
+        goals = [goals]
+    except InvalidNode:
+        pass
 
-    # This turns every element of d into an int
-    distances = distances.astype(int)
+    # for each goal calculate the maximum Maze and Manhattan distances, store
+    # that in a list, turn list into array and calculate the maximum over the
+    # first axis
+    max_distances_all = np.array([max_distances(maze, g) for g in goals]).max(0)
+    dist_shape = max_distances_all + 1
+    distances = np.zeros(dist_shape)
 
-    shape = distances.shape
-    mesh = np.meshgrid(range(shape[1]), range(shape[0]))
+    for goal in goals:
+        for n in maze.nodes():
+           new_coord = to_dist_coord(n, maze, goal)
+           distances[new_coord] += 1
+
+    if len(goals) == 1:
+        # This turns every element of d into an int
+        distances = distances.astype(int)
+
+    else:
+        distances = distances / len(goals)
+
+    # it is a bit hacky but it produces the plot we want... good for now
+    mesh = np.meshgrid(range(dist_shape[1]), range(dist_shape[0]))
     y, x = mesh
     x = x.flatten()
     y = y.flatten()
@@ -133,24 +154,28 @@ def distances_plot(maze, goal, plot=True, **kwargs):
     if plot:
         ax = pl.gca()
         ax.set_aspect('equal')
-        # we create a mask that selects only the nonzero elements of the distances
-        # matrix so that the "0" points don't ruin the legend
-        for i in np.unique(distances)[np.unique(distances)>0]:
-            mask = distances.flatten()==i
-            pl.scatter(x.flatten()[mask], y.flatten()[mask],
-                    s=15*np.pi*distances.flatten()[mask], c='k', label='%i'%i,
-                    **kwargs)
-        pl.xlim([-0.5, max_maze_distance+0.5])
-        pl.ylim([-0.5, max_manhattan_distance+0.5])
-        pl.xticks(range(0, max_maze_distance+1))
-        pl.yticks(range(0, max_manhattan_distance+1))
+        # multiplies the value to obtain number of pixels in the surface
+        area_factor = 15 * np.pi
+        pl.scatter(x.flatten(), y.flatten(),
+                    s=area_factor*distances.flatten(), c='k', **kwargs)
+
+        # Very ugly hack just to get some legend working
+        bullet_sizes = np.arange(1, distances.max()+1, 1)
+        for b in bullet_sizes:
+            pl.scatter(-1,-1, s=area_factor*b, c='k', label='%i' %b, **kwargs)
+        pl.legend(loc='upper left', scatterpoints=1, title='<nodes>')
+
+        pl.xlim([-0.5, max_distances_all[0]+0.5])
+        pl.ylim([-0.5, max_distances_all[1]+0.5])
+        pl.xticks(range(0, max_distances_all[0]+1))
+        pl.yticks(range(0, max_distances_all[1]+1))
         pl.grid()
         ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
         pl.xlabel('Maze distance to goal')
         pl.ylabel('Manhattan distance to goal')
-        pl.legend(loc='upper left', scatterpoints=1)
 
-    return distances, x, y
+    else:
+        return distances, x, y
 
 def distances_plot_path(trial):
     """Plot paths overlayed onto the distances plot.
