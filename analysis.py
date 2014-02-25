@@ -151,11 +151,13 @@ def per_dist_avg_dir_prob(session, plot=False):
         dx_sign = (1, 1, -1, -1)
         dy_sign = (1, -1, -1, 1)
         # scale just so that arrows don't overlap
-        scale = 0.50
+        scale = 1
         for direction in range(0, 4):
             xy_proj = scale * np.sqrt(dir_probs[:,:,direction]**2/2).transpose().flatten()
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*xy_proj,
-                    dy_sign[direction]*xy_proj, color='b') 
+                   dy_sign[direction]*xy_proj, color='b') 
+
+
 
 def max_distances(maze, goals=None):
     # the output of this function is the maximum of an array called
