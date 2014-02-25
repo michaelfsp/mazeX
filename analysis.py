@@ -43,6 +43,8 @@ def to_dist_coord(n, maze, goal):
 
     return (maze_dist, manhattan_dist)
 
+#TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
+#   separate function
 def dist_dir_prob(session, point):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
@@ -124,6 +126,36 @@ def avg_dist_dir_prob(session, plot=False):
     else:
         return prob
 
+def per_dist_avg_dir_prob(session, plot=False):
+    # session.maze will return a list if not all trials use the same maze
+    # in which case it will be iterable
+    max_dists = np.array([max_distances(t.maze, t.goal) for t in session.trials]
+            ).max(0)
+
+    dir_probs_dims = max_dists + 1
+    dir_probs_dims = dir_probs_dims.tolist()
+    dir_probs_dims.append(4)
+    dir_probs = np.zeros(dir_probs_dims)
+    x, y = np.meshgrid(range(dir_probs.shape[0]), range(dir_probs.shape[1]))
+    xy = np.array([x.flatten(), y.flatten()]).transpose()
+
+    for dist_coord in xy:
+        dir_probs[dist_coord[0], dist_coord[1], :] = dist_dir_prob(session,
+                tuple(dist_coord))
+
+    if not plot:
+        return dir_probs
+    else:
+        distances_plot(session.trial.maze, [t.goal for t in session.trials], plot=True)
+        pl.hold(True)
+        dx_sign = (1, 1, -1, -1)
+        dy_sign = (1, -1, -1, 1)
+        # scale just so that arrows don't overlap
+        scale = 0.50
+        for direction in range(0, 4):
+            xy_proj = scale * np.sqrt(dir_probs[:,:,direction]**2/2).transpose().flatten()
+            pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*xy_proj,
+                    dy_sign[direction]*xy_proj, color='b') 
 
 def max_distances(maze, goals=None):
     # the output of this function is the maximum of an array called
