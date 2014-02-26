@@ -165,7 +165,7 @@ class Session:
         """
         self.agent = agent
         self.trials = trials
-        self.current_trial = 0
+        self.current_trial = len(trials) - 1
 
     @property
     def trial(self):
