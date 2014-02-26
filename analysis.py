@@ -127,6 +127,13 @@ def avg_dist_dir_prob(session, plot=False):
         return prob
 
 def per_dist_avg_dir_prob(session, plot=False):
+    """Calculate the probability of direction choice on the distances space.
+    Right now the way the algorithm is the following:
+    
+       For every point in the distances space, calculate for every direction
+       number of times it is available (availability) and the number of times
+       it is taken (moves) and return the 'probability' as moves/availability.
+    """
     # session.maze will return a list if not all trials use the same maze
     # in which case it will be iterable
     max_dists = np.array([max_distances(t.maze, t.goal) for t in session.trials]
@@ -146,16 +153,19 @@ def per_dist_avg_dir_prob(session, plot=False):
     if not plot:
         return dir_probs
     else:
-        distances_plot(session.trial.maze, [t.goal for t in session.trials], plot=True)
+        distances_plot(session.trial.maze, [t.goal for t in session.trials],
+                plot=True, zorder=10)
         pl.hold(True)
         dx_sign = (1, 1, -1, -1)
         dy_sign = (1, -1, -1, 1)
-        # scale just so that arrows don't overlap
-        scale = 1
+        # scale factor that will make the maximum length of the arrow 0.5 when
+        # projected to either x or y axis. 0.75 = np.sqrt(1**2/2), and 1 is
+        # obviously the maximum...
+        scale = 0.5/0.75
         for direction in range(0, 4):
-            xy_proj = scale * np.sqrt(dir_probs[:,:,direction]**2/2).transpose().flatten()
+            xy_proj = scale*np.sqrt(dir_probs[:,:,direction]**2/2).transpose().flatten()
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*xy_proj,
-                   dy_sign[direction]*xy_proj, color='b') 
+                   dy_sign[direction]*xy_proj, units='xy', scale=1, color='b', zorder=1) 
 
 
 
