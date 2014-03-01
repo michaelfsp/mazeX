@@ -37,8 +37,12 @@ def to_dist_direction(n, loc, maze, goal):
 def to_dist_coord(n, maze, goal):
     """Returns the coordinates of node n in distance coordinates.
     """
-    maze_dist = nx.algorithms.shortest_path_length(maze, n,
-            goal) 
+    # Find position of n and goal nodes in the maze.nodes() list so that
+    # we can retrieve the distance between them from the distances matrix
+    nodes_list = maze.nodes()
+    n_ind = nodes_list.index(n)
+    goal_ind = nodes_list.index(goal)
+    maze_dist = maze.distances_matrix[n_ind, goal_ind]
     manhattan_dist = abs(goal[0] - n[0]) + abs(goal[1] - n[1])
 
     return (maze_dist, manhattan_dist)

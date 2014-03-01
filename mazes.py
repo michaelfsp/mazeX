@@ -21,6 +21,26 @@ class SquareMaze(nx.classes.graph.Graph):
 
         super(SquareMaze, self).__init__(G)
         self.size = size
+
+        # We will calculate the distances matrix once and then only
+        # recalculate if either the nodes or eges of the maze have changed
+        # We save the snapshot of both at time of calculation in these objects
+        self._distances_matrix_nodes = None
+        self._distances_matrix_edges = None
+        self._distances_matrix = None
+
+    @property
+    def distances_matrix(self):
+        # If the graph has not changed since last calculation of the matrix:
+        if (self._distances_matrix_nodes == self.nodes() and
+                self._distances_matrix_edges == self.edges()):
+            return self._distances_matrix
+        else:
+            self._distances_matrix = nx.algorithms.floyd_warshall_numpy(self).astype(int)
+            self._distances_matrix_nodes = self.nodes()
+            self._distances_matrix_edges = self.edges()
+
+            return self._distances_matrix
     
     @property
     def pos(self):
