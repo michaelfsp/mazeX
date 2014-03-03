@@ -1,6 +1,7 @@
 import numpy as np
 import networkx as nx
 import random
+import copy
 
 from mazex.exceptions import *
 
@@ -32,13 +33,13 @@ class SquareMaze(nx.classes.graph.Graph):
     @property
     def distances_matrix(self):
         # If the graph has not changed since last calculation of the matrix:
-        if (self._distances_matrix_nodes == self.nodes() and
-                self._distances_matrix_edges == self.edges()):
+        if (self._distances_matrix_nodes == self.node) and (
+                self._distances_matrix_edges == self.edge):
             return self._distances_matrix
         else:
             self._distances_matrix = nx.algorithms.floyd_warshall_numpy(self).astype(int)
-            self._distances_matrix_nodes = self.nodes()
-            self._distances_matrix_edges = self.edges()
+            self._distances_matrix_nodes = copy.deepcopy(self.node)
+            self._distances_matrix_edges = copy.deepcopy(self.edge)
 
             return self._distances_matrix
     
