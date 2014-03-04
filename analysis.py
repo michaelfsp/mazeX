@@ -67,9 +67,9 @@ def dist_dir_prob(session, point):
         # call the function to_dist_coord()
         for i in range(len(t.steps)-1): # len(t.steps)-1 to exclude the goal
             step = t.steps[i]
-            if to_dist_coord(step.loc, t.maze, t.goal) == point:
+            if to_dist_coord(step.loc, step.maze, step.goal) == point:
                 next_step = t.steps[i+1]
-                dist_params = (step.loc, t.maze, t.goal)
+                dist_params = (step.loc, step.maze, step.goal)
 
                 availability_indices = []
                 for a in step.available_nodes:
