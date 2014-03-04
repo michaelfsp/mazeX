@@ -4,6 +4,7 @@ import random
 import copy
 
 from mazex.exceptions import *
+from mazex.utils import copydoc
 
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
@@ -12,35 +13,27 @@ class SquareMaze(nx.classes.graph.Graph):
         """Generates a square maze of given size and no connections.
         Total number of nodes will size**2.
         """
+        super(SquareMaze, self).__init__()
 
-        # TODO: Check whether the graph instance is a possible maze
-        # configuration
-        G = nx.Graph()
-        
         for i in np.ndindex((size, size)):
-            G.add_node(i, attr_dict={'pos':i})
+            super(SquareMaze, self).add_node(i, attr_dict={'pos':i})
 
-        super(SquareMaze, self).__init__(G)
         self.size = size
 
         # We will calculate the distances matrix once and then only
         # recalculate if either the nodes or eges of the maze have changed
         # We save the snapshot of both at time of calculation in these objects
-        self._distances_matrix_nodes = None
-        self._distances_matrix_edges = None
+        self._has_changed = True
         self._distances_matrix = None
 
     @property
     def distances_matrix(self):
         # If the graph has not changed since last calculation of the matrix:
-        if (self._distances_matrix_nodes == self.node) and (
-                self._distances_matrix_edges == self.edge):
+        if not self._has_changed:
             return self._distances_matrix
         else:
             self._distances_matrix = nx.algorithms.floyd_warshall_numpy(self).astype(int)
-            self._distances_matrix_nodes = copy.deepcopy(self.node)
-            self._distances_matrix_edges = copy.deepcopy(self.edge)
-
+            self._has_changed = False
             return self._distances_matrix
     
     @property
@@ -105,6 +98,65 @@ class SquareMaze(nx.classes.graph.Graph):
 
         return adj_neighbors
 
+    @copydoc(nx.classes.graph.Graph)
+    def add_edge(self, u, v, attr_dict=None, **attr):
+        super(SquareMaze, self).add_edge(u, v, attr_dict=attr_dict, **attr)
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def add_edges_from(self, ebunch, attr_dict=None, **attr):
+        super(SquareMaze, self).add_edges_from(ebunch, attr_dict=None, **attr)
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def remove_edge(self, u, v):
+        super(SquareMaze, self).remove_edge(u, v)
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def remove_edges_from(self, ebunch):
+        super(SquareMaze, self).remove_edges_from(ebunch)
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def clear(self):
+        super(SquareMaze, self).clear()
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def add_path(self, nodes, **attr):
+        super(SquareMaze, self).add_path(nodes, **attr)
+        self._has_changed = True
+
+    # -------- Below are NetworkX methods which are not yet supported --------
+    @staticmethod
+    def add_node(self):
+        raise NodeModification
+
+    @staticmethod
+    def add_nodes_from(self):
+        raise NodeModification
+    """
+    @classmethod
+    def remove_node(self):
+        raise NodeModification
+
+    @classmethod
+    def remove_nodes_from(self):
+        raise NodeModification
+
+    @classmethod
+    def add_weighted_edges_from(self):
+        raise EdgeWeight
+
+    @classmethod
+    def add_cycle(self):
+        raise NotSupported
+
+    @classmethod
+    def add_star(self):
+        raise NotSupported
+    """
 
 class RandomSquareMaze(SquareMaze):
     """Generator of SuqareMaze with random connections.

@@ -62,3 +62,12 @@ def check_elements_equal(lst):
     uses we are giving it.
     """
     return not lst or lst.count(lst[0]) == len(lst)
+
+def copydoc(cls):
+    """Copies docstring from a parent class. Code from
+    http://article.gmane.org/gmane.comp.python.general/630549"""
+    def _fn(fn):
+        if fn.__name__ in cls.__dict__:
+            fn.__doc__ = cls.__dict__[fn.__name__].__doc__
+        return fn
+    return _fn
