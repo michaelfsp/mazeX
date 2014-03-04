@@ -25,6 +25,7 @@ class SquareMaze(nx.classes.graph.Graph):
         # We save the snapshot of both at time of calculation in these objects
         self._has_changed = True
         self._distances_matrix = None
+        self._distances_dictionary = None
 
     @property
     def distances_matrix(self):
@@ -35,6 +36,15 @@ class SquareMaze(nx.classes.graph.Graph):
             self._distances_matrix = nx.algorithms.floyd_warshall_numpy(self).astype(int)
             self._has_changed = False
             return self._distances_matrix
+
+    @property
+    def distances_dictionary(self):
+        if not self._has_changed:
+            return self._distances_dictionary
+        else:
+            self._distances_dictionary = nx.algorithms.floyd_warshall(self)
+            self._has_changed = False
+            return self._distances_dictionary
     
     @property
     def pos(self):
