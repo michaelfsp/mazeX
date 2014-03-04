@@ -39,7 +39,11 @@ def to_dist_coord(n, maze, goal):
     """
     # Find position of n and goal nodes in the maze.nodes() list so that
     # we can retrieve the distance between them from the distances matrix
-    nodes_list = maze.nodes()
+
+    #TODO: for some bizarre reason list(maze.node.keys()) is twice as fast as
+    # maze.nodes(). Find out what are the consequences of using one or the
+    # other
+    nodes_list = list(maze.node.keys())
     n_ind = nodes_list.index(n)
     goal_ind = nodes_list.index(goal)
     maze_dist = maze.distances_matrix[n_ind, goal_ind]
