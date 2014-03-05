@@ -38,7 +38,7 @@ def to_dist_coord(n, maze, goal):
     """Returns the coordinates of node n in distance coordinates in a tuple
     of the shape (maze_distance, manhattan_distance).
     """
-    return (maze.distances_dictionary[n][goal],
+    return (int(maze.distances_dictionary[n][goal]),
             abs(goal[0] - n[0]) + abs(goal[1] - n[1]))
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
