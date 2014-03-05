@@ -71,3 +71,25 @@ def copydoc(cls):
             fn.__doc__ = cls.__dict__[fn.__name__].__doc__
         return fn
     return _fn
+
+def check_list_is_empty(seq):
+    """Check if nested list is empty.
+    Solution from (http://stackoverflow.com/questions/1593564/
+    python-how-to-check-if-a-nested-list-is-essentially-empty)
+    """
+    try:
+        return all(map(check_list_is_empty, seq))
+    except TypeError:
+        return False
+
+def invert_dictionary(dic):
+    """Return a dictionary with the inverse of the mapping of non-unique
+    dictionary dict.
+    Adapted to Python 3 from solution found in
+    http://stackoverflow.com/questions/483666/python-reverse-inverse-a-mapping
+    """
+    inv_map = {}
+    for k, v in dic.items():
+        inv_map[v] = inv_map.get(v, [])
+        inv_map[v].append(k)
+    return inv_map

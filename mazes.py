@@ -5,6 +5,7 @@ import copy
 
 from mazex.exceptions import *
 from mazex.utils import copydoc
+import mazex.analysis
 
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
@@ -23,28 +24,62 @@ class SquareMaze(nx.classes.graph.Graph):
         # We will calculate the distances matrix once and then only
         # recalculate if either the nodes or eges of the maze have changed
         # We save the snapshot of both at time of calculation in these objects
-        self._has_changed = True
+        self._has_changed_since_matrix = True
+        self._has_changed_since_dictionary = True
+        self._has_changed_since_to_coord_map = True
+
         self._distances_matrix = None
         self._distances_dictionary = None
+        self._distances_to_coord_map = None
 
     @property
     def distances_matrix(self):
         # If the graph has not changed since last calculation of the matrix:
-        if not self._has_changed:
+        if not self._has_changed_since_matrix:
             return self._distances_matrix
         else:
-            self._distances_matrix = nx.algorithms.floyd_warshall_numpy(self).astype(int)
-            self._has_changed = False
+            # for some reason the NetworkX algorithm produces a numpy matrix
+            # instead of an array, so we np.array it
+            self._distances_matrix = np.array(
+                    nx.algorithms.floyd_warshall_numpy(self).astype(int))
+            self._has_changed_since_matrix = False
             return self._distances_matrix
 
     @property
     def distances_dictionary(self):
-        if not self._has_changed:
+        if not self._has_changed_since_dictionary:
             return self._distances_dictionary
         else:
             self._distances_dictionary = nx.algorithms.floyd_warshall(self)
-            self._has_changed = False
+            self._has_changed_since_dictionary = False
             return self._distances_dictionary
+
+    @property
+    def distances_to_coord(self):
+        if not self._has_changed_since_to_coord_map:
+            return self._distances_to_coord_map
+        else:
+            maze_dists = np.unique(self.distances_matrix)
+            mapping_dict = {}
+
+            for goal in self.node:
+                for n in self.node:
+                    dist_coord = mazex.analysis.to_dist_coord(n, self, goal)
+
+                    try:
+                        mapping_dict[dist_coord][goal].append(n) 
+
+                    except KeyError:
+                        try:
+                            mapping_dict[dist_coord][goal] = [n]
+
+                        except KeyError:
+                            mapping_dict[dist_coord] = {}
+                            mapping_dict[dist_coord][goal] = [n]
+
+            self._distances_to_coord_map = mapping_dict
+            self._has_changed_since_to_coord_map = False
+            return self._distances_to_coord_map
     
     @property
     def pos(self):
