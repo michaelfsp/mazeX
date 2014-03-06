@@ -21,7 +21,7 @@ def choose(probs):
     return np.argmax(cum_prob >= random_number)
 
 class Step:
-    def __init__(self, loc, heading=None, previous=None, trial=None):
+    def __init__(self, maze, loc, goal, heading=None, previous=None):
         """Initializes the Step.
         
         Parameters:
@@ -35,7 +35,13 @@ class Step:
         previous : Step
             Previous step.
         """
+        if isinstance(maze, SquareMaze):
+            self.maze = maze
+        else:
+            raise InvalidMaze
+
         self.loc = loc
+        self.goal = goal
         self.heading = heading
         self.values = []
         self.probs = []
@@ -44,10 +50,7 @@ class Step:
 
     @property
     def available_nodes(self):
-        try:
-            return self.trial.maze.neighbors(self.loc)
-        except AttributeError:
-            raise NotBoundToParent
+        return self.maze.neighbors(self.loc)
 
     @property
     def path(self):
@@ -64,10 +67,9 @@ class Step:
 
 
 class Trial:
-    def __init__(self, steps, maze, goal, max_steps=0, goal_reached=True,
-            session=None):
+    def __init__(self, steps, agent, maze, goal, max_steps=0, goal_reached=True):
         self.steps = steps
-        self._current_step = len(steps)-1
+        self.agent = agent
 
         if isinstance(maze, SquareMaze):
             self.maze = maze
@@ -79,17 +81,60 @@ class Trial:
         # Trial termination conditions
         self.max_steps = max_steps
         self.goal_reached = goal_reached
-        self.session = session
-
     
     @property
+    def loc(self):
+        return self.agent.loc
+
+    @property
     def step(self):
-        return self.steps[self._current_step]
+        return self.steps[-1]
 
     @property
     def path(self):
         return self.step.path
 
+    @property
+    def maze(self):
+        """If all steps have the same maze, return that maze, else return a
+        list of mazes. This might not be after some refactoring to be done in 
+        a future incarnation.
+        """
+        mazes = [s.maze for s in self.steps]
+        if check_elements_equal(mazes):
+            return mazes[0]
+        else:
+            return mazes
+
+    @property
+    def goal(self):
+        """If all steps have the same goal, return that goal, else return a
+        list of goals. This might not be after some refactoring to be done in 
+        a future incarnation.
+        """
+        goals = [s.goal for s in self.steps]
+        if check_elements_equal(goals):
+            return goals[0]
+        else:
+            return goals
+
+    def go_to_next_step(self):
+        self.step.values = self.agent.evaluate(
+            self.step.available_nodes, self.step.goal)
+        
+        self.step.probs = self.agent.choice_probs(self.step.values)
+
+        next_node = self.step.available_nodes[choose(self.step.probs)]
+
+        self.agent.loc = next_node
+
+        self.steps.append(Step(self.step.maze, self.agent.loc,
+            self.step.goal, self.agent.heading, self.step))
+
+    def solve(self):
+        while not self.termination_condition():
+            self.go_to_next_step()
+        
     def termination_condition(self):
         """This is a helper function for the simmulation methods.
 
@@ -107,7 +152,7 @@ class Trial:
         if self.max_steps and len(self.steps) >= self.max_steps:
             return True
 
-        elif self.goal_reached and self.step.loc == self.goal:
+        elif self.goal_reached and self.step.loc == self.step.goal:
             return True
 
         else:
@@ -139,7 +184,7 @@ class SimulatedTrial(Trial):
  
 
 class Session:
-    def __init__(self, trials):
+    def __init__(self, agent, trials):
         """Session initiation method.
 
         Parameters:
@@ -150,21 +195,16 @@ class Session:
         trials : list
             List of trials to be presented to the Agent
         """
+        self.agent = agent
         self.trials = trials
-        self._current_trial = len(trials)-1
+        self.current_trial = len(trials) - 1
 
     @property
     def trial(self):
-        return self.trials[self._current_trial]
-
-class SimulatedSession(Session):
-    def __init__(self, trials, agent):
-        super(SimulatedSession, self).__init__(trials)
-        self._current_trial = 0
-        self.agent = agent
+        return self.trials[self.current_trial]
 
     def next_trial(self):
-        return self.trials[self._current_trial+1]
+        return self.trials[self.current_trial+1]
 
     def run(self):
         """Runs the Session's trials sequentially. Note that it will solve
@@ -183,8 +223,8 @@ class SimulatedSession(Session):
         self.trial.solve()
 
 
-class SimulatedSessionWithRandomGoals(SimulatedSession):
-    def __init__(self, agent, n_trials, first_trial, gen_func):
+class SessionWithRandomTrials(Session):
+    def __init__(cls, agent, n_trials, first_trial, gen_func):
         """
 
         Parameters:

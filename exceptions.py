@@ -43,7 +43,19 @@ class WeirdDirection(MazeXException):
     def __str__(self):
         return "I didn't now transitions in this direction were possible!"
 
-class NotBoundToParent(MazeXException):
+class UnexistentPoint(MazeXException):
     def __str__(self):
-        return ("This object is not bound to any parent which causes this"
-                " mehod to not be available")
+        return "This point does not exist for this maze, goal combination!"
+
+class NodeModification(MazeXException):
+    def __str__(self):
+        return ("Modification of the set of nodes after maze instantiation is"
+                " not yet supported!")
+
+class EdgeWeight(MazeXException):
+    def __str__(self):
+        return "Weighted edges are not supported yet!"
+
+class NotSupported(MazeXException):
+    def __str__(self):
+        return "This NetworkX functionality is not supported yet!"

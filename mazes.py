@@ -1,8 +1,11 @@
 import numpy as np
 import networkx as nx
 import random
+import copy
 
 from mazex.exceptions import *
+from mazex.utils import copydoc
+import mazex.analysis
 
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
@@ -11,16 +14,72 @@ class SquareMaze(nx.classes.graph.Graph):
         """Generates a square maze of given size and no connections.
         Total number of nodes will size**2.
         """
+        super(SquareMaze, self).__init__()
 
-        # TODO: Check whether the graph instance is a possible maze
-        # configuration
-        G = nx.Graph()
-        
         for i in np.ndindex((size, size)):
-            G.add_node(i, attr_dict={'pos':i})
+            super(SquareMaze, self).add_node(i, attr_dict={'pos':i})
 
-        super(SquareMaze, self).__init__(G)
         self.size = size
+
+        # We will calculate the distances matrix once and then only
+        # recalculate if either the nodes or eges of the maze have changed
+        # We save the snapshot of both at time of calculation in these objects
+        self._has_changed_since_matrix = True
+        self._has_changed_since_dictionary = True
+        self._has_changed_since_to_coord_map = True
+
+        self._distances_matrix = None
+        self._distances_dictionary = None
+        self._distances_to_coord_map = None
+
+    @property
+    def distances_matrix(self):
+        # If the graph has not changed since last calculation of the matrix:
+        if not self._has_changed_since_matrix:
+            return self._distances_matrix
+        else:
+            # for some reason the NetworkX algorithm produces a numpy matrix
+            # instead of an array, so we np.array it
+            self._distances_matrix = np.array(
+                    nx.algorithms.floyd_warshall_numpy(self).astype(int))
+            self._has_changed_since_matrix = False
+            return self._distances_matrix
+
+    @property
+    def distances_dictionary(self):
+        if not self._has_changed_since_dictionary:
+            return self._distances_dictionary
+        else:
+            self._distances_dictionary = nx.algorithms.floyd_warshall(self)
+            self._has_changed_since_dictionary = False
+            return self._distances_dictionary
+
+    @property
+    def distances_to_coord(self):
+        if not self._has_changed_since_to_coord_map:
+            return self._distances_to_coord_map
+        else:
+            maze_dists = np.unique(self.distances_matrix)
+            mapping_dict = {}
+
+            for goal in self.node:
+                for n in self.node:
+                    dist_coord = mazex.analysis.to_dist_coord(n, self, goal)
+
+                    try:
+                        mapping_dict[dist_coord][goal].append(n) 
+
+                    except KeyError:
+                        try:
+                            mapping_dict[dist_coord][goal] = [n]
+
+                        except KeyError:
+                            mapping_dict[dist_coord] = {}
+                            mapping_dict[dist_coord][goal] = [n]
+
+            self._distances_to_coord_map = mapping_dict
+            self._has_changed_since_to_coord_map = False
+            return self._distances_to_coord_map
     
     @property
     def pos(self):
@@ -84,6 +143,65 @@ class SquareMaze(nx.classes.graph.Graph):
 
         return adj_neighbors
 
+    @copydoc(nx.classes.graph.Graph)
+    def add_edge(self, u, v, attr_dict=None, **attr):
+        super(SquareMaze, self).add_edge(u, v, attr_dict=attr_dict, **attr)
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def add_edges_from(self, ebunch, attr_dict=None, **attr):
+        super(SquareMaze, self).add_edges_from(ebunch, attr_dict=None, **attr)
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def remove_edge(self, u, v):
+        super(SquareMaze, self).remove_edge(u, v)
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def remove_edges_from(self, ebunch):
+        super(SquareMaze, self).remove_edges_from(ebunch)
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def clear(self):
+        super(SquareMaze, self).clear()
+        self._has_changed = True
+
+    @copydoc(nx.classes.graph.Graph)
+    def add_path(self, nodes, **attr):
+        super(SquareMaze, self).add_path(nodes, **attr)
+        self._has_changed = True
+
+    # -------- Below are NetworkX methods which are not yet supported --------
+    @staticmethod
+    def add_node(self):
+        raise NodeModification
+
+    @staticmethod
+    def add_nodes_from(self):
+        raise NodeModification
+    """
+    @classmethod
+    def remove_node(self):
+        raise NodeModification
+
+    @classmethod
+    def remove_nodes_from(self):
+        raise NodeModification
+
+    @classmethod
+    def add_weighted_edges_from(self):
+        raise EdgeWeight
+
+    @classmethod
+    def add_cycle(self):
+        raise NotSupported
+
+    @classmethod
+    def add_star(self):
+        raise NotSupported
+    """
 
 class RandomSquareMaze(SquareMaze):
     """Generator of SuqareMaze with random connections.

@@ -2,6 +2,7 @@
 Analysis methods that don't rely on fitting should come here
 """
 from mazex.exceptions import *
+import mazex.utils as utils
 import networkx as nx
 import numpy as np
 import pylab as pl
@@ -34,25 +35,73 @@ def to_dist_direction(n, loc, maze, goal):
         raise WeirdDirection
 
 def to_dist_coord(n, maze, goal):
-    """Returns the coordinates of node n in distance coordinates.
+    """Returns the coordinates of node n in distance coordinates in a tuple
+    of the shape (maze_distance, manhattan_distance).
     """
-    maze_dist = nx.algorithms.shortest_path_length(maze, n,
-            goal) 
-    manhattan_dist = abs(goal[0] - n[0]) + abs(goal[1] - n[1])
+    return (int(maze.distances_dictionary[n][goal]),
+            abs(goal[0] - n[0]) + abs(goal[1] - n[1]))
 
-    return (maze_dist, manhattan_dist)
+#TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
+#   separate function
+def dist_dir_prob(session, point, first_exit_only=False):
+    """Calculate the average direction of choices in distances metric for a
+    single point on the distances space.
 
-class Map:
-    """Mapping between X,Y coordinates into Manhattan vs Shortest
-    Path Distance coordinates.
-    
-    Not in use at the moment.
+    It outputs n_times_choice / n_times_available
     """
-    def __init__(self, maze, goal):
-        self.maze = maze
-        self.goal = goal
-        self._mapping = None
+    #TODO: Spit an error if the point does not exist
+    #FIXME: These storage of maze and goal in a step will be deprecated
+    maze = session.trial.step.maze
 
+    moves = np.zeros(4)
+    availability = np.zeros(4)
+
+    for t in session.trials:
+        try:
+            nodes_on_point = maze.distances_to_coord[point][t.goal]
+        except KeyError: # the path of trial t doesn't go through this point
+            continue # ignores the remaining calculations for the current
+        # iteration of this for loop
+
+        if first_exit_only:
+            step_indices = [t.path.index(n) for n in nodes_on_point if n in
+                    t.path]
+        else:
+            step_indices = []
+            for n in nodes_on_point:
+                # This list comprehension finds all occurrences of n in list 
+                # t.path, unlinke t.path.index() which returns only the first
+                # occurrence
+                # += 'appends' it to the list step_indices
+                step_indices += [i for i, x in enumerate(
+                    t.path) if x == n]
+
+        # just to save on text we will save here the parameters we need to
+        # call the function to_dist_coord()
+
+        for i in step_indices:
+            step = t.steps[i]
+            try:
+                # will fail if it is the last in the path
+                next_step = t.steps[i+1]
+            except IndexError:
+                continue # ignore current step and go to next...
+            # makes sense to not break instead in case the trial was aborted
+            # before goal was reached.
+
+            dist_params = (step.loc, step.maze, step.goal)
+
+            availability_indices = []
+            for a in step.available_nodes:
+                availability_indices.append(to_dist_direction(a, *dist_params))
+            availability_indices = list(set(availability_indices))
+            # [[]] makes use of advanced indexing
+            availability[[availability_indices]] += 1
+            moves[to_dist_direction(next_step.loc, *dist_params)] += 1
+        
+    prob = moves/availability
+
+    return prob
 
 def avg_dist_dir_prob(session, plot=False):
     """Calculate the average direction of choices in distances metric.
@@ -67,12 +116,17 @@ def avg_dist_dir_prob(session, plot=False):
             step = t.steps[i]
             next_step = t.steps[i+1]
             dist_params = (step.loc, t.maze, t.goal)
+
+            availability_indices = []
             for a in step.available_nodes:
-                                availability[to_dist_direction(a,
-                                    *dist_params)] += 1
+                availability_indices.append(to_dist_direction(a, *dist_params))
+            availability_indices = list(set(availability_indices))
+            # [[]] activates advanced indexing
+            availability[[availability_indices]] += 1
+
             moves[to_dist_direction(next_step.loc, *dist_params)] += 1
         
-        prob = moves/availability
+    prob = moves/availability
 
     if plot:
         # we will use these signs to make the arrows point in the right
@@ -100,32 +154,123 @@ def avg_dist_dir_prob(session, plot=False):
     else:
         return prob
 
+def per_dist_avg_dir_prob(session, first_exit_only=False, plot=False):
+    """Calculate the probability of direction choice on the distances space.
+    Right now the way the algorithm is the following:
+    
+       For every point in the distances space, calculate for every direction
+       number of times it is available (availability) and the number of times
+       it is taken (moves) and return the 'probability' as moves/availability.
+    """
+    # session.maze will return a list if not all trials use the same maze
+    # in which case it will be iterable
+    max_dists = np.array([max_distances(t.maze, t.goal) for t in session.trials]
+            ).max(0)
 
-def distances_plot(maze, goal, plot=True, **kwargs):
+    dir_probs_dims = max_dists + 1
+    dir_probs_dims = dir_probs_dims.tolist()
+    dir_probs_dims.append(4)
+    dir_probs = np.zeros(dir_probs_dims)
+    x, y = np.meshgrid(range(dir_probs.shape[0]), range(dir_probs.shape[1]))
+    xy = np.array([x.flatten(), y.flatten()]).transpose()
+
+    for dist_coord in xy:
+        dir_probs[dist_coord[0], dist_coord[1], :] = dist_dir_prob(session,
+                tuple(dist_coord), first_exit_only=first_exit_only)
+
+    if not plot:
+        return dir_probs
+    else:
+        distances_plot(session.trial.maze, [t.goal for t in session.trials],
+                plot=True, zorder=10)
+        pl.hold(True)
+        dx_sign = (1, 1, -1, -1)
+        dy_sign = (1, -1, -1, 1)
+        # scale factor that will make the maximum length of the arrow 0.5 when
+        # projected to either x or y axis. 0.75 = np.sqrt(1**2/2), and 1 is
+        # obviously the maximum...
+        scale = 0.5/0.75
+        for direction in range(0, 4):
+            xy_proj = scale*np.sqrt(dir_probs[:,:,direction]**2/2).transpose().flatten()
+            pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*xy_proj,
+                   dy_sign[direction]*xy_proj, units='xy', scale=1, color='b', zorder=1) 
+
+
+
+def max_distances(maze, goals=None):
+    # the output of this function is the maximum of an array called
+    # max_distances_all
+    # we first need to create that array based on the three possible scenarios
+    # no goal, single goals, multiple goals
+    # for each goal calculate the maximum Maze and Manhattan distances, store
+    # that in a list, turn list into array and calculate the maximum over the
+    # first axis
+    if not goals:
+        max_maze_distance = nx.algorithms.distance_measures.diameter(maze)
+        max_manhattan_distance = 2 * (maze.size-1)
+        return (max_maze_distance, max_manhattan_distance)
+
+    # In case only one goal was passed as argument
+    # TODO: This is very hacky. improve...
+    try:
+        utils.assert_is_node(goals)
+        goals = [goals]
+    except InvalidNode:
+        pass
+
+    max_distances_all = []
+    
+    for goal in goals:
+        max_maze_distance = nx.algorithms.distance_measures.eccentricity(maze,
+                goal)
+        # find largest x distance to this goal
+        max_x_dist = max((goal[0], maze.size-1 - goal[0]))
+        # same for y
+        max_y_dist = max((goal[1], maze.size-1 - goal[1]))
+        max_manhattan_distance = max_x_dist + max_y_dist
+
+        max_distances_all.append([max_maze_distance, max_manhattan_distance])
+
+    max_distances_all = np.array(max_distances_all)
+    return max_distances_all.max(0)
+        
+def distances_plot(maze, goals=None, plot=True, **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.
     """
-    # Finds the longest distance to the goal in this particular maze and goal
-    max_maze_distance = nx.algorithms.distance_measures.eccentricity(
-            maze, goal)
-    max_manhattan_distance = 2 * (maze.size-1)
-    
-    distances = np.zeros((max_maze_distance+1, max_manhattan_distance+1))
-    
-    for n in maze.nodes():
-       maze_dist = nx.algorithms.shortest_path_length(maze, n, goal) 
-       manhattan_dist = abs(goal[0] - n[0]) + abs(goal[1] - n[1])
-       point = (manhattan_dist, maze_dist) 
+    # If no goal is specified, consider every node as a possible goal location
+    if not goals:
+        goals = maze.nodes()
+        max_distances_all = max_distances(maze)
 
-       new_coord = to_dist_coord(n, maze, goal)
-       #import pdb; pdb.set_trace()
-       distances[new_coord] += 1
+    else:
+        # In case only one goal was passed as argument
+        # TODO: This is very hacky. improve...
+        try:
+            utils.assert_is_node(goals)
+            goals = [goals]
+        except InvalidNode:
+            pass
 
-    # This turns every element of d into an int
-    distances = distances.astype(int)
+        max_distances_all = max_distances(maze, goals)
 
-    shape = distances.shape
-    mesh = np.meshgrid(range(shape[1]), range(shape[0]))
+    dist_shape = np.array(max_distances_all) + 1
+    distances = np.zeros(dist_shape)
+
+    for goal in goals:
+        for n in maze.nodes():
+           new_coord = to_dist_coord(n, maze, goal)
+           distances[new_coord] += 1
+
+    if len(goals) == 1:
+        # This turns every element of d into an int
+        distances = distances.astype(int)
+
+    else:
+        distances = distances / len(goals)
+
+    # it is a bit hacky but it produces the plot we want... good for now
+    mesh = np.meshgrid(range(dist_shape[1]), range(dist_shape[0]))
     y, x = mesh
     x = x.flatten()
     y = y.flatten()
@@ -133,24 +278,28 @@ def distances_plot(maze, goal, plot=True, **kwargs):
     if plot:
         ax = pl.gca()
         ax.set_aspect('equal')
-        # we create a mask that selects only the nonzero elements of the distances
-        # matrix so that the "0" points don't ruin the legend
-        for i in np.unique(distances)[np.unique(distances)>0]:
-            mask = distances.flatten()==i
-            pl.scatter(x.flatten()[mask], y.flatten()[mask],
-                    s=15*np.pi*distances.flatten()[mask], c='k', label='%i'%i,
-                    **kwargs)
-        pl.xlim([-0.5, max_maze_distance+0.5])
-        pl.ylim([-0.5, max_manhattan_distance+0.5])
-        pl.xticks(range(0, max_maze_distance+1))
-        pl.yticks(range(0, max_manhattan_distance+1))
+        # multiplies the value to obtain number of pixels in the surface
+        area_factor = 15 * np.pi
+        pl.scatter(x.flatten(), y.flatten(),
+                    s=area_factor*distances.flatten(), c='k', **kwargs)
+
+        # Very ugly hack just to get some legend working
+        bullet_sizes = np.arange(1, distances.max()+1, 1)
+        for b in bullet_sizes:
+            pl.scatter(-1,-1, s=area_factor*b, c='k', label='%i' %b, **kwargs)
+        pl.legend(loc='upper left', scatterpoints=1, title='<nodes>')
+
+        pl.xlim([-0.5, max_distances_all[0]+0.5])
+        pl.ylim([-0.5, max_distances_all[1]+0.5])
+        pl.xticks(range(0, max_distances_all[0]+1))
+        pl.yticks(range(0, max_distances_all[1]+1))
         pl.grid()
         ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
         pl.xlabel('Maze distance to goal')
         pl.ylabel('Manhattan distance to goal')
-        pl.legend(loc='upper left', scatterpoints=1)
 
-    return distances, x, y
+    else:
+        return distances, x, y
 
 def distances_plot_path(trial):
     """Plot paths overlayed onto the distances plot.

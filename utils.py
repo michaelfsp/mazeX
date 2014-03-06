@@ -62,3 +62,34 @@ def check_elements_equal(lst):
     uses we are giving it.
     """
     return not lst or lst.count(lst[0]) == len(lst)
+
+def copydoc(cls):
+    """Copies docstring from a parent class. Code from
+    http://article.gmane.org/gmane.comp.python.general/630549"""
+    def _fn(fn):
+        if fn.__name__ in cls.__dict__:
+            fn.__doc__ = cls.__dict__[fn.__name__].__doc__
+        return fn
+    return _fn
+
+def check_list_is_empty(seq):
+    """Check if nested list is empty.
+    Solution from (http://stackoverflow.com/questions/1593564/
+    python-how-to-check-if-a-nested-list-is-essentially-empty)
+    """
+    try:
+        return all(map(check_list_is_empty, seq))
+    except TypeError:
+        return False
+
+def invert_dictionary(dic):
+    """Return a dictionary with the inverse of the mapping of non-unique
+    dictionary dict.
+    Adapted to Python 3 from solution found in
+    http://stackoverflow.com/questions/483666/python-reverse-inverse-a-mapping
+    """
+    inv_map = {}
+    for k, v in dic.items():
+        inv_map[v] = inv_map.get(v, [])
+        inv_map[v].append(k)
+    return inv_map
