@@ -43,31 +43,61 @@ def to_dist_coord(n, maze, goal):
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
 #   separate function
-def dist_dir_prob(session, point):
+def dist_dir_prob(session, point, first_exit_only=False):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
 
     It outputs n_times_choice / n_times_available
     """
+    #TODO: Spit an error if the point does not exist
+    #FIXME: These storage of maze and goal in a step will be deprecated
+    maze = session.trial.step.maze
+
     moves = np.zeros(4)
     availability = np.zeros(4)
 
     for t in session.trials:
+        try:
+            nodes_on_point = maze.distances_to_coord[point][t.goal]
+        except KeyError: # the path of trial t doesn't go through this point
+            continue # ignores the remaining calculations for the current
+        # iteration of this for loop
+
+        if first_exit_only:
+            step_indices = [t.path.index(n) for n in nodes_on_point if n in
+                    t.path]
+        else:
+            step_indices = []
+            for n in nodes_on_point:
+                # This list comprehension finds all occurrences of n in list 
+                # t.path, unlinke t.path.index() which returns only the first
+                # occurrence
+                # += 'appends' it to the list step_indices
+                step_indices += [i for i, x in enumerate(
+                    t.path) if x == n]
+
         # just to save on text we will save here the parameters we need to
         # call the function to_dist_coord()
-        for i in range(len(t.steps)-1): # len(t.steps)-1 to exclude the goal
-            step = t.steps[i]
-            if to_dist_coord(step.loc, step.maze, step.goal) == point:
-                next_step = t.steps[i+1]
-                dist_params = (step.loc, step.maze, step.goal)
 
-                availability_indices = []
-                for a in step.available_nodes:
-                    availability_indices.append(to_dist_direction(a, *dist_params))
-                availability_indices = list(set(availability_indices))
-                # [[]] makes use of advanced indexing
-                availability[[availability_indices]] += 1
-                moves[to_dist_direction(next_step.loc, *dist_params)] += 1
+        for i in step_indices:
+            step = t.steps[i]
+            try:
+                # will fail if it is the last in the path
+                next_step = t.steps[i+1]
+            except IndexError:
+                continue # ignore current step and go to next...
+            # makes sense to not break instead in case the trial was aborted
+            # before goal was reached.
+
+            dist_params = (step.loc, step.maze, step.goal)
+
+            availability_indices = []
+            for a in step.available_nodes:
+                availability_indices.append(to_dist_direction(a, *dist_params))
+            availability_indices = list(set(availability_indices))
+            # [[]] makes use of advanced indexing
+            availability[[availability_indices]] += 1
+            moves[to_dist_direction(next_step.loc, *dist_params)] += 1
         
     prob = moves/availability
 
@@ -124,7 +154,7 @@ def avg_dist_dir_prob(session, plot=False):
     else:
         return prob
 
-def per_dist_avg_dir_prob(session, plot=False):
+def per_dist_avg_dir_prob(session, first_exit_only=False, plot=False):
     """Calculate the probability of direction choice on the distances space.
     Right now the way the algorithm is the following:
     
@@ -146,7 +176,7 @@ def per_dist_avg_dir_prob(session, plot=False):
 
     for dist_coord in xy:
         dir_probs[dist_coord[0], dist_coord[1], :] = dist_dir_prob(session,
-                tuple(dist_coord))
+                tuple(dist_coord), first_exit_only=first_exit_only)
 
     if not plot:
         return dir_probs
