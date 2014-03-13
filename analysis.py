@@ -44,7 +44,7 @@ def to_dist_coord(n, maze, goal):
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
 #   separate function
 def dist_dir_prob(session, point, first_exit_only=True, weighted=True,
-        by_availability=False, normalized='simple'):
+        by_availability=False, normalized='prob'):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
 
@@ -119,6 +119,9 @@ def dist_dir_prob(session, point, first_exit_only=True, weighted=True,
     elif normalized == 'moves':
         prob /= moves_counter
 
+    elif normalized == 'prob':
+        prob /= prob.sum()
+
     return prob
 
 def avg_dist_dir_prob(session, plot=False):
@@ -143,7 +146,6 @@ def avg_dist_dir_prob(session, plot=False):
             availability[[availability_indices]] += 1
 
             moves[to_dist_direction(next_step.loc, *dist_params)] += 1
-        
     prob = moves/availability
 
     if plot:
@@ -173,7 +175,7 @@ def avg_dist_dir_prob(session, plot=False):
         return prob
 
 def per_dist_avg_dir_prob(session, first_exit_only=False, weighted=True,
-        by_availability=False, normalized='simple', plot=False):
+        by_availability=False, normalized='prob', plot=False):
     """Calculate the probability of direction choice on the distances space.
     Right now the way the algorithm is the following:
     
@@ -212,7 +214,7 @@ def per_dist_avg_dir_prob(session, first_exit_only=False, weighted=True,
         # obviously the maximum...
         #FIXME
 
-        if normalized == 'simple':
+        if normalized == 'simple' or normalized == 'prob':
             max_proj = np.sqrt(1**2/2)
         else:
             if not weighted:
