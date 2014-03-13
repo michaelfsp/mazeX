@@ -43,7 +43,8 @@ def to_dist_coord(n, maze, goal):
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
 #   separate function
-def dist_dir_prob(session, point, first_exit_only=False):
+def dist_dir_prob(session, point, first_exit_only=True, weighted=True,
+        by_availability=False, normalized='simple'):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
 
@@ -55,6 +56,8 @@ def dist_dir_prob(session, point, first_exit_only=False):
 
     moves = np.zeros(4)
     availability = np.zeros(4)
+
+    moves_counter = 0
 
     for t in session.trials:
         try:
@@ -89,6 +92,8 @@ def dist_dir_prob(session, point, first_exit_only=False):
             # makes sense to not break instead in case the trial was aborted
             # before goal was reached.
 
+            moves_counter += 1
+
             dist_params = (step.loc, step.maze, step.goal)
 
             availability_indices = []
@@ -97,9 +102,22 @@ def dist_dir_prob(session, point, first_exit_only=False):
             availability_indices = list(set(availability_indices))
             # [[]] makes use of advanced indexing
             availability[[availability_indices]] += 1
-            moves[to_dist_direction(next_step.loc, *dist_params)] += 1
-        
-    prob = moves/availability
+            if not weighted:
+                moves[to_dist_direction(next_step.loc, *dist_params)] += 1
+            else:
+                weight = len(availability_indices)-1
+                moves[to_dist_direction(next_step.loc, *dist_params)] += weight
+
+    if by_availability:    
+        prob = moves/availability
+    else:
+        prob = moves
+
+    if normalized == 'simple':
+        prob /= prob.max()
+
+    elif normalized == 'moves':
+        prob /= moves_counter
 
     return prob
 
@@ -154,7 +172,8 @@ def avg_dist_dir_prob(session, plot=False):
     else:
         return prob
 
-def per_dist_avg_dir_prob(session, first_exit_only=False, plot=False):
+def per_dist_avg_dir_prob(session, first_exit_only=False, weighted=True,
+        by_availability=False, normalized='simple', plot=False):
     """Calculate the probability of direction choice on the distances space.
     Right now the way the algorithm is the following:
     
@@ -176,7 +195,9 @@ def per_dist_avg_dir_prob(session, first_exit_only=False, plot=False):
 
     for dist_coord in xy:
         dir_probs[dist_coord[0], dist_coord[1], :] = dist_dir_prob(session,
-                tuple(dist_coord), first_exit_only=first_exit_only)
+                tuple(dist_coord), first_exit_only=first_exit_only,
+                weighted=weighted, by_availability=by_availability,
+                normalized=normalized)
 
     if not plot:
         return dir_probs
@@ -189,7 +210,16 @@ def per_dist_avg_dir_prob(session, first_exit_only=False, plot=False):
         # scale factor that will make the maximum length of the arrow 0.5 when
         # projected to either x or y axis. 0.75 = np.sqrt(1**2/2), and 1 is
         # obviously the maximum...
-        scale = 0.5/0.75
+        #FIXME
+
+        if normalized == 'simple':
+            max_proj = np.sqrt(1**2/2)
+        else:
+            if not weighted:
+                max_proj = np.sqrt(1**2/2)
+            else:
+                max_proj = np.sqrt(2**2/2)
+        scale = 0.5/max_proj
         for direction in range(0, 4):
             xy_proj = scale*np.sqrt(dir_probs[:,:,direction]**2/2).transpose().flatten()
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*xy_proj,
