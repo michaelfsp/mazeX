@@ -265,7 +265,70 @@ def max_distances(maze, goals=None):
 
     max_distances_all = np.array(max_distances_all)
     return max_distances_all.max(0)
-        
+
+def heatmap(session, **kwargs):
+    plot=True
+    goals = [t.step.goal for t in session.trials]
+
+    heatarray_shape = np.array(max_distances(session.trial.step.maze, goals)) + 1
+
+    heatarray = np.zeros(heatarray_shape)
+
+    for t in session.trials:
+        for s in t.path[:-1]:
+            heatarray[to_dist_coord(s, t.step.maze, t.step.goal)] += 1
+
+    maze = session.trial.step.maze
+    max_distances_all = max_distances(maze, goals)
+
+    dist_shape = np.array(max_distances_all) + 1
+    distances = np.zeros(dist_shape)
+
+    for goal in goals:
+        for n in maze.nodes():
+           new_coord = to_dist_coord(n, maze, goal)
+           distances[new_coord] += 1
+
+    if len(goals) == 1:
+        # This turns every element of d into an int
+        distances = distances.astype(int)
+
+    else:
+        distances = distances / len(goals)
+
+    # it is a bit hacky but it produces the plot we want... good for now
+    mesh = np.meshgrid(range(dist_shape[1]), range(dist_shape[0]))
+    y, x = mesh
+    x = x.flatten()
+    y = y.flatten()
+
+    if plot:
+        ax = pl.gca()
+        ax.set_aspect('equal')
+        # multiplies the value to obtain number of pixels in the surface
+        area_factor = 30* 15 * np.pi
+        pl.scatter(x.flatten(), y.flatten(),
+                    s=(area_factor*heatarray.flatten())/heatarray.sum(), c='k', **kwargs)
+
+        # Very ugly hack just to get some legend working
+        bullet_sizes = np.linspace(0.001, np.max(heatarray/heatarray.sum()), 4)
+        for b in bullet_sizes:
+            pl.scatter(-1,-1, s=area_factor*b, c='k', label='%f' %b, **kwargs)
+        pl.legend(loc='upper left', scatterpoints=1, title='<nodes>')
+
+        pl.xlim([-0.5, max_distances_all[0]+0.5])
+        pl.ylim([-0.5, max_distances_all[1]+0.5])
+        pl.xticks(range(0, max_distances_all[0]+1))
+        pl.yticks(range(0, max_distances_all[1]+1))
+        pl.grid()
+        ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
+        pl.xlabel('Maze distance to goal')
+        pl.ylabel('Manhattan distance to goal')
+
+    else:
+        return distances, x, y
+
+
 def distances_plot(maze, goals=None, plot=True, **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.

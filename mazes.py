@@ -181,6 +181,7 @@ class SquareMaze(nx.classes.graph.Graph):
     @staticmethod
     def add_nodes_from(self):
         raise NodeModification
+    #TODO:
     """
     @classmethod
     def remove_node(self):
