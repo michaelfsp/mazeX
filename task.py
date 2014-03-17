@@ -46,6 +46,9 @@ class Step:
         self.values = []
         self.probs = []
         self.previous = previous
+        # sets .subsequent for the previous step
+        if previous:
+            previous.subsequent = self
 
     @property
     def available_nodes(self):
