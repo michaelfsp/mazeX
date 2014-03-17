@@ -43,7 +43,8 @@ def to_dist_coord(n, maze, goal):
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
 #   separate function
-def dist_dir_prob(session, point, first_exit_only=False):
+def dist_dir_prob(session, point, first_exit_only=True, weighted=True,
+        by_availability=False, normalized='prob'):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
 
@@ -55,6 +56,8 @@ def dist_dir_prob(session, point, first_exit_only=False):
 
     moves = np.zeros(4)
     availability = np.zeros(4)
+
+    moves_counter = 0
 
     for t in session.trials:
         try:
@@ -89,6 +92,8 @@ def dist_dir_prob(session, point, first_exit_only=False):
             # makes sense to not break instead in case the trial was aborted
             # before goal was reached.
 
+            moves_counter += 1
+
             dist_params = (step.loc, step.maze, step.goal)
 
             availability_indices = []
@@ -97,9 +102,25 @@ def dist_dir_prob(session, point, first_exit_only=False):
             availability_indices = list(set(availability_indices))
             # [[]] makes use of advanced indexing
             availability[[availability_indices]] += 1
-            moves[to_dist_direction(next_step.loc, *dist_params)] += 1
-        
-    prob = moves/availability
+            if not weighted:
+                moves[to_dist_direction(next_step.loc, *dist_params)] += 1
+            else:
+                weight = len(availability_indices)-1
+                moves[to_dist_direction(next_step.loc, *dist_params)] += weight
+
+    if by_availability:    
+        prob = moves/availability
+    else:
+        prob = moves
+
+    if normalized == 'simple':
+        prob /= prob.max()
+
+    elif normalized == 'moves':
+        prob /= moves_counter
+
+    elif normalized == 'prob':
+        prob /= prob.sum()
 
     return prob
 
@@ -125,7 +146,6 @@ def avg_dist_dir_prob(session, plot=False):
             availability[[availability_indices]] += 1
 
             moves[to_dist_direction(next_step.loc, *dist_params)] += 1
-        
     prob = moves/availability
 
     if plot:
@@ -154,7 +174,8 @@ def avg_dist_dir_prob(session, plot=False):
     else:
         return prob
 
-def per_dist_avg_dir_prob(session, first_exit_only=False, plot=False):
+def per_dist_avg_dir_prob(session, first_exit_only=False, weighted=True,
+        by_availability=False, normalized='prob', plot=False):
     """Calculate the probability of direction choice on the distances space.
     Right now the way the algorithm is the following:
     
@@ -176,7 +197,9 @@ def per_dist_avg_dir_prob(session, first_exit_only=False, plot=False):
 
     for dist_coord in xy:
         dir_probs[dist_coord[0], dist_coord[1], :] = dist_dir_prob(session,
-                tuple(dist_coord), first_exit_only=first_exit_only)
+                tuple(dist_coord), first_exit_only=first_exit_only,
+                weighted=weighted, by_availability=by_availability,
+                normalized=normalized)
 
     if not plot:
         return dir_probs
@@ -189,7 +212,16 @@ def per_dist_avg_dir_prob(session, first_exit_only=False, plot=False):
         # scale factor that will make the maximum length of the arrow 0.5 when
         # projected to either x or y axis. 0.75 = np.sqrt(1**2/2), and 1 is
         # obviously the maximum...
-        scale = 0.5/0.75
+        #FIXME
+
+        if normalized == 'simple' or normalized == 'prob':
+            max_proj = np.sqrt(1**2/2)
+        else:
+            if not weighted:
+                max_proj = np.sqrt(1**2/2)
+            else:
+                max_proj = np.sqrt(2**2/2)
+        scale = 0.5/max_proj
         for direction in range(0, 4):
             xy_proj = scale*np.sqrt(dir_probs[:,:,direction]**2/2).transpose().flatten()
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*xy_proj,
@@ -233,7 +265,70 @@ def max_distances(maze, goals=None):
 
     max_distances_all = np.array(max_distances_all)
     return max_distances_all.max(0)
-        
+
+def heatmap(session, **kwargs):
+    plot=True
+    goals = [t.step.goal for t in session.trials]
+
+    heatarray_shape = np.array(max_distances(session.trial.step.maze, goals)) + 1
+
+    heatarray = np.zeros(heatarray_shape)
+
+    for t in session.trials:
+        for s in t.path[:-1]:
+            heatarray[to_dist_coord(s, t.step.maze, t.step.goal)] += 1
+
+    maze = session.trial.step.maze
+    max_distances_all = max_distances(maze, goals)
+
+    dist_shape = np.array(max_distances_all) + 1
+    distances = np.zeros(dist_shape)
+
+    for goal in goals:
+        for n in maze.nodes():
+           new_coord = to_dist_coord(n, maze, goal)
+           distances[new_coord] += 1
+
+    if len(goals) == 1:
+        # This turns every element of d into an int
+        distances = distances.astype(int)
+
+    else:
+        distances = distances / len(goals)
+
+    # it is a bit hacky but it produces the plot we want... good for now
+    mesh = np.meshgrid(range(dist_shape[1]), range(dist_shape[0]))
+    y, x = mesh
+    x = x.flatten()
+    y = y.flatten()
+
+    if plot:
+        ax = pl.gca()
+        ax.set_aspect('equal')
+        # multiplies the value to obtain number of pixels in the surface
+        area_factor = 30* 15 * np.pi
+        pl.scatter(x.flatten(), y.flatten(),
+                    s=(area_factor*heatarray.flatten())/heatarray.sum(), c='k', **kwargs)
+
+        # Very ugly hack just to get some legend working
+        bullet_sizes = np.linspace(0.001, np.max(heatarray/heatarray.sum()), 4)
+        for b in bullet_sizes:
+            pl.scatter(-1,-1, s=area_factor*b, c='k', label='%f' %b, **kwargs)
+        pl.legend(loc='upper left', scatterpoints=1, title='<nodes>')
+
+        pl.xlim([-0.5, max_distances_all[0]+0.5])
+        pl.ylim([-0.5, max_distances_all[1]+0.5])
+        pl.xticks(range(0, max_distances_all[0]+1))
+        pl.yticks(range(0, max_distances_all[1]+1))
+        pl.grid()
+        ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
+        pl.xlabel('Maze distance to goal')
+        pl.ylabel('Manhattan distance to goal')
+
+    else:
+        return distances, x, y
+
+
 def distances_plot(maze, goals=None, plot=True, **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.
