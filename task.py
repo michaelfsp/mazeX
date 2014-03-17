@@ -46,6 +46,10 @@ class Step:
         self.values = []
         self.probs = []
         self.previous = previous
+        # sets .subsequent for the previous step
+        if previous:
+            previous.subsequent = self
+        self.subsequent = None
         self.trial = trial
 
     @property
@@ -157,7 +161,6 @@ class Trial:
 
         else:
             return False
-
 
 class SimulatedTrial(Trial):
     def __init__(self, steps, maze, goal, session, max_steps=0,
