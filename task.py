@@ -193,6 +193,21 @@ class Session:
         # solve the last trial
         self.trial.solve()
 
+    def steps_from_dist_point(self, point):
+        """Note: it does not include the last step, when the agent is already
+        at the goal!"""
+        steps = []
+        for t in self.trials:
+            try:
+                points = t.step.maze.distances_to_coord[point][t.step.goal]
+            except KeyError:
+                continue
+
+            for s in t.steps[:-1]:
+                if s.loc in points:
+                    steps.append(s)
+        return steps
+
 
 class SessionWithRandomTrials(Session):
     def __init__(cls, agent, n_trials, first_trial, gen_func):
