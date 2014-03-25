@@ -7,6 +7,18 @@ import networkx as nx
 import numpy as np
 import pylab as pl
 
+def surprise(step):
+    available_moves = [to_dist_direction(step.loc, a, step.maze, step.goal)
+            for a in step.available_nodes]
+    Ni = len(set(available_moves))
+    return -np.log2(1/Ni)
+
+def normed_surprise(point, session):
+    # list of all steps exiting from this point
+    steps = session.steps_from_dist_point(point)
+    surprises = np.vectorize(surprise)
+
+
 def to_dist_direction(n, loc, maze, goal):
     """Calculate the direction in the distances space of a given transition
     from loc to n.
@@ -43,12 +55,11 @@ def to_dist_coord(n, maze, goal):
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
 #   separate function
-def dist_dir_prob(session, point, first_exit_only=True, weighted=True,
-        by_availability=False, normalized='prob'):
+def dist_dir_prob(session, point, first_exit_only=True, normalized='prob'):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
 
-    It outputs n_times_choice / n_times_available
+    It outputs 'normalized surprise'
     """
     #TODO: Spit an error if the point does not exist
     #FIXME: These storage of maze and goal in a step will be deprecated
@@ -92,7 +103,10 @@ def dist_dir_prob(session, point, first_exit_only=True, weighted=True,
             # makes sense to not break instead in case the trial was aborted
             # before goal was reached.
 
-            moves_counter += 1
+            if metric == 'n-1':
+                moves_counter += 1
+            elif metric == 'surprise':
+                moves_counter += surprise(step)
 
             dist_params = (step.loc, step.maze, step.goal)
 
