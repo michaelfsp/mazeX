@@ -1,6 +1,7 @@
 import sys
 # so we can import mazex.
 sys.path.append('../../')
+import numpy as np
 import mazex as mx
 from mazex.utils import check_list_is_empty
 

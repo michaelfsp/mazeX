@@ -79,9 +79,6 @@ from mazex.agents import *
 # Mazes
 from mazex.mazes import *
 
-# Utilx
-from mazex.utils import *
-
 # Drawing capabilities
 from mazex.drawing import *
 
