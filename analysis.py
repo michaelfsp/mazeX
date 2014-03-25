@@ -52,7 +52,7 @@ def dist_dir_prob(session, point, first_exit_only=True, weighted=True,
     """
     #TODO: Spit an error if the point does not exist
     #FIXME: These storage of maze and goal in a step will be deprecated
-    maze = session.trial.step.maze
+    maze = session.trial.maze
 
     moves = np.zeros(4)
     availability = np.zeros(4)
@@ -94,7 +94,7 @@ def dist_dir_prob(session, point, first_exit_only=True, weighted=True,
 
             moves_counter += 1
 
-            dist_params = (step.loc, step.maze, step.goal)
+            dist_params = (step.loc, step.trial.maze, step.trial.goal)
 
             availability_indices = []
             for a in step.available_nodes:

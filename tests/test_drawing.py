@@ -16,12 +16,13 @@ class TestMaze:
         self.htrials = []
         for goal in self.goals:
             self.hagent.edge_visit_cache.clear()
-            step = mx.Step(self.maze, self.hagent.loc, goal)
-            htrial = mx.Trial([step], self.hagent)
+            initial_step = mx.SimStep(self.hagent.loc)
+            htrial = mx.SimTrial(self.maze, goal, initial_step, self.hagent)
             htrial.solve()
             self.htrials.append(htrial)
 
-        self.hsession = mx.Session(self.hagent, self.htrials)
+        self.hsession = mx.Session()
+        self.hsession.trials += self.htrials
 
     def test_draw_maze(self):
         mx.draw(self.maze)

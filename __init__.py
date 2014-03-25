@@ -85,8 +85,11 @@ from mazex.utils import *
 # Drawing capabilities
 from mazex.drawing import *
 
-# Task related stuff
-from mazex.task import *
+# Datamodel related stuff
+from mazex.datamodel import *
+
+# Simmulation stuff
+from mazex.simtask import *
 
 # Analysis related stuff
 import mazex.analysis

@@ -6,7 +6,7 @@ import pylab as pl
 import networkx as nx
 from mazex.mazes import SquareMaze
 from mazex.exceptions import *
-from mazex.task import Step, Trial
+from mazex.datamodel import Step, Trial
 from mazex.analysis import distances_plot
 
 import pdb
@@ -41,26 +41,26 @@ def draw_step(S, ax=None, hold=None, **kwds):
         raise DrawException
     # First we obtain a list of the nodes that are neither current
     # nor goal location
-    normal_nodes = S.maze.nodes()
+    normal_nodes = S.trial.maze.nodes()
     # And then we remove current and goal location nodes because
     # those will be plotted differently
     normal_nodes.remove(S.loc)
-    if S.goal != S.loc:
-        normal_nodes.remove(S.goal)
+    if S.trial.goal != S.loc:
+        normal_nodes.remove(S.trial.goal)
 
-    draw_maze(S.maze, ax=ax, hold=True, nodelist=normal_nodes, **kwds)
+    draw_maze(S.trial.maze, ax=ax, hold=True, nodelist=normal_nodes, **kwds)
     # Then we draw the nodes correspoding to current location
     #  we use the heading to shape the arrow, if present
     if S.heading:
         shape = S.heading
     else:
         shape = '8'
-    nx.draw_networkx_nodes(S.maze, pos=S.maze.pos,
+    nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
             nodelist=[S.loc], node_color='b',
             node_shape=shape)
     # ... and goal location 
-    nx.draw_networkx_nodes(S.maze, pos=S.maze.pos,
-            nodelist=[S.goal], node_color='r',
+    nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
+            nodelist=[S.trial.goal], node_color='r',
             node_shape='h') 
 
 def draw_trial(T, ax=None, hold=None, **kwds):
@@ -73,7 +73,7 @@ def draw_trial(T, ax=None, hold=None, **kwds):
 
     draw_step(T.steps[0], ax=ax, hold=True, **kwds)
 
-    nx.draw_networkx_edges(T.step.maze, pos=T.step.maze.pos,
+    nx.draw_networkx_edges(T.maze, pos=T.maze.pos,
             edgelist=edges, edge_color='g', width=4)
 
 def draw(M, ax=None, hold=None, **kwds):
