@@ -41,13 +41,14 @@ def test_avg_dist_dir_prob():
     paths = [path1, path2, path3, path4]
     trials = []
     for path in paths:
-        steps = [mx.Step(maze, x, path[-1]) for x in path]
-        trial = mx.Trial(steps, agent)
+        trial = mx.Trial(maze, path[-1])
+        steps = [mx.Step(x, trial) for x in path]
         #HACK: add a previous to each step
         for p, s in zip(range(0, len(trial.steps)), trial.steps[1:]):
             s.previous = trial.steps[p]
         trials.append(trial)
-    session = mx.Session(agent, trials)
+    session = mx.Session()
+    session.trials += trials
     # total moves per dist dir
     moves = np.array([0, 0, 17, 7])
     # total number of times available per dist dir
