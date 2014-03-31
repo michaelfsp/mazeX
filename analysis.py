@@ -7,17 +7,28 @@ import networkx as nx
 import numpy as np
 import pylab as pl
 
-def surprise(step):
-    available_moves = [to_dist_direction(step.loc, a, step.maze, step.goal)
-            for a in step.available_nodes]
-    Ni = len(set(available_moves))
+def surprisal(step, null='random'):
+    """Surprisal associated with movement out of node at Step.loc.
+    
+    Parameters:
+    -----------
+    step : Step
+        The step for which surprisal is to be computed
+
+    null : 'random', 'manhattan', 'vonmises'
+    """
+    if null == 'manhattan':
+        available_moves = [to_dist_direction(step.loc, a, step.trial.maze,
+            step.trial.goal) for a in step.available_nodes]
+        Ni = len(set(available_moves))
+
+    elif null == 'random':
+        Ni = len(step.available_nodes)
+
+    else:
+        raise NotSupported
+
     return -np.log2(1/Ni)
-
-def normed_surprise(point, session):
-    # list of all steps exiting from this point
-    steps = session.steps_from_dist_point(point)
-    surprises = np.vectorize(surprise)
-
 
 def to_dist_direction(n, loc, maze, goal):
     """Calculate the direction in the distances space of a given transition
@@ -55,25 +66,31 @@ def to_dist_coord(n, maze, goal):
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
 #   separate function
-def dist_dir_prob(session, point, first_exit_only=True, normalized='prob'):
+def dist_dir_prob(session, point, first_exit_only=True):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
 
-    It outputs 'normalized surprise'
+    It outputs 'normalized surprisal'
+
+    Parameters:
+    -----------
+        first_exit_only : Boolean
+            Consider for the analysis only the first transition out of a node
     """
     #TODO: Spit an error if the point does not exist
     #FIXME: These storage of maze and goal in a step will be deprecated
     maze = session.trial.maze
 
-    moves = np.zeros(4)
+    surprisals = np.zeros(4)
     availability = np.zeros(4)
 
-    moves_counter = 0
+    surprisals_counter = np.zeros(4)
+    availability_counter = np.zeros(4)
 
     for t in session.trials:
         try:
             nodes_on_point = maze.distances_to_coord[point][t.goal]
-        except KeyError: # the path of trial t doesn't go through this point
+        except KeyError: # this point doesn't exist on this trial
             continue # ignores the remaining calculations for the current
         # iteration of this for loop
 
@@ -102,41 +119,39 @@ def dist_dir_prob(session, point, first_exit_only=True, normalized='prob'):
                 continue # ignore current step and go to next...
             # makes sense to not break instead in case the trial was aborted
             # before goal was reached.
+            dist_params = (step.loc, t.maze, t.goal)
 
-            if metric == 'n-1':
-                moves_counter += 1
-            elif metric == 'surprise':
-                moves_counter += surprise(step)
-
-            dist_params = (step.loc, step.trial.maze, step.trial.goal)
-
-            availability_indices = []
+            available_directions = []
             for a in step.available_nodes:
-                availability_indices.append(to_dist_direction(a, *dist_params))
-            availability_indices = list(set(availability_indices))
+                available_directions.append(to_dist_direction(a, *dist_params))
+            # list() so I can use output as an index
+            # set() gets only the unique indices in the list
+            # NOTE: if in the same step two maze arms represent the same
+            # direction in the distances space, that direction is counted as
+            # available only once
+            availability_indices = list(set(available_directions))
             # [[]] makes use of advanced indexing
-            availability[[availability_indices]] += 1
-            if not weighted:
-                moves[to_dist_direction(next_step.loc, *dist_params)] += 1
-            else:
-                weight = len(availability_indices)-1
-                moves[to_dist_direction(next_step.loc, *dist_params)] += weight
+            availability_counter[[availability_indices]] += 1
+            availability[[availability_indices]] += surprisal(step)
 
-    if by_availability:    
-        prob = moves/availability
-    else:
-        prob = moves
+            surprisals_counter[to_dist_direction(next_step.loc, *dist_params)] += 1
 
+            surprisals[to_dist_direction(next_step.loc, *dist_params)] += surprisal(
+                    step)
+
+    """
+    # These don't really make as much sense anymore but will leave them here
+    # for now
     if normalized == 'simple':
         prob /= prob.max()
 
     elif normalized == 'moves':
-        prob /= moves_counter
+        prob /= surprisals_counter
 
     elif normalized == 'prob':
         prob /= prob.sum()
-
-    return prob
+    """
+    return surprisals/surprisals_counter, availability/availability_counter
 
 def avg_dist_dir_prob(session, plot=False):
     """Calculate the average direction of choices in distances metric.
@@ -188,8 +203,8 @@ def avg_dist_dir_prob(session, plot=False):
     else:
         return prob
 
-def per_dist_avg_dir_prob(session, first_exit_only=False, weighted=True,
-        by_availability=False, normalized='prob', plot=False):
+def per_dist_avg_dir_prob(session, first_exit_only=True,
+        availability='plot', plot=False):
     """Calculate the probability of direction choice on the distances space.
     Right now the way the algorithm is the following:
     
@@ -202,21 +217,24 @@ def per_dist_avg_dir_prob(session, first_exit_only=False, weighted=True,
     max_dists = np.array([max_distances(t.maze, t.goal) for t in session.trials]
             ).max(0)
 
-    dir_probs_dims = max_dists + 1
-    dir_probs_dims = dir_probs_dims.tolist()
-    dir_probs_dims.append(4)
-    dir_probs = np.zeros(dir_probs_dims)
-    x, y = np.meshgrid(range(dir_probs.shape[0]), range(dir_probs.shape[1]))
+    dir_surprisals_dims = max_dists + 1
+    dir_surprisals_dims = dir_surprisals_dims.tolist()
+    dir_surprisals_dims.append(4)
+    dir_surprisals = np.zeros(dir_surprisals_dims)
+    dir_availabilities = np.zeros(dir_surprisals_dims)
+
+    x, y = np.meshgrid(range(dir_surprisals.shape[0]), range(dir_surprisals.shape[1]))
     xy = np.array([x.flatten(), y.flatten()]).transpose()
 
     for dist_coord in xy:
-        dir_probs[dist_coord[0], dist_coord[1], :] = dist_dir_prob(session,
-                tuple(dist_coord), first_exit_only=first_exit_only,
-                weighted=weighted, by_availability=by_availability,
-                normalized=normalized)
+        #import pdb; pdb.set_trace()
+        surpr, avail = dist_dir_prob(session, tuple(dist_coord),
+                first_exit_only=first_exit_only)
+        dir_surprisals[dist_coord[0], dist_coord[1], :] = surpr
+        dir_availabilities[dist_coord[0], dist_coord[1], :] = avail
 
     if not plot:
-        return dir_probs
+        return dir_surprisals, dir_availabilities
     else:
         distances_plot(session.trial.maze, [t.goal for t in session.trials],
                 plot=True, zorder=10)
@@ -228,20 +246,32 @@ def per_dist_avg_dir_prob(session, first_exit_only=False, weighted=True,
         # obviously the maximum...
         #FIXME
 
-        if normalized == 'simple' or normalized == 'prob':
-            max_proj = np.sqrt(1**2/2)
+        if availability == 'normalizer':
+            # maximum would be 1, since the surprisals are normalized
+            # this is simply the value of the projection of a vector of length
+            # 1 and angle 45 degr. onto x or y axes...
+            max_proj = np.sqrt(1/2)
         else:
-            if not weighted:
-                max_proj = np.sqrt(1**2/2)
-            else:
-                max_proj = np.sqrt(2**2/2)
+            # if not normalized the maximum surprisal is 2
+            max_proj = np.sqrt((2**2)/2)
+        
+        # this is simply a scaling factor so that the arrows don't overlap on
+        # the plot
         scale = 0.5/max_proj
+
         for direction in range(0, 4):
-            xy_proj = scale*np.sqrt(dir_probs[:,:,direction]**2/2).transpose().flatten()
-            pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*xy_proj,
-                   dy_sign[direction]*xy_proj, units='xy', scale=1, color='b', zorder=1) 
+            surprisals_xy_proj = scale*np.sqrt(dir_surprisals[:,:,direction
+                ]**2/2).transpose().flatten()
+            pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj,
+                   dy_sign[direction]*surprisals_xy_proj, units='xy', scale=1,
+                   color='b', zorder=2) 
 
-
+            if availability == 'plot':
+                availabilities_xy_proj = scale*np.sqrt(dir_availabilities[:,:,direction
+                    ]**2/2).transpose().flatten()
+                pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*availabilities_xy_proj,
+                       dy_sign[direction]*availabilities_xy_proj, units='xy', scale=1,
+                       color='r', zorder=1) 
 
 def max_distances(maze, goals=None):
     # the output of this function is the maximum of an array called
