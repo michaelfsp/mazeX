@@ -26,7 +26,7 @@ class SimStep(Step):
         # trial=None is only here to allow the creation of the initial step
         # for the initial step this will be altered later by
         # SimTrial.__init__() a bit of a hugly hack but will do it for now
-        super(SimStep, self).__init__(loc, trial, previous=None)
+        super(SimStep, self).__init__(loc, trial, previous = previous)
 
         self.values = []
         self.probs = []
@@ -50,8 +50,10 @@ class SimTrial(Trial):
         next_node = self.step.available_nodes[choose(self.step.probs)]
 
         self.agent.loc = next_node
+        
+        current_step = self.step
 
-        self.steps.append(SimStep(next_node, self, previous = self.step))
+        self.steps.append(SimStep(next_node, self, previous = current_step))
 
     def solve(self):
         while not self.termination_condition():
