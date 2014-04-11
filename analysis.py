@@ -17,18 +17,26 @@ def surprisal(step, null='random'):
 
     null : 'random', 'manhattan', 'vonmises'
     """
-    if null == 'manhattan':
+    if null == 'random':
         available_moves = [to_dist_direction(step.loc, a, step.trial.maze,
             step.trial.goal) for a in step.available_nodes]
         Ni = len(set(available_moves))
-
-    elif null == 'random':
-        Ni = len(step.available_nodes)
 
     else:
         raise NotSupported
 
     return -np.log2(1/Ni)
+
+def expected_surprisal(step, null='random'):
+    """Calculates the expected surprisal for a given step and null agent.
+
+    Parameters : Step
+        The step for which surprisal is to be computed
+
+    null : 'random', 'manhattan', 'vonmises'
+    """
+    if null == 'random':
+
 
 def to_dist_direction(n, loc, maze, goal):
     """Calculate the direction in the distances space of a given transition
