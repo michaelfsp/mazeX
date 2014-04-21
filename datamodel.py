@@ -43,13 +43,13 @@ class Step:
         if self._heading:
             return self._heading
         elif self.previous:
-            if self.previous.loc[1] > self.loc[1]:
+            if self.previous.loc[1] < self.loc[1]:
                 direction = '^'
-            elif self.previous.loc[1] < self.loc[1]:
+            elif self.previous.loc[1] > self.loc[1]:
                 direction = 'v'
-            elif self.previous.loc[0] > self.loc[0]:
-                direction = '>'
             elif self.previous.loc[0] < self.loc[0]:
+                direction = '>'
+            elif self.previous.loc[0] > self.loc[0]:
                 direction = '<'
         elif not self.previous:
             direction = None #only applies to the first step in a trial
