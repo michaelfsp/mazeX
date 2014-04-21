@@ -64,11 +64,11 @@ class Step:
         """Calculates  path until current step by iterating over the previous
         step's locations.
         """
-        path = [self.loc]
+        path = [self]
         previous_step = self.previous
 
         while previous_step:
-            path.insert(0, previous_step.loc)
+            path.insert(0, previous_step)
             previous_step = previous_step.previous
         return path
 
