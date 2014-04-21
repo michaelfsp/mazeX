@@ -6,6 +6,23 @@ import mazex.utils as utils
 import networkx as nx
 import numpy as np
 import pylab as pl
+import scipy.optimize
+
+def prob(step, null='random'):
+    if null == 'random':
+        # now we need to count how many edges correspond to the chosen
+        # direction, but only in case there are more edges available than
+        # directions in the distances space
+        edges_per_direction = np.zeros(4)
+        for n in step.available_nodes:
+            edges_per_direction[to_dist_direction(n, step.loc,
+                step.trial.maze, step.trial.goal)] += 1
+
+        edges_per_direction[edges_per_direction==0]=None
+        return edges_per_direction/len(step.available_nodes)
+
+    else:
+        raise NotSupported
 
 def surprisal(step, null='random'):
     """Surprisal associated with movement out of node at Step.loc.
@@ -17,27 +34,27 @@ def surprisal(step, null='random'):
 
     null : 'random', 'manhattan', 'vonmises'
     """
+    #TODO: Give surprisal per direction
     if null == 'random':
-        available_moves = [to_dist_direction(step.loc, a, step.trial.maze,
-            step.trial.goal) for a in step.available_nodes]
-        Ni = len(set(available_moves))
+        surprisals = -np.log2(prob(step, null=null))
 
     else:
         raise NotSupported
 
-    return -np.log2(1/Ni)
+psi_fun = lambda t, m, x: (np.exp(t*(x/m))-1)/(np.exp(t)-1)
 
-def expected_surprisal(step, null='random'):
-    """Calculates the expected surprisal for a given step and null agent.
+# we use this function for fsolve to find the right value of t
+psi_fun_solve = lambda t, m, x: psi_fun(t, m, x)-(1/2)
 
-    Parameters : Step
-        The step for which surprisal is to be computed
+def psi(Ic, Ic_exp, Ic_max):
+    #the value of the initial guesses for t
+    if Ic_exp/Ic_max < 1/2:
+        t0 = -1
+    else:
+        t0 = 1
+    t = scipy.optimize.fsolve(psi_fun_solve, t0, args=(Ic_max, Ic_exp))
 
-    null : 'random', 'manhattan', 'vonmises'
-    """
-    if null == 'random':
-        pass
-    #TODO!
+    return psi_fun(t, Ic_max, Ic)
 
 
 def to_dist_direction(n, loc, maze, goal):
