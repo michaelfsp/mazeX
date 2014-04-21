@@ -25,6 +25,28 @@ def angle_between_nodes(loc, node1, node2):
     return np.arccos(np.dot(node1_vec, node2_vec) / (np.linalg.norm(
         node1_vec)*np.linalg.norm(node2_vec)))
 
+def cos_between_nodes(loc, node1, node2):
+    """A common function that determines the angle between a given edge and
+    the goal.
+
+    Parameters:
+    -----------
+    node : node or tuple
+        Node on the maze we want to evaluate the angle of
+    
+    loc : node or tuple
+        The current node
+    
+    goal : node or turple
+        The node of the ,y coordinates of the goal location.
+    """
+    node1_vec = np.array(node1) - np.array(loc)
+    node2_vec = np.array(node2) - np.array(loc)
+    
+    return np.dot(node1_vec, node2_vec) / (np.linalg.norm(
+        node1_vec)*np.linalg.norm(node2_vec))
+
+
 def assert_is_node(node):
     # test the node follows our node naming convention
     if not len(node) == 2:

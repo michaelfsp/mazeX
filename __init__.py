@@ -90,6 +90,9 @@ from mazex.simtask import *
 
 # Analysis related stuff
 import mazex.analysis
+
+# Utils
+import mazex.utils
 """
 I believe we don't need these imports.
 
