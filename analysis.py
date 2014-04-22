@@ -55,6 +55,90 @@ def psi(Ic, Ic_exp, Ic_max):
 
     return psi_fun(t, Ic_max, Ic)
 
+def dist_psi(session, point, first_exit_only=True):
+    """Calculate the average direction of choices in distances metric for a
+    single point on the distances space.
+
+    It outputs 'normalized surprisal'
+
+    Parameters:
+    -----------
+        first_exit_only : Boolean
+            Consider for the analysis only the first transition out of a node
+    """
+    #TODO: Spit an error if the point does not exist
+    #FIXME: These storage of maze and goal in a step will be deprecated
+    maze = session.trial.maze
+
+    Ic = np.zeros(4)
+    Ic_max = np.zeros(4)
+    Ic_exp = np.zeros(4)
+
+    availability = np.zeros(4)
+
+    for t in session.trials:
+        try:
+            nodes_on_point = maze.distances_to_coord[point][t.goal]
+        except KeyError: # this point doesn't exist on this trial
+            continue # ignores the remaining calculations for the current
+        # iteration of this for loop
+
+        if first_exit_only:
+            step_indices = [t.path.index(n) for n in nodes_on_point if n in
+                    t.path]
+        else:
+            step_indices = []
+            for n in nodes_on_point:
+                # This list comprehension finds all occurrences of n in list 
+                # t.path, unlinke t.path.index() which returns only the first
+                # occurrence
+                # += 'appends' it to the list step_indices
+                step_indices += [i for i, x in enumerate(
+                    t.path) if x == n]
+
+        # just to save on text we will save here the parameters we need to
+        # call the function to_dist_coord()
+
+        for i in step_indices:
+            step = t.steps[i]
+            try:
+                # will fail if it is the last in the path
+                next_step = t.steps[i+1]
+            except IndexError:
+                continue # ignore current step and go to next...
+            # makes sense to not break instead in case the trial was aborted
+            # before goal was reached.
+            dist_params = (step.loc, t.maze, t.goal)
+
+            available_directions = []
+            for a in step.available_nodes:
+                available_directions.append(to_dist_direction(a, *dist_params))
+            # list() so I can use output as an index
+            # set() gets only the unique indices in the list
+            # NOTE: if in the same step two maze arms represent the same
+            # direction in the distances space, that direction is counted as
+            # available only once
+            availability_indices = list(set(available_directions))
+            # [[]] makes use of advanced indexing
+            availability[[availability_indices]] += 1
+
+            index_chosen = to_dist_direction(step.subsequent.loc, *dist_params)
+
+            surpr = surprisal(step)
+            # this trick is to avoid problems with sums of nans and Nones
+            surpr[surpr==np.inf] = 0
+            p = prob(step)
+
+            Ic[index_chosen] += surpr[index_chosen]
+            Ic_exp += p*surpr
+            Ic_max += surpr
+
+    Ic = Ic/availability
+    Ic_exp = Ic_exp/availability
+    Ic_max = Ic_max/availability
+
+    return Ic, Ic_exp, Ic_max
+
 
 def to_dist_direction(n, loc, maze, goal):
     """Calculate the direction in the distances space of a given transition
