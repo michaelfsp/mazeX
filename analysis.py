@@ -18,7 +18,6 @@ def prob(step, null='random'):
             edges_per_direction[to_dist_direction(n, step.loc,
                 step.trial.maze, step.trial.goal)] += 1
 
-        edges_per_direction[edges_per_direction==0]=None
         return edges_per_direction/len(step.available_nodes)
 
     else:
@@ -36,7 +35,7 @@ def surprisal(step, null='random'):
     """
     #TODO: Give surprisal per direction
     if null == 'random':
-        surprisals = -np.log2(prob(step, null=null))
+        return -np.log2(prob(step, null=null))
 
     else:
         raise NotSupported
