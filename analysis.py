@@ -137,7 +137,14 @@ def dist_psi(session, point, first_exit_only=True):
     Ic_exp = Ic_exp/availability
     Ic_max = Ic_max/availability
 
-    return Ic, Ic_exp, Ic_max
+    psi_values = np.zeros(4)
+
+    for i in [0,1,2,3]:
+        if Ic[i]:
+            psi_values[i] = (psi(Ic[i], Ic_exp[i], Ic_max[i]))
+
+    return psi_values
+
 
 
 def to_dist_direction(n, loc, maze, goal):
