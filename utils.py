@@ -116,6 +116,43 @@ def invert_dictionary(dic):
         inv_map[v].append(k)
     return inv_map
 
+def max_distances(maze, goals=None):
+    # the output of this function is the maximum of an array called
+    # max_distances_all
+    # we first need to create that array based on the three possible scenarios
+    # no goal, single goals, multiple goals
+    # for each goal calculate the maximum Maze and Manhattan distances, store
+    # that in a list, turn list into array and calculate the maximum over the
+    # first axis
+    if not goals:
+        max_maze_distance = nx.algorithms.distance_measures.diameter(maze)
+        max_manhattan_distance = 2 * (maze.size-1)
+        return (max_maze_distance, max_manhattan_distance)
+
+    # In case only one goal was passed as argument
+    # TODO: This is very hacky. improve...
+    try:
+        utils.assert_is_node(goals)
+        goals = [goals]
+    except InvalidNode:
+        pass
+
+    max_distances_all = []
+    
+    for goal in goals:
+        max_maze_distance = nx.algorithms.distance_measures.eccentricity(maze,
+                goal)
+        # find largest x distance to this goal
+        max_x_dist = max((goal[0], maze.size-1 - goal[0]))
+        # same for y
+        max_y_dist = max((goal[1], maze.size-1 - goal[1]))
+        max_manhattan_distance = max_x_dist + max_y_dist
+
+        max_distances_all.append([max_maze_distance, max_manhattan_distance])
+
+    max_distances_all = np.array(max_distances_all)
+    return max_distances_all.max(0)
+
 def to_dist_direction(n, loc, maze, goal):
     """Calculate the direction in the distances space of a given transition
     from loc to n.
