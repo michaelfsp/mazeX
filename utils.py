@@ -115,3 +115,38 @@ def invert_dictionary(dic):
         inv_map[v] = inv_map.get(v, [])
         inv_map[v].append(k)
     return inv_map
+
+def to_dist_direction(n, loc, maze, goal):
+    """Calculate the direction in the distances space of a given transition
+    from loc to n.
+    
+    I am not sure if it is possible to have something other than
+    the 4 possible transitions I have identified so I will make
+    conditions very explicit in order to detect eventual
+    exceptions
+    """
+    loc = to_dist_coord(loc, maze, goal)
+    n = to_dist_coord(n, maze, goal)
+
+    if n[0]>loc[0] and n[1]>loc[1]:
+        "NE transition in our convention for the axis on this diagram"
+        return 0
+    elif n[0]>loc[0] and n[1]<loc[1]:
+        "SE transition in our convention for the axis on this diagram"
+        return 1
+    elif n[0]<loc[0] and n[1]<loc[1]:
+        "SW transition in our convention for the axis on this diagram"
+        return 2
+    elif n[0]<loc[0] and n[1]>loc[1]:
+        "NW transition in our convention for the axis on this diagram"
+        return 3
+    else:
+        raise WeirdDirection
+
+def to_dist_coord(n, maze, goal):
+    """Returns the coordinates of node n in distance coordinates in a tuple
+    of the shape (maze_distance, manhattan_distance).
+    """
+    return (int(maze.distances_dictionary[n][goal]),
+            abs(goal[0] - n[0]) + abs(goal[1] - n[1]))
+

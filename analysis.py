@@ -15,7 +15,7 @@ def prob(step, null='random'):
         # directions in the distances space
         edges_per_direction = np.zeros(4)
         for n in step.available_nodes:
-            edges_per_direction[to_dist_direction(n, step.loc,
+            edges_per_direction[utils.to_dist_direction(n, step.loc,
                 step.trial.maze, step.trial.goal)] += 1
 
         return edges_per_direction/len(step.available_nodes)
@@ -41,7 +41,6 @@ def surprisal(step, null='random'):
         raise NotSupported
 
 psi_fun = lambda t, m, x: (np.exp(t*(x/m))-1)/(np.exp(t)-1)
-
 # we use this function for fsolve to find the right value of t
 psi_fun_solve = lambda t, m, x: psi_fun(t, m, x)-(1/2)
 
@@ -112,7 +111,7 @@ def dist_psi(session, point, first_exit_only=True):
 
             available_directions = []
             for a in step.available_nodes:
-                available_directions.append(to_dist_direction(a, *dist_params))
+                available_directions.append(utils.to_dist_direction(a, *dist_params))
             # list() so I can use output as an index
             # set() gets only the unique indices in the list
             # NOTE: if in the same step two maze arms represent the same
@@ -122,7 +121,7 @@ def dist_psi(session, point, first_exit_only=True):
             # [[]] makes use of advanced indexing
             availability[[availability_indices]] += 1
 
-            index_chosen = to_dist_direction(step.subsequent.loc, *dist_params)
+            index_chosen = utils.to_dist_direction(step.subsequent.loc, *dist_params)
 
             surpr = surprisal(step)
             # this trick is to avoid problems with sums of nans and Nones
@@ -203,39 +202,6 @@ def per_dist_psi(session, first_exit_only=True, plot=True):
         pl.title('$\psi_{d,l}(\kappa)$', fontsize=30)
 
 
-def to_dist_direction(n, loc, maze, goal):
-    """Calculate the direction in the distances space of a given transition
-    from loc to n.
-    
-    I am not sure if it is possible to have something other than
-    the 4 possible transitions I have identified so I will make
-    conditions very explicit in order to detect eventual
-    exceptions
-    """
-    loc = to_dist_coord(loc, maze, goal)
-    n = to_dist_coord(n, maze, goal)
-
-    if n[0]>loc[0] and n[1]>loc[1]:
-        "NE transition in our convention for the axis on this diagram"
-        return 0
-    elif n[0]>loc[0] and n[1]<loc[1]:
-        "SE transition in our convention for the axis on this diagram"
-        return 1
-    elif n[0]<loc[0] and n[1]<loc[1]:
-        "SW transition in our convention for the axis on this diagram"
-        return 2
-    elif n[0]<loc[0] and n[1]>loc[1]:
-        "NW transition in our convention for the axis on this diagram"
-        return 3
-    else:
-        raise WeirdDirection
-
-def to_dist_coord(n, maze, goal):
-    """Returns the coordinates of node n in distance coordinates in a tuple
-    of the shape (maze_distance, manhattan_distance).
-    """
-    return (int(maze.distances_dictionary[n][goal]),
-            abs(goal[0] - n[0]) + abs(goal[1] - n[1]))
 
 def prob_angle_choice(session, plot=True, **kwargs):
     """Calculate choice probability by cos of angle formed between edge and
@@ -329,7 +295,7 @@ def dist_dir_prob(session, point, first_exit_only=True):
 
             available_directions = []
             for a in step.available_nodes:
-                available_directions.append(to_dist_direction(a, *dist_params))
+                available_directions.append(utils.to_dist_direction(a, *dist_params))
             # list() so I can use output as an index
             # set() gets only the unique indices in the list
             # NOTE: if in the same step two maze arms represent the same
@@ -340,9 +306,9 @@ def dist_dir_prob(session, point, first_exit_only=True):
             availability_counter[[availability_indices]] += 1
             availability[[availability_indices]] += surprisal(step)
 
-            surprisals_counter[to_dist_direction(next_step.loc, *dist_params)] += 1
+            surprisals_counter[utils.to_dist_direction(next_step.loc, *dist_params)] += 1
 
-            surprisals[to_dist_direction(next_step.loc, *dist_params)] += surprisal(
+            surprisals[utils.to_dist_direction(next_step.loc, *dist_params)] += surprisal(
                     step)
 
     """
@@ -375,12 +341,12 @@ def avg_dist_dir_prob(session, plot=False):
 
             availability_indices = []
             for a in step.available_nodes:
-                availability_indices.append(to_dist_direction(a, *dist_params))
+                availability_indices.append(utils.to_dist_direction(a, *dist_params))
             availability_indices = list(set(availability_indices))
             # [[]] activates advanced indexing
             availability[[availability_indices]] += 1
 
-            moves[to_dist_direction(next_step.loc, *dist_params)] += 1
+            moves[utils.to_dist_direction(next_step.loc, *dist_params)] += 1
     prob = moves/availability
 
     if plot:
@@ -526,7 +492,7 @@ def heatmap(session, **kwargs):
 
     for t in session.trials:
         for s in t.path[:-1]:
-            heatarray[to_dist_coord(s, t.step.maze, t.step.goal)] += 1
+            heatarray[utils.to_dist_coord(s, t.step.maze, t.step.goal)] += 1
 
     maze = session.trial.step.maze
     max_distances_all = max_distances(maze, goals)
@@ -536,7 +502,7 @@ def heatmap(session, **kwargs):
 
     for goal in goals:
         for n in maze.nodes():
-           new_coord = to_dist_coord(n, maze, goal)
+           new_coord = utils.to_dist_coord(n, maze, goal)
            distances[new_coord] += 1
 
     if len(goals) == 1:
@@ -604,7 +570,7 @@ def distances_plot(maze, goals=None, plot=True, **kwargs):
 
     for goal in goals:
         for n in maze.nodes():
-           new_coord = to_dist_coord(n, maze, goal)
+           new_coord = utils.to_dist_coord(n, maze, goal)
            distances[new_coord] += 1
 
     if len(goals) == 1:
@@ -651,9 +617,9 @@ def distances_plot_path(trial):
     """
     distances_plot(trial.step.maze, trial.step.goal, zorder=10)
     for i in range(len(trial.path)-2):
-        first_node = to_dist_coord(trial.path[i], trial.step.maze,
+        first_node = utils.to_dist_coord(trial.path[i], trial.step.maze,
                 trial.step.goal)
-        second_node = to_dist_coord(trial.path[i+1], trial.step.maze,
+        second_node = utils.to_dist_coord(trial.path[i+1], trial.step.maze,
                 trial.step.goal)
         # zorder=1 sends the lines to the 'bottom layer'
         pl.plot([first_node[0], second_node[0]], [first_node[1],
