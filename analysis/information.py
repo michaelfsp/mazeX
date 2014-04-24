@@ -8,7 +8,6 @@ import networkx as nx
 import numpy as np
 import pylab as pl
 import scipy.optimize
-import
 
 def surprisal(step, null='random'):
     """Surprisal associated with movement out of node at Step.loc.

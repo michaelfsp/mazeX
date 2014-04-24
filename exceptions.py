@@ -59,3 +59,8 @@ class EdgeWeight(MazeXException):
 class NotSupported(MazeXException):
     def __str__(self):
         return "This NetworkX functionality is not supported yet!"
+
+class UnexpectedResult(MazeXException):
+    def __str__(self):
+        return ("This calculation was not conceived assuming this result"
+                " cannot occur. Please do not trust this result!")

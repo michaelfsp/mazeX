@@ -92,7 +92,7 @@ from mazex.simtask import *
 import mazex.analysis
 
 # Utils
-import mazex.utils
+import mazex.utils as utils
 """
 I believe we don't need these imports.
 

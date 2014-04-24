@@ -7,7 +7,7 @@ import networkx as nx
 from mazex.mazes import SquareMaze
 from mazex.exceptions import *
 from mazex.datamodel import Step, Trial
-from mazex.analysis import distances_plot
+from mazex.analysis.distances import distances_plot
 
 import pdb
 

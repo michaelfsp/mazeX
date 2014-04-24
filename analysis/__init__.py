@@ -4,8 +4,4 @@ __author__   = "Michael Pereira"
 
 __version__ = "dev_git"
 
-import distances
-import probs
-import information
-import angle
-
+from mazex.analysis import angle, deviations, distances, information, probs
