@@ -1,8 +1,9 @@
 """
 Analysis methods based on deviations from the shortest path.
 """
+import numpy as np
 
-def deviation_from_shortest(trial):
+def stupid_moves(trial):
     """
     dg = distance to goal
     spl = shortest path length.
@@ -10,25 +11,13 @@ def deviation_from_shortest(trial):
     dg_trajectory = [trial.maze.distances_dictionary[n][trial.goal] for n
             in trial.path]
 
-    sigma_trajectory = []
-    while len(sigma_trajectory) != len(dg_trajectory)-1:
-        i = len(sigma_trajectory)
+    delta = np.diff(dg_trajectory)
 
-        if dg_trajectory[i] > dg_trajectory[i+1]:
-            # if the distance drecreased, the agent acted optimally
-            sigma_trajectory.append(0)
-        elif dg_trajectory[i] < dg_trajectory[i+1]:
-            # otherwise we need to find how big the detour was
-            # so we search the distances list starting from the point the
-            # distance increased until we find the same distance again. The
-            # index of that occurrence is the number of extra steps the agent
-            # will have to do because of its stupidity here, as compared to an
-            # optimal agent
-            extra_steps = dg_trajectory[i+1:].index(dg_trajectory[i]) + 1
+    sigma = np.zeros(dg_trajectory[0])
 
-            # we define the deviation sigma
-            sigma_trajectory.append(int(extra_steps/2))
+    for i, d in enumerate(delta):
+        if d == 1:
+            position = dg_trajectory[0] - dg_trajectory[i]
+            sigma[position] += 1
 
-            del dg_trajectory[i+1:i+extra_steps+1]
-
-    return dg_trajectory[:-1], sigma_trajectory
+    return np.arange(dg_trajectory[0], 0, -1), sigma
