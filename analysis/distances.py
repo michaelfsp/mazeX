@@ -1,5 +1,10 @@
 """Basic analysis tools for operations on the distances space.
 """
+import numpy as np
+import pylab as pl
+
+from mazex.exceptions import *
+import mazex.utils as utils
 
 def distances_plot(maze, goals=None, plot=True, **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal

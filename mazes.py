@@ -64,7 +64,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
             for goal in self.node:
                 for n in self.node:
-                    dist_coord = mazex.analysis.to_dist_coord(n, self, goal)
+                    dist_coord = mazex.utils.to_dist_coord(n, self, goal)
 
                     try:
                         mapping_dict[dist_coord][goal].append(n) 

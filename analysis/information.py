@@ -1,13 +1,14 @@
 """
 Analysis methods that rely on information content.
 """
-
-from mazex.exceptions import *
-import mazex.utils as utils
-import networkx as nx
 import numpy as np
 import pylab as pl
 import scipy.optimize
+import networkx as nx
+
+import mazex
+from mazex.exceptions import *
+import mazex.utils as utils
 
 def surprisal(step, null='random'):
     """Surprisal associated with movement out of node at Step.loc.
@@ -21,7 +22,7 @@ def surprisal(step, null='random'):
     """
     #TODO: Give surprisal per direction
     if null == 'random':
-        return -np.log2(prob(step, null=null))
+        return -np.log2(mazex.analysis.probs.prob(step, null=null))
 
     else:
         raise NotSupported
@@ -112,7 +113,7 @@ def dist_psi(session, point, first_exit_only=True):
             surpr = surprisal(step)
             # this trick is to avoid problems with sums of nans and Nones
             surpr[surpr==np.inf] = 0
-            p = prob(step)
+            p = mazex.analysis.probs.prob(step)
 
             Ic[index_chosen] += surpr[index_chosen]
             Ic_exp += p*surpr
@@ -150,8 +151,8 @@ def per_dist_psi(session, first_exit_only=True, plot=True):
     if not plot:
         return dir_surprisals
     else:
-        distances_plot(session.trial.maze, [t.goal for t in session.trials],
-                plot=True, zorder=10)
+        mazex.analysis.distances.distances_plot(session.trial.maze,
+                [t.goal for t in session.trials], plot=True, zorder=10)
         pl.hold(True)
         dx_sign = (1, 1, -1, -1)
         dy_sign = (1, -1, -1, 1)
@@ -168,6 +169,7 @@ def per_dist_psi(session, first_exit_only=True, plot=True):
         for direction in range(0, 4):
             surprisals_xy_proj = scale*np.sqrt(dir_surprisals[:,:,direction
                 ]**2/2).transpose().flatten()
+
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj,
                    dy_sign[direction]*surprisals_xy_proj, units='xy', scale=1,
                    color='g', width=0.15, headwidth=1, headlength=0.5, zorder=2) 

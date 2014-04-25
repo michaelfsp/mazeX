@@ -88,11 +88,12 @@ from mazex.datamodel import *
 # Simmulation stuff
 from mazex.simtask import *
 
-# Analysis related stuff
-import mazex.analysis
-
 # Utils
 import mazex.utils as utils
+
+# Analysis related stuff
+import mazex.analysis as analysis
+
 """
 I believe we don't need these imports.
 

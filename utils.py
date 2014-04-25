@@ -2,6 +2,7 @@
 Assorted utils.
 """
 import numpy as np
+import networkx as nx
 from mazex.exceptions import *
 
 def angle_between_nodes(loc, node1, node2):
@@ -132,7 +133,7 @@ def max_distances(maze, goals=None):
     # In case only one goal was passed as argument
     # TODO: This is very hacky. improve...
     try:
-        utils.assert_is_node(goals)
+        assert_is_node(goals)
         goals = [goals]
     except InvalidNode:
         pass
