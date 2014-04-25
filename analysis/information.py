@@ -179,13 +179,25 @@ def per_dist_psi(session, first_exit_only=True, plot=True):
 
             threshold = lambda x: 0.5 if 0.5<x<np.inf else x 
             threshold = np.vectorize(threshold)
-
+            
+            # here we calculate the length of the vector that is going up to 0.5
             surprisals_xy_proj_05 = scale*np.sqrt(threshold(dir_surprisals[:,:,direction
                 ])**2/2).transpose().flatten()
 
+            # for visualization purposes let's plot the vectors of length 0.5
+            # and we call them scale vectors
+            scale_vector_xy_proj = scale*np.sqrt(np.where(dir_surprisals[
+                :,:,direction]>0, 0.5, np.nan)**2/2).transpose().flatten()
+
+            # import pdb; pdb.set_trace()
+
+            pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*scale_vector_xy_proj,
+                    dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
+                color='r', width=0.15, headwidth=1, headlength=0, zorder=4) 
+
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj_05,
                     dy_sign[direction]*surprisals_xy_proj_05, units='xy', scale=1,
-                    color='r', width=0.15, headwidth=1, headlength=0, zorder=5) 
+                    color='b', width=0.15, headwidth=1, headlength=0, zorder=5) 
 
         pl.title('$\psi_{d,l}(\kappa)$', fontsize=30)
 
