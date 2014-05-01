@@ -126,8 +126,9 @@ def dist_psi(session, point, first_exit_only=True):
 
     return psi_values, availability
 
+def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
+        plot=True):
 
-def per_dist_psi(session, first_exit_only=True, plot=True):
     max_dists = np.array([utils.max_distances(t.maze, t.goal) for t in session.trials]
             ).max(0)
 
@@ -135,14 +136,17 @@ def per_dist_psi(session, first_exit_only=True, plot=True):
     dir_surprisals_dims = dir_surprisals_dims.tolist()
     dir_surprisals_dims.append(4)
     dir_surprisals = np.zeros(dir_surprisals_dims)
+    
+    availability = np.zeros(dir_surprisals_dims)
 
     x, y = np.meshgrid(range(dir_surprisals.shape[0]), range(dir_surprisals.shape[1]))
     xy = np.array([x.flatten(), y.flatten()]).transpose()
 
     for dist_coord in xy:
-        surpr = dist_psi(session, tuple(dist_coord),
+        surpr, available = dist_psi(session, tuple(dist_coord),
                 first_exit_only=first_exit_only)
         dir_surprisals[dist_coord[0], dist_coord[1], :] = surpr
+        availability[dist_coord[0], dist_coord[1], :] = available
 
     if not plot:
         return dir_surprisals
@@ -168,7 +172,7 @@ def per_dist_psi(session, first_exit_only=True, plot=True):
 
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj,
                    dy_sign[direction]*surprisals_xy_proj, units='xy', scale=1,
-                   color='g', width=0.15, headwidth=1, headlength=0.5, zorder=2) 
+                   color='r', width=0.15, headwidth=1, headlength=0.5, zorder=2) 
 
             # now we overlay only the part of the 'arrow' that goes up to 0.5
             # by passing it through a thresholding function
@@ -181,19 +185,20 @@ def per_dist_psi(session, first_exit_only=True, plot=True):
                 ])**2/2).transpose().flatten()
 
             # for visualization purposes let's plot the vectors of length 0.5
-            # and we call them scale vectors
-            scale_vector_xy_proj = scale*np.sqrt(np.where(dir_surprisals[
-                :,:,direction]>0, 0.5, np.nan)**2/2).transpose().flatten()
-
-            # import pdb; pdb.set_trace()
+            # and we call them scale vectors we do not plot for the directions
+            # that where available less than the number of times specified by
+            # the cutoff_availability
+            scale_vector_xy_proj = scale*np.sqrt(np.where(availability[
+                :,:,direction]>cutoff_availability, 0.5, np.nan)**2/2
+                ).transpose().flatten()
 
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*scale_vector_xy_proj,
                     dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
-                color='r', width=0.15, headwidth=1, headlength=0, zorder=4) 
+                color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
 
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj_05,
                     dy_sign[direction]*surprisals_xy_proj_05, units='xy', scale=1,
-                    color='b', width=0.15, headwidth=1, headlength=0, zorder=5) 
+                    color='m', width=0.15, headwidth=1, headlength=0, zorder=5) 
 
         pl.title('$\psi_{d,l}(\kappa)$', fontsize=30)
 
