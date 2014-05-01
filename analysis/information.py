@@ -39,7 +39,7 @@ def psi(Ic, Ic_exp, Ic_max):
         t0 = 1
     t = scipy.optimize.fsolve(psi_fun_solve, t0, args=(Ic_max, Ic_exp))
 
-    return psi_fun(t, Ic_max, Ic)
+    return psi_fun(float(t), Ic_max, Ic)
 
 def dist_psi(session, point, first_exit_only=True):
     """Calculate the average direction of choices in distances metric for a
