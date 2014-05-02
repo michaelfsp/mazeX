@@ -94,6 +94,9 @@ import mazex.utils as utils
 # Analysis related stuff
 import mazex.analysis as analysis
 
+# Fitting related stuff
+import mazex.fitting as fitting
+
 """
 I believe we don't need these imports.
 
