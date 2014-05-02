@@ -39,6 +39,10 @@ class Step:
         return self.trial.maze.neighbors(self.loc)
 
     @property
+    def choice(self):
+        return self.available_nodes.index(self.subsequent.loc)
+
+    @property
     def heading(self):
         if self._heading:
             return self._heading
