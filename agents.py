@@ -54,6 +54,12 @@ def softmax(beta, values):
         probs = np.ones(len(values)) * 1/(len(values))
     
     else:
+        #since the softmax is insensitive to subtraction of a value from
+        #all values, we subtract the mean of the values in order to avoid
+        #numerical overflows (see Daw 2009 (manuscript for Attention &
+        #Performance XXIII)
+        values-=np.mean(values)
+
         #this is the calculation of the numerator of the equation
         exp_elements = np.exp(beta*values)
 
