@@ -1,4 +1,5 @@
 import numpy as np
+import mazex.agents
 
 class Likelihood(object):
     """A class for the likelihood functions."""
@@ -25,3 +26,18 @@ class Likelihood(object):
 
         return -log_likelihood
 
+class HeuristicLikelihood(Likelihood):
+
+    def __init__(self, session):
+        self.session = session
+
+        self.agent_class = mazex.agents.HeuristicAgent
+
+    def neg_log_likelihood(self, params_array):
+        beta, kappa, xi = params_array
+        return super(HeuristicLikelihood, self).neg_log_likelihood((beta,
+            kappa, xi))
+
+    def neg_log_likelihood_beta(self, beta, kappa, xi):
+        return super(HeuristicLikelihood, self).neg_log_likelihood((beta,
+            kappa, xi))
