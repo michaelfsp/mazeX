@@ -1,10 +1,9 @@
 import numpy as np
 import random
-from scipy.stats import vonmises
 from collections import OrderedDict
 
 from mazex.exceptions import *
-from mazex.utils import angle_between_nodes, assert_is_node, assert_nodes_adjacent 
+from mazex.utils import angle_between_nodes, assert_is_node, assert_nodes_adjacent, generate_von_mises_dictionary
 
 from networkx.algorithms.shortest_paths import astar_path
 
@@ -196,7 +195,7 @@ class Agent:
 
         
 class HeuristicAgent(Agent):
-    def __init__(self, loc, beta, kappa, xi, heading=None):
+    def __init__(self, loc, beta, kappa, xi, heading=None, maze_size=6):
         """Creates an agent that follows a directional heuristic.
 
         Parameters:
@@ -217,6 +216,7 @@ class HeuristicAgent(Agent):
         # last=False)
         self.edge_visit_cache = OrderedDict()
         self.step_count = 0
+        self.vm_prob = generate_von_mises_dictionary(maze_size, kappa)
 
     def set_loc(self, node):
         old_loc = self.loc
@@ -262,11 +262,10 @@ class HeuristicAgent(Agent):
             nodeslist = [nodeslist]
         except InvalidNode:
             pass
+       
+        vm_probs = oself.vm_prob[self.loc][n][goal] for n in nodeslist]
 
-        angles = [angle_between_nodes(
-            self.loc, goal, n) for n in nodeslist] 
-        
-        values = np.array(vonmises.pdf(angles, kappa=self.kappa))
+        values = np.array(vm_probs)
 
         edgeslist = [(self.loc, n) for n in nodeslist]
         

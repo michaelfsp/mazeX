@@ -105,6 +105,62 @@ def check_list_is_empty(seq):
     except TypeError:
         return False
 
+def generate_angles_dictionary(size):
+    from mazex.mazes import RandomSquareMaze
+
+    maze = RandomSquareMaze(size, 1)
+
+    angles = {}
+    for l in maze.nodes():
+        angles[l] = {}
+        n_list = maze.nodes()
+        n_list.remove(l)
+        for n in n_list:
+            angles[l][n] = {}
+            for g in n_list:
+                angles[l][n][g] = angle_between_nodes(l, n, g)
+    return angles
+
+def generate_von_mises_dictionary(size, kappa):
+    import pickle
+    from scipy.stats import vonmises
+    from mazex.mazes import RandomSquareMaze
+
+    maze = RandomSquareMaze(size, 1)
+
+    try:
+        filename_vm = str(size)+'_'+str(kappa)+'.pickle'
+        f = open(filename_vm, 'rb')
+        vm_prob = pickle.load(f)
+
+    except FileNotFoundError:
+        try:
+            filename = str(size)+'.pickle'
+            f = open(filename, 'rb')
+            angles = pickle.load(f)
+
+        except FileNotFoundError:
+            angles = generate_angles_dictionary(size)
+            filename = str(size)+'.pickle'
+            with open(filename, 'wb') as f:
+                pickle.dump(angles, f)
+
+        vm_prob = {}
+        for l in maze.nodes():
+            vm_prob[l] = {}
+            n_list = maze.nodes()
+            n_list.remove(l)
+            for n in n_list:
+                vm_prob[l][n] = {}
+                for g in n_list:
+                    prob = vonmises.pdf(angles[l][n][g], kappa=kappa)
+                    vm_prob[l][n][g] = prob
+
+        with open(filename_vm, 'wb') as f:
+            pickle.dump(vm_prob, f)
+
+    return vm_prob
+
 def invert_dictionary(dic):
     """Return a dictionary with the inverse of the mapping of non-unique
     dictionary dict.
