@@ -130,13 +130,74 @@ def dist_psi(session, point, first_exit_only=True, before_transformation=False):
 
         return psi_values, availability
 
+def avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
+        plot=True, xy=(0,0)):
+    x, y = xy
+
+    maze = session.maze
+
+    data = np.zeros((3,4))
+    total_availability = np.zeros(4)
+
+    for point in maze.distances_to_coord.keys():
+        Ics, availability = dist_psi(session, point,
+                first_exit_only=first_exit_only, before_transformation=True)
+        data += Ics
+        total_availability += availability
+
+    psi_values = np.zeros(4)
+
     for i in [0,1,2,3]:
-        psi_values[i] = psi(Ic[i], Ic_exp[i], Ic_max[i])
+        psi_values[i] = psi(data[0,i], data[1,i], data[2,i])
+
+    if plot:
+        dx_sign = (1, 1, -1, -1)
+        dy_sign = (1, -1, -1, 1)
+        max_proj = 1
+        # this is simply a scaling factor so that the arrows don't overlap on
+        # the plot
+        scale = 1.5/max_proj
+
+        for direction in range(0, 4):
+            surprisals_xy_proj = scale*np.sqrt(psi_values[direction]**2/2)
+
+            pl.quiver(x, y, dx_sign[direction]*surprisals_xy_proj,
+                   dy_sign[direction]*surprisals_xy_proj, units='xy', scale=1,
+                   color='r', width=0.15, headwidth=1, headlength=0.5, zorder=2) 
+            # now we overlay only the part of the 'arrow' that goes up to 0.5
+            # by passing it through a thresholding function
+
+            threshold = lambda x: 0.5 if 0.5<x<np.inf else x 
+            threshold = np.vectorize(threshold)
+            
+            # here we calculate the length of the vector that is going up to 0.5
+            surprisals_xy_proj_05 = scale*np.sqrt(threshold(psi_values[direction
+                ])**2/2)
+
+            # for visualization purposes let's plot the vectors of length 0.5
+            # and we call them scale vectors we do not plot for the directions
+            # that where available less than the number of times specified by
+            # the cutoff_availability
+            scale_vector_xy_proj = scale*np.sqrt(np.where(total_availability[
+                direction]>cutoff_availability, 0.5, np.nan)**2/2)
+
+            pl.quiver(x, y, dx_sign[direction]*scale_vector_xy_proj,
+                    dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
+                color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
+
+            pl.quiver(x, y, dx_sign[direction]*surprisals_xy_proj_05,
+                    dy_sign[direction]*surprisals_xy_proj_05, units='xy', scale=1,
+                    color='m', width=0.15, headwidth=1, headlength=0, zorder=5) 
+
+            # pl.xlim(-1, 1)
+            # pl.ylim(-1, 1)
+            
+            # import ipdb; ipdb.set_trace()
 
     return psi_values, availability
-
+        
 def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
-        plot=True):
+        plot=True, plot_avg=True):
 
     max_dists = np.array([utils.max_distances(t.maze, t.goal) for t in session.trials]
             ).max(0)
@@ -208,6 +269,12 @@ def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj_05,
                     dy_sign[direction]*surprisals_xy_proj_05, units='xy', scale=1,
                     color='m', width=0.15, headwidth=1, headlength=0, zorder=5) 
+
+            if plot_avg:
+                avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
+                        plot=True, xy=(3,7))
+
+
 
         pl.title('$\psi_{d,l}(\kappa)$', fontsize=30)
 
