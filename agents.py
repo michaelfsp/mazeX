@@ -263,7 +263,7 @@ class HeuristicAgent(Agent):
         except InvalidNode:
             pass
        
-        vm_probs = oself.vm_prob[self.loc][n][goal] for n in nodeslist]
+        vm_probs = [self.vm_prob[self.loc][n][goal] for n in nodeslist]
 
         values = np.array(vm_probs)
 
