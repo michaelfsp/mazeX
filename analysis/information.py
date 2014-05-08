@@ -41,7 +41,7 @@ def psi(Ic, Ic_exp, Ic_max):
 
     return psi_fun(float(t), Ic_max, Ic)
 
-def dist_psi(session, point, first_exit_only=True):
+def dist_psi(session, point, first_exit_only=True, before_transformation=False):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
 
@@ -120,6 +120,15 @@ def dist_psi(session, point, first_exit_only=True):
             Ic_max += surpr
 
     psi_values = np.zeros(4)
+
+    if before_transformation:
+        return np.array([Ic, Ic_exp, Ic_max]), availability
+
+    else:
+        for i in [0,1,2,3]:
+            psi_values[i] = psi(Ic[i], Ic_exp[i], Ic_max[i])
+
+        return psi_values, availability
 
     for i in [0,1,2,3]:
         psi_values[i] = psi(Ic[i], Ic_exp[i], Ic_max[i])
