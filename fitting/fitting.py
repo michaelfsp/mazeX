@@ -22,6 +22,7 @@ class Likelihood(object):
                 choice_prob = self.agent.choice_probs(values)[s.choice]
                 self.agent.loc = s.subsequent.loc
 
+                #TODO: change to protected log
                 log_likelihood += np.log(choice_prob)
 
         return -log_likelihood
@@ -41,3 +42,8 @@ class HeuristicLikelihood(Likelihood):
     def neg_log_likelihood_beta(self, beta, kappa, xi):
         return super(HeuristicLikelihood, self).neg_log_likelihood((beta,
             kappa, xi))
+
+    def neg_log_likelihood_beta_xi(self, beta_xi):
+        beta, xi = beta_xi
+        return super(HeuristicLikelihood, self).neg_log_likelihood((beta,
+            1, xi))
