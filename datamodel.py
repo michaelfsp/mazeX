@@ -159,7 +159,7 @@ class Session:
         list of mazes. This might not be after some refactoring to be done in 
         a future incarnation.
         """
-        mazes = [s.maze for s in self.steps]
+        mazes = [s.maze for s in self.trials]
         if check_elements_equal(mazes):
             return mazes[0]
         else:
