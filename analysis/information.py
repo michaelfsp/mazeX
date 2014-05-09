@@ -131,7 +131,7 @@ def dist_psi(session, point, first_exit_only=True, before_transformation=False):
         return psi_values, availability
 
 def avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
-        plot=True, xy=(0,0)):
+        plot=True, scale_bar=True, xy=(0,0)):
     x, y = xy
 
     maze = session.maze
@@ -181,9 +181,10 @@ def avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
             scale_vector_xy_proj = scale*np.sqrt(np.where(total_availability[
                 direction]>cutoff_availability, 0.5, np.nan)**2/2)
 
-            pl.quiver(x, y, dx_sign[direction]*scale_vector_xy_proj,
-                    dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
-                color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
+            if scale_bar:
+                pl.quiver(x, y, dx_sign[direction]*scale_vector_xy_proj,
+                        dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
+                    color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
 
             pl.quiver(x, y, dx_sign[direction]*surprisals_xy_proj_05,
                     dy_sign[direction]*surprisals_xy_proj_05, units='xy', scale=1,
@@ -197,7 +198,7 @@ def avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
     return psi_values, availability
         
 def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
-        plot=True, plot_avg=True):
+        plot=True, plot_avg=True, scale_bar=True):
 
     max_dists = np.array([utils.max_distances(t.maze, t.goal) for t in session.trials]
             ).max(0)
@@ -262,9 +263,10 @@ def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
                 :,:,direction]>cutoff_availability, 0.5, np.nan)**2/2
                 ).transpose().flatten()
 
-            pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*scale_vector_xy_proj,
-                    dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
-                color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
+            if scale_bar:
+                pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*scale_vector_xy_proj,
+                        dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
+                    color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
 
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj_05,
                     dy_sign[direction]*surprisals_xy_proj_05, units='xy', scale=1,
@@ -272,10 +274,6 @@ def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
 
             if plot_avg:
                 avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
-                        plot=True, xy=(3,7))
+                        plot=True, xy=(2.5,7.5))
 
-
-
-        pl.title('$\psi_{d,l}(\kappa)$', fontsize=30)
-
-
+        pl.title('Pseudo choice probability($\psi_{d,l}$)', fontsize=30)
