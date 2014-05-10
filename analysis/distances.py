@@ -84,12 +84,12 @@ def distances_plot(maze, goals=None, plot=True, node_size=False, **kwargs):
 def distances_plot_path(trial):
     """Plot paths overlayed onto the distances plot.
     """
-    distances_plot(trial.step.maze, trial.step.goal, zorder=10)
+    distances_plot(trial.maze, trial.goal, zorder=10)
     for i in range(len(trial.path)-2):
-        first_node = utils.to_dist_coord(trial.path[i], trial.step.maze,
-                trial.step.goal)
-        second_node = utils.to_dist_coord(trial.path[i+1], trial.step.maze,
-                trial.step.goal)
+        first_node = utils.to_dist_coord(trial.path[i], trial.maze,
+                trial.goal)
+        second_node = utils.to_dist_coord(trial.path[i+1], trial.maze,
+                trial.goal)
         # zorder=1 sends the lines to the 'bottom layer'
         pl.plot([first_node[0], second_node[0]], [first_node[1],
             second_node[1]], 'g', linewidth=4, zorder=1)
