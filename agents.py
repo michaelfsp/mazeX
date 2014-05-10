@@ -215,6 +215,7 @@ class HeuristicAgent(Agent):
         # older entries by using self.edge_visit_cache.popitem(
         # last=False)
         self.edge_visit_cache = OrderedDict()
+        self.node_visit_cache = OrderedDict()
         self.step_count = 0
         self.vm_prob = generate_von_mises_dictionary(maze_size, kappa)
 
@@ -238,6 +239,12 @@ class HeuristicAgent(Agent):
             self.edge_visit_cache.pop(directed_edge);
 
         self.edge_visit_cache[directed_edge] = self.step_count
+        
+        #we do the same for the node visit cache
+        if node in self.node_visit_cache:
+            self.node_visit_cache.pop(node)
+
+        self.node_visit_cache[node] = self.step_count
 
         self.step_count += 1
     
@@ -255,6 +262,8 @@ class HeuristicAgent(Agent):
         goal : node
             Location of goal.
         """
+        #TODO: use this as a parameter
+        penalty = 'edge'
         # this little trick makes the method work even if not a list
         # but a single node is passed
         try:
@@ -267,43 +276,81 @@ class HeuristicAgent(Agent):
 
         values = np.array(vm_probs)
 
-        edgeslist = [(self.loc, n) for n in nodeslist]
-        
-        step_count_at_last_visit = []
-
-        for e in edgeslist:
-            if e in self.edge_visit_cache:
-                step_count_at_last_visit.append(
-                        self.edge_visit_cache[e])
-            else:
-                # nodes that have never been visited we will
-                # assume they have been visited in "step -1"
-                # the value -1 doesn't play any actual role
-                # as these steps will have no penalization
-                step_count_at_last_visit.append(-1)
-
-        # This is the number of edges for which there is a visit
-        # record
-        
-        step_count_at_last_visit = np.array(step_count_at_last_visit)
-
-        n_visited_edges = np.count_nonzero(
-                step_count_at_last_visit > 0)
-
-        penalties = np.zeros(len(edgeslist))
-
-
-        while n_visited_edges > 0:
-            max_step_count = max(step_count_at_last_visit)
-            index_max_step_count = np.where(step_count_at_last_visit
-                    == max_step_count)
-
-            penalties[index_max_step_count] = n_visited_edges * self.xi
-            # very dumb way of having max() finding the second
-            # max in the next iteration
-            step_count_at_last_visit[index_max_step_count] = -1
+        if penalty == 'edge':
+            edgeslist = [(self.loc, n) for n in nodeslist]
             
-            n_visited_edges -= 1
+            step_count_at_last_edge_visit = []
+
+            for e in edgeslist:
+                if e in self.edge_visit_cache:
+                    step_count_at_last_edge_visit.append(
+                            self.edge_visit_cache[e])
+                else:
+                    # nodes that have never been visited we will
+                    # assume they have been visited in "step -1"
+                    # the value -1 doesn't play any actual role
+                    # as these steps will have no penalization
+                    step_count_at_last_edge_visit.append(-1)
+
+            # This is the number of edges for which there is a visit
+            # record
+            
+            step_count_at_last_edge_visit = np.array(step_count_at_last_edge_visit)
+
+            n_visited_edges = np.count_nonzero(
+                    step_count_at_last_edge_visit > 0)
+
+            penalties = np.zeros(len(edgeslist))
+
+            while n_visited_edges > 0:
+                min_step_count = min(step_count_at_last_edge_visit)
+                index_min_step_count = np.where(step_count_at_last_edge_visit
+                        == min_step_count)
+
+                penalties[index_min_step_count] = self.xi/n_visited_edges 
+                # very dumb way of having max() finding the second
+                # max in the next iteration
+                step_count_at_last_edge_visit = np.delete(step_count_at_last_edge_visit,
+                        index_min_step_count)            
+                n_visited_edges -= 1
+
+        elif penalty == 'node':
+            step_count_at_last_node_visit = []
+
+            for n in nodeslist:
+                if n in self.node_visit_cache:
+                    step_count_at_last_node_visit.append(
+                            self.node_visit_cache[n])
+                else:
+                    # nodes that have never been visited we will
+                    # assume they have been visited in "step -1"
+                    # the value -1 doesn't play any actual role
+                    # as these steps will have no penalization
+                    step_count_at_last_node_visit.append(-1)
+
+            # This is the number of edges for which there is a visit
+            # record
+            
+            step_count_at_last_node_visit = np.array(step_count_at_last_node_visit)
+
+            n_visited_nodes = np.count_nonzero(
+                    step_count_at_last_node_visit > 0)
+
+            penalties = np.zeros(len(nodeslist))
+
+            while n_visited_nodes > 0:
+                #import ipdb; ipdb.set_trace()
+                min_step_count = min(
+                        step_count_at_last_node_visit[step_count_at_last_node_visit>0])
+                index_min_step_count = np.where(step_count_at_last_node_visit
+                        == min_step_count)
+
+                penalties[index_min_step_count] = self.xi/n_visited_nodes 
+                # very dumb way of having max() finding the second
+                # max in the next iteration
+                step_count_at_last_node_visit = np.delete(step_count_at_last_node_visit,
+                        index_min_step_count)            
+                n_visited_nodes -= 1
 
         values -= penalties
 
