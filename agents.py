@@ -301,17 +301,16 @@ class HeuristicAgent(Agent):
                     step_count_at_last_edge_visit > 0)
 
             penalties = np.zeros(len(edgeslist))
-
             while n_visited_edges > 0:
-                min_step_count = min(step_count_at_last_edge_visit)
-                index_min_step_count = np.where(step_count_at_last_edge_visit
-                        == min_step_count)
-
-                penalties[index_min_step_count] = self.xi/n_visited_edges 
+                max_step_count = max(step_count_at_last_edge_visit)
+                index_max_step_count = np.where(step_count_at_last_edge_visit 
+                        == max_step_count)
+            
+                penalties[index_max_step_count] = self.xi / (1+len(edgeslist)-n_visited_edges)
                 # very dumb way of having max() finding the second
                 # max in the next iteration
-                step_count_at_last_edge_visit = np.delete(step_count_at_last_edge_visit,
-                        index_min_step_count)            
+                step_count_at_last_edge_visit[index_max_step_count] = -1
+
                 n_visited_edges -= 1
 
         elif penalty == 'node':
