@@ -6,7 +6,8 @@ import pylab as pl
 from mazex.exceptions import *
 import mazex.utils as utils
 
-def distances_plot(maze, goals=None, plot=True, node_size=False, **kwargs):
+def distances_plot(maze, goals=None, plot=True, node_size=False,
+        goal_color='r', **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.
     """
@@ -57,6 +58,8 @@ def distances_plot(maze, goals=None, plot=True, node_size=False, **kwargs):
             pl.scatter(x.flatten(), y.flatten(),
                         s=area_factor*distances.flatten(), c='k', **kwargs)
 
+            pl.scatter(0, 0, s=area_factor, c=goal_color, **kwargs)
+
             # Very ugly hack just to get some legend working
             bullet_sizes = np.arange(1, distances.max()+1, 1)
             for b in bullet_sizes:
@@ -69,6 +72,9 @@ def distances_plot(maze, goals=None, plot=True, node_size=False, **kwargs):
             pl.scatter(x.flatten(), y.flatten(),
                         s=area_factor*np.where(distances.flatten()>0, 1, 0),
                         c='k', **kwargs)
+
+            # Plot once more the goal but this time in the color specified
+            pl.scatter(0, 0, s=area_factor, c=goal_color, **kwargs)
 
         pl.xlim([-0.5, max_distances_all[0]+0.5])
         pl.ylim([-0.5, max_distances_all[1]+0.5])
