@@ -82,7 +82,7 @@ def distances_plot(maze, goals=None, plot=True, node_size=False,
         pl.yticks(range(0, max_distances_all[1]+1))
         pl.grid()
         ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
-        pl.xlabel('Maze distance to goal', fontsize=22)
+        pl.xlabel('Graph distance to goal', fontsize=22)
         pl.ylabel('Manhattan distance to goal', fontsize=22)
 
     else:
