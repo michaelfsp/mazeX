@@ -67,7 +67,8 @@ def distances_plot(maze, goals=None, plot=True, node_size=False, **kwargs):
         else:
             area_factor = 15 * np.pi
             pl.scatter(x.flatten(), y.flatten(),
-                        s=np.ones_like(distances.flatten()), c='k', **kwargs)
+                        s=area_factor*np.where(distances.flatten()>0, 1, 0),
+                        c='k', **kwargs)
 
         pl.xlim([-0.5, max_distances_all[0]+0.5])
         pl.ylim([-0.5, max_distances_all[1]+0.5])
