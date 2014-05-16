@@ -46,6 +46,7 @@ class Step:
     def heading(self):
         if self._heading:
             return self._heading
+
         elif self.previous:
             if self.previous.loc[1] < self.loc[1]:
                 direction = '^'
@@ -55,8 +56,22 @@ class Step:
                 direction = '>'
             elif self.previous.loc[0] > self.loc[0]:
                 direction = '<'
+
         elif not self.previous:
-            direction = None #only applies to the first step in a trial
+            if self.subsequent:
+                # this case this is the first step of a trial
+                if self.subsequent.loc[1] > self.loc[1]:
+                    direction = '^'
+                elif self.subsequent.loc[1] < self.loc[1]:
+                    direction = 'v'
+                elif self.subsequent.loc[0] > self.loc[0]:
+                    direction = '>'
+                elif self.subsequent.loc[0] < self.loc[0]:
+                    direction = '<'
+     
+            else:
+                direction = None #it should only happen if it is an isolated step
+
         return direction
 
     @heading.setter
