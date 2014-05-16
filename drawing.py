@@ -9,7 +9,7 @@ from mazex.exceptions import *
 from mazex.datamodel import Step, Trial
 from mazex.analysis.distances import distances_plot
 
-import pdb
+# other interesting node colors '#848599'
 
 def draw_maze(M, ax=None, hold=None, **kwds):
     """Draw a maze configuration.
@@ -22,8 +22,13 @@ def draw_maze(M, ax=None, hold=None, **kwds):
     ax.set_aspect('equal')
 
     if isinstance(M, SquareMaze):
-        nx.draw(M, pos=M.pos, ax=ax, hold=hold, node_color='gray',
-                **kwds)
+        nx.draw(M, pos=M.pos, ax=ax, hold=True, node_color='#797b8c', linewidths=0,
+                node_size=600, width=5, **kwds)
+        nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='white', linewidths=0,
+                node_size=300)
+        nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='#797b8c', linewidths=0,
+                node_size=100)
+        pl.tight_layout()
 
 def draw_step(S, ax=None, hold=None, **kwds):
     """Represent a maze configuration.
