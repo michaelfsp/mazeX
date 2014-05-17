@@ -23,9 +23,9 @@ def draw_maze(M, ax=None, hold=None, **kwds):
 
     if isinstance(M, SquareMaze):
         nx.draw(M, pos=M.pos, ax=ax, hold=True, node_color='#797b8c', linewidths=0,
-                node_size=600, width=6, **kwds)
+                node_size=800, width=6, **kwds)
         nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='white', linewidths=0,
-                node_size=300)
+                node_size=350)
         nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='#797b8c', linewidths=0,
                 node_size=100)
         pl.tight_layout()
@@ -69,10 +69,10 @@ def draw_step(S, ax=None, hold=None, **kwds):
     # ... and goal location 
     nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
             nodelist=[S.trial.goal], node_color='#f26161', linewidths=0,
-            node_size=600, hold=True)
+            node_size=800, hold=True)
     nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
             nodelist=[S.trial.goal], node_color='white', linewidths=0,
-            node_size=300, hold=hold)
+            node_size=350, hold=hold)
     nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
             nodelist=[S.trial.goal], node_color='#f26161', linewidths=0,
             node_size=100, hold=hold)
