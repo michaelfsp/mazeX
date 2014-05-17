@@ -49,7 +49,6 @@ def draw_step(S, ax=None, hold=None, **kwds):
     normal_nodes = S.trial.maze.nodes()
     # And then we remove current and goal location nodes because
     # those will be plotted differently
-    normal_nodes.remove(S.loc)
     if S.trial.goal != S.loc:
         normal_nodes.remove(S.trial.goal)
 
@@ -61,12 +60,9 @@ def draw_step(S, ax=None, hold=None, **kwds):
     else:
         shape = '8'
     nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
-            nodelist=[S.loc], node_color='white', node_size=450, linewidths=0,
-            node_shape=shape)
-    nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
-            nodelist=[S.loc], node_color='#6161f2', node_size=400,
-            linewidths=0, node_shape=shape)
-    # ... and goal location 
+            nodelist=[S.loc], node_color='#6161f2', node_size=350,
+            linewidths=1.5, node_shape=shape)
+  # ... and goal location 
     nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
             nodelist=[S.trial.goal], node_color='#f26161', linewidths=0,
             node_size=800, hold=True)
