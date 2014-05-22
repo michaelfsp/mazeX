@@ -254,7 +254,7 @@ class HeuristicAgent(Agent):
     
     loc = property(_get_loc, set_loc)
 
-    def evaluate(self, nodeslist, goal):
+    def evaluate(self, nodeslist, goal, penalty='node'):
         """Returns a vector with the edge values of each edge given as
         input.
         
@@ -265,10 +265,15 @@ class HeuristicAgent(Agent):
 
         goal : node
             Location of goal.
+
+        penalty : 'node' or 'edge_unidir', 'edge_bidir' 
+            If 'node', the agent will penalize options that lead to nodes it has
+            already visited. If 'edge', the agent will only penalize edges it
+            has already visited.
         """
-        #TODO: use this as a parameter
-        penalty_metric = 'node'
-        penalty_operation = 'division'
+
+        if penalty not in ('node', 'edge_unidir'):
+            raise NotSupported
 
         # this little trick makes the method work even if not a list
         # but a single node is passed
@@ -278,88 +283,66 @@ class HeuristicAgent(Agent):
         except InvalidNode:
             pass
        
-        vm_probs = [self.vm_prob[self.loc][n][goal] for n in nodeslist]
+        vm = [self.vm_prob[self.loc][n][goal] for n in nodeslist]
 
-        values = np.array(vm_probs)
+        penalties = np.zeros(len(nodeslist))
 
-        if penalty_metric == 'edge':
+        if penalty == 'edge_unidir':
             edgeslist = [(self.loc, n) for n in nodeslist]
             
-            step_count_at_last_edge_visit = []
+            step_count_last_visit = []
 
             for e in edgeslist:
                 if e in self.edge_visit_cache:
-                    step_count_at_last_edge_visit.append(
+                    step_count_last_visit.append(
                             self.edge_visit_cache[e])
                 else:
                     # nodes that have never been visited we will
                     # assume they have been visited in "step -1"
                     # the value -1 doesn't play any actual role
                     # as these steps will have no penalization
-                    step_count_at_last_edge_visit.append(-1)
+                    step_count_last_visit.append(-1)
 
-            # This is the number of edges for which there is a visit
-            # record
-            
-            step_count_at_last_edge_visit = np.array(step_count_at_last_edge_visit)
-
-            n_visited_edges = np.count_nonzero(
-                    step_count_at_last_edge_visit > 0)
-
-            penalties = np.zeros(len(edgeslist))
-            while n_visited_edges > 0:
-                max_step_count = max(step_count_at_last_edge_visit)
-                index_max_step_count = np.where(step_count_at_last_edge_visit 
-                        == max_step_count)
-            
-                penalties[index_max_step_count] = self.xi / (1+len(edgeslist)-n_visited_edges)
-                # very dumb way of having max() finding the second
-                # max in the next iteration
-                step_count_at_last_edge_visit[index_max_step_count] = -1
-
-                n_visited_edges -= 1
-
-        elif penalty_metric == 'node':
-            step_count_at_last_node_visit = []
+        elif penalty == 'node':
+            step_count_last_visit = []
 
             for n in nodeslist:
                 if n in self.node_visit_cache:
-                    step_count_at_last_node_visit.append(
+                    step_count_last_visit.append(
                             self.node_visit_cache[n])
                 else:
                     # nodes that have never been visited we will
                     # assume they have been visited in "step -1"
                     # the value -1 doesn't play any actual role
                     # as these steps will have no penalization
-                    step_count_at_last_node_visit.append(-1)
+                    step_count_last_visit.append(-1)
 
-            # This is the number of edges for which there is a visit
-            # record
-            
-            step_count_at_last_node_visit = np.array(step_count_at_last_node_visit)
+        step_count_last_visit = np.array(step_count_last_visit)
 
-            n_visited_nodes = np.count_nonzero(
-                    step_count_at_last_node_visit > 0)
+        penalties = np.zeros(len(nodeslist))
 
-            penalties = np.zeros(len(nodeslist))
+        sorted_indices = np.argsort(step_count_last_visit)
+        sorted_step_count = np.sort(step_count_last_visit)
+        helper_index_matrix = np.vstack((sorted_indices, sorted_step_count))
 
-            while n_visited_nodes > 0:
-                max_step_count = max(step_count_at_last_node_visit)
-                index_max_step_count = np.where(step_count_at_last_node_visit 
-                        == max_step_count)
-            
-                penalties[index_max_step_count] = self.xi / (1+len(nodeslist)-n_visited_nodes)
-                # very dumb way of having max() finding the second
-                # max in the next iteration
-                step_count_at_last_node_visit[index_max_step_count] = -1
+        helper_matrix_only_visited_ones = helper_index_matrix[
+                :,helper_index_matrix[1,:]>0]
 
-                n_visited_nodes -= 1
+        n_penalties = helper_matrix_only_visited_ones.shape[1]
+        '''
+        if np.any(helper_index_matrix[1,:]>0):
+            import ipdb; ipdb.set_trace()
+        '''
+        # this is a simple filter to prevent the penalty factors from
+        # becoming larger than 1, i.e., from discounting more than the value
+        # of the node
+        threshold = lambda x: x if x<1 else 1
 
-        if penalty_operation == 'sum':
-            values -= penalties
-        elif penalty_operation == 'division':
-            values /= 2**penalties
+        for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
+            penalties[x] = threshold(self.xi/(n_penalties-i))
 
+        values = vm - vm*penalties
+ 
         return values
 
 class OmniscientAgent(Agent):
