@@ -48,7 +48,11 @@ def softmax(beta, values):
 
     if beta == float('inf'):
         probs = np.zeros(len(values))
-        probs[np.argmax(values)] = 1
+        max_value = np.max(values)
+        index_maxs = np.flatnonzero(values == max_value)
+        n_maxs = index_maxs.size
+
+        probs[index_maxs] = 1/n_maxs
 
     elif beta == float('-inf'):
         probs = np.ones(len(values)) * 1/(len(values))
