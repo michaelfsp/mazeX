@@ -119,7 +119,6 @@ def check_list_is_empty(seq):
         return False
 
 def get_angles_dictionary(size):
-    #import ipdb; ipdb.set_trace()
     cache_dir = '..mazex'+os.sep+'cache'
     cache_file = cache_dir + os.sep + 'cached_angles'
     cached_object = str(size)
