@@ -3,7 +3,8 @@ import random
 from collections import OrderedDict
 
 from mazex.exceptions import *
-from mazex.utils import angle_between_nodes, assert_is_node, assert_nodes_adjacent, generate_von_mises_dictionary
+from mazex.utils import (angle_between_nodes, assert_is_node,
+assert_nodes_adjacent, get_von_mises_dictionary)
 
 from networkx.algorithms.shortest_paths import astar_path
 
@@ -221,7 +222,7 @@ class HeuristicAgent(Agent):
         self.edge_visit_cache = OrderedDict()
         self.node_visit_cache = OrderedDict()
         self.step_count = 0
-        self.vm_prob = generate_von_mises_dictionary(maze_size, kappa)
+        self.vm_prob = get_von_mises_dictionary(maze_size, kappa)
 
     def set_loc(self, node):
         old_loc = self.loc
