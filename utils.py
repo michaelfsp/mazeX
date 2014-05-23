@@ -119,13 +119,15 @@ def check_list_is_empty(seq):
         return False
 
 def get_angles_dictionary(size):
-
-    cache_dir = '.mazex'+os.sep+'cache'
-    cache_file = cache_dir + os.sep + 'cached_vm'
+    #import ipdb; ipdb.set_trace()
+    cache_dir = '..mazex'+os.sep+'cache'
+    cache_file = cache_dir + os.sep + 'cached_angles'
+    cached_object = str(size)
 
     try:
         d = shelve.open(cache_file)
-
+        angles = d[cached_object]
+        
     # this is bad practice because it will catch any exception while we only
     #  want to catch it here if it is a 'file not found' exception
     #  however, the 'file not found' exception spat by shelve is not specific
@@ -135,18 +137,6 @@ def get_angles_dictionary(size):
             os.makedirs(cache_dir)
 
         d = shelve.open(cache_file)
-
-    try:
-        # check whether we can retrieve pre-calculated values
-        angles = d['angles'][size]
-
-    except KeyError:
-        # otherwise calculate them
-
-        # if d['angles'] has not already been instantiated into a dictionary
-        #  then do so
-        if not 'angles' in d.keys():
-            d['angles'] = {}
 
         # and now do the calculations proper
         from mazex.mazes import RandomSquareMaze
@@ -164,12 +154,13 @@ def get_angles_dictionary(size):
                     angles[l][n][g] = angle_between_nodes(l, n, g)
 
         # and store them for later use
-        d['angles'][size] = angles
+        d[cached_object] = angles
     
     # we close the dictionary so it doesn't stay in memory
-    d.close()
 
-    return angles
+    finally:
+        d.close()
+        return angles
 
 def get_von_mises_dictionary(size, kappa):
     """Return a dictionary containing the von Mises probabilites for the value
