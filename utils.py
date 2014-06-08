@@ -161,6 +161,22 @@ def get_angles_dictionary(size):
         d.close()
         return angles
 
+def get_von_mises_array(size, kappa):
+    angles_dic = get_angles_dictionary(size)
+
+    angles = []
+
+    list_nested_dic_leaves(angles_dic, angles)
+
+    angles = np.sort(angles)
+
+    #remove nans
+    angles = angles[~np.isnan(angles)]
+
+    vm_array = np.array([angles, vonmises.pdf(angles, kappa=kappa)])
+
+    return vm_array
+
 def get_von_mises_dictionary(size, kappa):
     """Return a dictionary containing the von Mises probabilites for the value
     corresponding to the chosen kappa and angle between any two contiguous
@@ -242,6 +258,38 @@ def invert_dictionary(dic):
         inv_map[v] = inv_map.get(v, [])
         inv_map[v].append(k)
     return inv_map
+
+def nested_dictionary_depth(dic):
+    """Checks the depth of a nested dictionary structure, e.g., dic = {
+    'a':{'z':1, 'y':2}, 'b':{'x':3, 'w': 4}}.    
+
+    It currently assumes that the dictionary depth is homogeneous across keys"""
+
+    level = 0
+
+    key_list = list(dic.keys())
+    lower_dic = dic[key_list[0]]
+    is_dic = True
+
+    while is_dic:
+        try:
+            key_list_lower_dic = list(lower_dic.keys())
+
+            lower_dic = lower_dic[key_list_lower_dic[0]]
+            level += 1
+
+        except AttributeError:
+            is_dic = False
+
+    return level
+
+def list_nested_dic_leaves(d, l):
+    for k, v in d.items():
+        if isinstance(v, dict):
+            list_nested_dic_leaves(v, l)
+        else:
+            l.append(v)
+
 
 def max_distances(maze, goals=None):
     # the output of this function is the maximum of an array called
