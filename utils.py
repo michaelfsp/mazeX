@@ -161,7 +161,15 @@ def get_angles_dictionary(size):
         d.close()
         return angles
 
-def get_von_mises_array(size, kappa):
+def get_von_mises_array(size, kappa, decimals=2):
+    '''
+    Return a 2D array with angles and von Mises distribution values for all
+    the angles that could be encountered in a maze with size = size.
+
+    Decimals determines the precision of the array - TO BE IMPLEMENTED!
+    '''
+    #TODO: implement option decimals!
+
     angles_dic = get_angles_dictionary(size)
 
     angles = []
@@ -172,6 +180,9 @@ def get_von_mises_array(size, kappa):
 
     #remove nans
     angles = angles[~np.isnan(angles)]
+
+    #remove redundant entries
+    angles = np.unique(angles)
 
     vm_array = np.array([angles, vonmises.pdf(angles, kappa=kappa)])
 

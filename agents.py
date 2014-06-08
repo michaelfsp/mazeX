@@ -4,7 +4,8 @@ from collections import OrderedDict
 
 from mazex.exceptions import *
 from mazex.utils import (angle_between_nodes, assert_is_node,
-assert_nodes_adjacent, get_von_mises_dictionary)
+assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
+get_angles_dictionary)
 
 from networkx.algorithms.shortest_paths import astar_path
 
@@ -222,7 +223,8 @@ class HeuristicAgent(Agent):
         self.edge_visit_cache = OrderedDict()
         self.node_visit_cache = OrderedDict()
         self.step_count = 0
-        self.vm_prob = get_von_mises_dictionary(maze_size, kappa)
+        self.angles_dic = get_angles_dictionary(maze_size)
+        self.vm_dist = get_von_mises_array(maze_size, kappa)
 
     def set_loc(self, node):
         old_loc = self.loc
@@ -283,8 +285,16 @@ class HeuristicAgent(Agent):
             nodeslist = [nodeslist]
         except InvalidNode:
             pass
-       
-        vm = [self.vm_prob[self.loc][n][goal] for n in nodeslist]
+        
+
+        angles = [self.angles_dic[self.loc][n][goal] for n in nodeslist]
+        
+        # since what is stored in self.vm_dist is a 2D array with angles
+        # and values, we first determine the index of the closes angle entry
+        # in the matrix and then retrieve the distribution value
+        vm_indices = [np.argmin(abs(self.vm_dist[0] - angle)) for angle in angles]
+
+        vm = self.vm_dist[1][vm_indices]
 
         penalties = np.zeros(len(nodeslist))
 
