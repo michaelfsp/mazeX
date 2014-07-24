@@ -9,6 +9,8 @@ get_angles_dictionary)
 
 from networkx.algorithms.shortest_paths import astar_path
 
+from scipy.stats import vonmises
+
 def _get_loc(self):
     return self._loc
 
@@ -225,6 +227,7 @@ class HeuristicAgent(Agent):
         self.step_count = 0
         self.angles_dic = get_angles_dictionary(maze_size)
         self.vm_dist = get_von_mises_array(maze_size, kappa)
+        self.max_vm = vonmises.pdf(0, kappa=kappa) 
 
     def set_loc(self, node):
         old_loc = self.loc
@@ -257,7 +260,7 @@ class HeuristicAgent(Agent):
     
     loc = property(_get_loc, set_loc)
 
-    def evaluate(self, nodeslist, goal, penalty='node'):
+    def evaluate(self, nodeslist, goal, penalty='node', relative_penalty=False):
         """Returns a vector with the edge values of each edge given as
         input.
         
@@ -273,6 +276,12 @@ class HeuristicAgent(Agent):
             If 'node', the agent will penalize options that lead to nodes it has
             already visited. If 'edge', the agent will only penalize edges it
             has already visited.
+
+        relative_penalty : boolean
+            If True a percentage of the value is subtracted instead of an
+            absolute value.
+            Note that if False, xi is still scaled by the maximum von Mises
+            value for the chosen kappa.
         """
 
         if penalty not in ('node', 'edge_unidir'):
@@ -340,19 +349,23 @@ class HeuristicAgent(Agent):
                 :,helper_index_matrix[1,:]>0]
 
         n_penalties = helper_matrix_only_visited_ones.shape[1]
-        '''
-        if np.any(helper_index_matrix[1,:]>0):
-            import ipdb; ipdb.set_trace()
-        '''
-        # this is a simple filter to prevent the penalty factors from
-        # becoming larger than 1, i.e., from discounting more than the value
-        # of the node
-        threshold = lambda x: x if x<1 else 1
+        
+        if relative_penalty:
+            # this is a simple filter to prevent the penalty factors from
+            # becoming larger than 1, i.e., from discounting more than the value
+            # of the node
+            threshold = lambda x: x if x<1 else 1
 
-        for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
-            penalties[x] = threshold(self.xi/(n_penalties-i))
+            for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
+                penalties[x] = threshold(self.xi/(n_penalties-i))
 
-        values = vm - vm*penalties
+            values = vm - vm*penalties
+
+        else:
+            for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
+                penalties[x] = self.xi/(n_penalties-i)
+
+            values = vm - penalties * self.max_vm
  
         return values
 
@@ -390,6 +403,28 @@ class OmniscientAgent(Agent):
 
         return path
         
+class MixtureAgent(HeuristicAgent):
+    def __init__(self, loc, beta, kappa, xi, maze,
+            heading=None, maze_size=6, switch_distance = 0):
+        super(MixtureAgent, self).__init__(loc, beta, kappa, xi, heading=None,
+                maze_size=6)
+        self.maze = maze
+        self.switch_distance = switch_distance
+        #self.switched = False
+    
+    def evaluate(self, nodeslist, goal, penalty='node', relative_penalty=False):
+
+        if self.maze.distances_dictionary[self.loc][goal] <= self.switch_distance:
+            omniscient_agent = OmniscientAgent(self.loc, self.maze)
+            values = omniscient_agent.evaluate(nodeslist, goal)
+            #self.switched = True
+            #print('omniscient!')
+        else:
+            values = super(MixtureAgent, self).evaluate(nodeslist, goal,
+                    penalty = penalty, relative_penalty = relative_penalty)
+            #print('heuristic!')
+
+        return values
 
 class DirectedRandomAgent(Agent):
     def __init__(self, loc, beta, conc, heading=None, direction=0):
@@ -425,3 +460,4 @@ class DirectedRandomAgent(Agent):
         """Calculates the position the agent wants to visit next.
         """
         pass
+
