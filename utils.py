@@ -84,7 +84,7 @@ def assert_nodes_adjacent(node1, node2):
     if np.sqrt((node2[0] - node1[0])**2 + (node2[1] - node1[1])**2) == 1:
         return True
     else:
-        raise IlegalStep
+        pass#raise IlegalStep
 
 def check_elements_equal(lst):
     """Check that all elements of list are identical.
@@ -293,6 +293,20 @@ def nested_dictionary_depth(dic):
             is_dic = False
 
     return level
+
+"""
+def list_angles_in_dictionary(dic):
+    '''Lists all angles in a nested dictionary containing angles between nodes
+    .'''
+    values = list(dic.values())
+    
+    levels_to_go = nested_dictionary_depth(dic)
+
+    angles = []
+
+    while levels_to_go:
+        for d in
+"""
 
 def list_nested_dic_leaves(d, l):
     for k, v in d.items():
