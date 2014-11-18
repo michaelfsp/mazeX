@@ -34,6 +34,8 @@ class BonsaiFile:
                 #here determine to which port point is nearest
                 list_ports_transversed.append(mapping.find_nearest_port(xy))
 
+        return list_ports_transversed
+
 
 
 class PortRegion(shapely.geometry.Polygon):
