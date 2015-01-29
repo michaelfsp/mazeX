@@ -39,20 +39,29 @@ class BonsaiFile:
 
 
 class PortRegion(shapely.geometry.Polygon):
-    def __init__(self, poke_coord, shell=None, holes=None):
+    def __init__(self, poke_coord, poke_address, shell=None, holes=None):
         super(PortRegion, self).__init__(shell, holes)
         self.poke_coord = poke_coord
+        self.poke_address = poke_address
 
 class RegionMapping:
     def __init__(self, svg_file):
         self.svg_file = svg_file
         self.tree = ET.parse(svg_file)
         self.root = self.tree.getroot()
+        self.g = None #sometimes inkscape will place paths inside a node
+        # called 'g' which groups other SVG elements in it such as the paths
+        # of our polygons of interest
 
         self.portregions = []
         
         # here we will detect the polygons and create PortRegions from them
         list_paths = self.root.findall('{http://www.w3.org/2000/svg}path')
+
+        if len(list_paths) == 0 or self.root.find('{http://www.w3.org/2000/svg}g'):
+            self.g = self.root.find('{http://www.w3.org/2000/svg}g')
+            list_paths = self.g.findall('{http://www.w3.org/2000/svg}path')
+
         for x in list_paths: #each polygon is a path in SVG
             #gets a string that contains coordinates of vertices plus stuff
             #  we don't need
@@ -71,8 +80,10 @@ class RegionMapping:
 
             poke_coord = eval(x.get(
                 '{http://www.inkscape.org/namespaces/inkscape}label'))
+            poke_address = int(x.get('id'))
 
-            self.portregions.append(PortRegion(poke_coord, list_coord_tuples))
+            self.portregions.append(PortRegion(poke_coord,
+                poke_address, list_coord_tuples))
 
     def find_nearest_port(self, xy_tuple):
         point = shapely.geometry.Point(xy_tuple)
