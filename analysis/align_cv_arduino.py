@@ -1,32 +1,27 @@
 import copy
+import datetime
 import numpy as np
+import pylab as pl
 from data import RegionMapping
+
+#----------------------------------Useful bits--------------------------------
+tosec = lambda h,m,s: 3600*h + 60*m + s
+
 
 #------------------------------------ Parameters -----------------------------
 fps = 30
 
+
+#-------------------------------Parsing Arduino data--------------------------
 """For getting the reward times we get the times when the light went off,
 which coincides with reward delivery, and discard the last event as that
 is simply triggered by the task coming to an end.
 """
-
-raw = np.loadtxt('/home/michael/data/122014/arduino/23122014/4IV.txt')
+raw = np.loadtxt('/home/michael/data/122014/arduino/23122014/5I.txt')
 reward_events = raw[(raw[:,1]<100)&(raw[:,2]==0)][:-1][:,:2]
 
 
-
-"""Now we extract the regions corresponding to the different ports on the
-image using the annotated SVG file.
-"""
-
-mapping = RegionMapping('./mazex/analysis/background.svg')
-
-
-
-"""
-We extract the CV data.
-"""
-
+#---------------------------------Parsing CV data-----------------------------
 data_dir = '/home/michael/data/122014/cv/'
 
 meta = np.loadtxt(data_dir+'metadata2014-12-23T14_08_57.csv', skiprows=1)
@@ -42,34 +37,23 @@ timed_centroid = np.hstack((time, centroid))
 
 
 
-#def RMS(timed_centroi
+"""Now we extract the regions corresponding to the different pokes on the
+image using the annotated SVG file.
+"""
+mapping = RegionMapping('./mazex/analysis/background.svg')
 
-def get_region_centroid_xy(mapping):
-    dic = {}
-    for portregion in mapping.portregions:
-        # shapely has a strange way of returning the coordinates so we first
-        #  store the information in a tuple
-        centroid_xy_tuple = portregion.centroid.xy
-        x = centroid_xy_tuple[0][0]
-        y = centroid_xy_tuple[1][0]
-
-        dic[portregion.poke_address] = (x,y)
-
-    return dic
+poke_xy_dic = mapping.get_region_centroid_xy()
 
 reward_events_xy = np.zeros((reward_events.shape[0], 2))
 
-port_xy_dic = get_region_centroid_xy(mapping)
-
 for i, re in enumerate(reward_events):
-    reward_events_xy[i] = port_xy_dic[re[1]]
+    poke_address = re[1]
+    reward_events_xy[i] = poke_xy_dic[poke_address]
     
-candidate_indices = np.zeros(reward_events.shape[0], dtype=int) #dtype has
-# to be int or else numpy won't accept these as indexes
 
-for i,r in enumerate(reward_events):
-    candidate_indices[i] = np.argmin(abs(timed_centroid[:,0]-r[0]))
-
+candidate_indices = reward_events[:,0]/(1000/fps)
+# indexing requires these to be integers
+candidate_indices = candidate_indices.round().astype('int')
 candidate_indices -= candidate_indices[0] #so that when tau=0,
 #  candidate_indices[0] is also zero
 
@@ -112,15 +96,15 @@ def score_tau(tau, fps, timed_centroid, candidate_indices, reward_events_xy):
 """Calculate distance for every tau (shift).
 """
 recording_length = timed_centroid[-1,0]
-session_length = reward_events[-1,0] - reward_events[0,0]
 
-tau_min = 0
+tau_min = reward_events[0,0]
 tau_res = 33.3333 #ms
-tau_max = (recording_length - session_length) - np.ceil(tau_res)
+tau_max = (recording_length - reward_events[-1,0]) - np.ceil(tau_res)
 delta_index = round((1000/fps)/tau_res) # by how much should the indexes be
 # incremented to achieve delta. fps is the framerate
 
-total_steps = np.floor(tau_max/tau_res)# - delta_index
+total_steps = np.floor((tau_max-tau_min)/tau_res)# - delta_index
+
 
 score_vs_tau = np.zeros((total_steps, 2))
 n_steps = 0
@@ -128,12 +112,33 @@ tau = tau_min
 while n_steps < total_steps:
     score_vs_tau[n_steps] = (tau, score_tau(tau, fps, timed_centroid,
         candidate_indices, reward_events_xy))
+
+    if ((n_steps/total_steps)*100)%10 < 0.0001:
+        print(int((n_steps/total_steps)*100), '%')
+
     n_steps += 1
     tau += tau_res
-    if n_steps%1000 ==0:
-        print(n_steps)
 
 """Test tau.
 """
+pl.figure()
+pl.plot(score_vs_tau[:,0], score_vs_tau[:,1])
+
+avg_dot_product = score_vs_tau.mean(axis=0)[1]
+abs_min_dot_product = np.min(score_vs_tau, axis=0)[1]
+mean_min_difference = abs_min_dot_product - avg_dot_product
+# we define the threshold as 90% distance to minimum from the mean
+threshold = avg_dot_product - 0.9*(avg_dot_product - abs_min_dot_product)
+index_first_point_below_threshold = np.nonzero(score_vs_tau < threshold)[0][0]
+tau = score_vs_tau[:,0][index_first_point_below_threshold]
+
+adjusted_tau = tau - 1000 #usually it is at least 1 sec late
+
+print('tau: ', datetime.timedelta(seconds=tau/1000))
+print('adjusted tau: ', datetime.timedelta(seconds=adjusted_tau/1000))
+
 
 video_dir = '/home/michael/data/122014/video/' 
+
+
+pl.show()
