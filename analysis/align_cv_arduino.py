@@ -17,8 +17,9 @@ fps = 30
 which coincides with reward delivery, and discard the last event as that
 is simply triggered by the task coming to an end.
 """
-raw = np.loadtxt('/home/michael/data/122014/arduino/23122014/5I.txt')
+raw = np.loadtxt('/home/michael/data/122014/arduino/23122014/5III.txt')
 reward_events = raw[(raw[:,1]<100)&(raw[:,2]==0)][:-1][:,:2]
+time_to_first_reward = int(reward_events[0,0])
 
 
 #---------------------------------Parsing CV data-----------------------------
@@ -26,7 +27,7 @@ data_dir = '/home/michael/data/122014/cv/'
 
 meta = np.loadtxt(data_dir+'metadata2014-12-23T14_08_57.csv', skiprows=1)
 tracked = np.loadtxt(data_dir+'tracking2014-12-23T14_08_57.csv', skiprows=1)
-
+avg_major_axis_length = np.median(tracked[:,3])
 centroid = tracked[:,0:2]
 
 frame_number = meta[:,1] # Bonsai gets the frame_numbers from the camera.
@@ -89,9 +90,9 @@ def score_tau(tau, fps, timed_centroid, candidate_indices, reward_events_xy):
     re_indexed[:,0] = candidate_indices + tau_index_shift
 
     centroid_xy_coord = timed_centroid[re_indexed[:,0], 1:3]
-
+    
     return np.linalg.norm(centroid_xy_coord - reward_events_xy)
-
+    
 
 """Calculate distance for every tau (shift).
 """
@@ -128,15 +129,23 @@ avg_dot_product = score_vs_tau.mean(axis=0)[1]
 abs_min_dot_product = np.min(score_vs_tau, axis=0)[1]
 mean_min_difference = abs_min_dot_product - avg_dot_product
 # we define the threshold as 90% distance to minimum from the mean
-threshold = avg_dot_product - 0.9*(avg_dot_product - abs_min_dot_product)
+#threshold = avg_dot_product - 0.9*(avg_dot_product - abs_min_dot_product)
+
+residual_norm = np.linalg.norm((avg_major_axis_length/2)*np.ones(
+    reward_events_xy.shape[0]))
+threshold = abs_min_dot_product + residual_norm
+
 index_first_point_below_threshold = np.nonzero(score_vs_tau < threshold)[0][0]
-tau = score_vs_tau[:,0][index_first_point_below_threshold]
+best_tau = score_vs_tau[:,0][index_first_point_below_threshold]
 
-adjusted_tau = tau - 1000 #usually it is at least 1 sec late
+adjusted_tau = best_tau - time_to_first_reward
 
-print('tau: ', datetime.timedelta(seconds=tau/1000))
-print('adjusted tau: ', datetime.timedelta(seconds=adjusted_tau/1000))
+print('time of first reward: ', datetime.timedelta(seconds=best_tau/1000))
+print('data acquisition start: ', datetime.timedelta(seconds=adjusted_tau/1000))
 
+print('\nTimes of reward events\n')
+for r in reward_events[:,0]:
+    print(datetime.timedelta(seconds=(adjusted_tau + r)/1000))
 
 video_dir = '/home/michael/data/122014/video/' 
 
