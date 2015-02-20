@@ -96,6 +96,18 @@ class RegionMapping:
 
         return self.portregions[nearest_port_index].poke_coord
 
+    def get_region_centroid_xy(self):
+        """Returns a dictionary with poke_address and (x,y) coordinates for of
+        that poke's centroid.
+        """
+        dic = {}
+        for portregion in self.portregions:
+            # shapely has a strange way of returning the coordinates so we first
+            #  store the information in a tuple
+            centroid_xy_tuple = portregion.centroid.xy
+            x = centroid_xy_tuple[0][0]
+            y = centroid_xy_tuple[1][0]
 
+            dic[portregion.poke_address] = (x,y)
 
-
+        return dic

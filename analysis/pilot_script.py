@@ -16,8 +16,10 @@ time = time[:, None] # this last silly indexing expands the dimensions
 # of the vector so it can be stacked with the other matrix as follows:
 timed_centroid = np.hstack((centroid, time))
 
+
 """
-Video Markers
+Code to extract the position of different video segments as manually annotated
+on Openshot.
 """
 
 root = vid_markers.getroot()
@@ -39,3 +41,6 @@ for track in tracks:
 
         start_stop[track_id] = (int(start), int(stop))
 
+tosec = lambda h,m,s: 3600*h + 60*m + s
+
+epsilon_23 = 1.0201718872078982
