@@ -23,7 +23,8 @@ which coincides with reward delivery, and discard the last event as that
 is simply triggered by the task coming to an end.
 """
 mice = ['4I', '4II', '4III', '4IV', '5I', '5II', '5III', '5IV']
-experiment_days = [14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+# on day 14 animals already ran on the maze but we don't have video data
+experiment_days = [15, 16, 17, 18, 19, 20, 21, 22, 23]
 
 
 #raw = np.loadtxt('/home/michael/data/122014/arduino/23122014/5III.txt')
@@ -36,24 +37,18 @@ for m in mice:
     reward_events[m] = {}
     reward_event_times[m] = {}
     diff[m] = []
-    for d in experiment_days:
+    for d in experiment_days[-3:]:
         raw = np.loadtxt('/home/michael/data/122014/arduino/'+str(d)+'122014/'+m+'.txt')
         reward_events[m][d] = raw[(raw[:,1]<100)&(raw[:,2]==0)][:-1][:,:2]
         reward_event_times[m][d] = reward_events[m][d][:,0]/1000 #convert to seconds
         diff[m].extend(list(np.diff(reward_event_times[m][d])))
 
-        '''
-        print(m)
-        print(d)
-        print(min(diff))
-        '''
-
     pl.figure()
 
     pl.title(m)
-    for nbins in (100, 200):
-        pl.hist(diff[m], bins=nbins)
-    pl.xlim((0,60))
+    for nbins in (25, 50):
+        pl.hist(np.log(diff[m]), bins=nbins)
+    pl.xlim((0,6))
 
 pl.show()
 
