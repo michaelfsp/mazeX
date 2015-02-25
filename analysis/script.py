@@ -1,5 +1,6 @@
 import bonsai
-
+import numpy as np
+import pylab as pl
 #------------------------------------ Parameters -----------------------------
 
 fps = 30
@@ -9,11 +10,11 @@ metadata_file = data_dir+'metadata2014-12-23T14_08_57.csv'
 centroid_file = data_dir+'tracking2014-12-23T14_08_57.csv'
 
 
-bonsai_data = bonsai.BonsaiData(centroid_file, metadata_file, fps,
-        background_file)
+#bonsai_data = bonsai.BonsaiData(centroid_file, metadata_file, fps,
+#        background_file)
 
 #---------------------------------Parsing CV data-----------------------------
-avg_major_axis_length = np.median(tracked[:,3])
+#avg_major_axis_length = np.median(tracked[:,3])
 
 
 #-----------------------------------ITIs--------------------------------------
@@ -28,20 +29,30 @@ experiment_days = [14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
 #raw = np.loadtxt('/home/michael/data/122014/arduino/23122014/5III.txt')
 #reward_events = raw[(raw[:,1]<100)&(raw[:,2]==0)][:-1][:,:2]
 #time_to_first_reward = int(reward_events[0,0])
-
+reward_events = {}
+reward_event_times = {}
+diff = {}
 for m in mice:
-    diff = []
-    for d in experiment_days[-3:]:
+    reward_events[m] = {}
+    reward_event_times[m] = {}
+    diff[m] = []
+    for d in experiment_days:
         raw = np.loadtxt('/home/michael/data/122014/arduino/'+str(d)+'122014/'+m+'.txt')
-        reward_events = raw[(raw[:,1]<100)&(raw[:,2]==0)][:-1][:,:2]
-        reward_event_times = reward_events[:,0]/1000 #convert to seconds
-        diff.extend(list(np.diff(reward_event_times)))
+        reward_events[m][d] = raw[(raw[:,1]<100)&(raw[:,2]==0)][:-1][:,:2]
+        reward_event_times[m][d] = reward_events[m][d][:,0]/1000 #convert to seconds
+        diff[m].extend(list(np.diff(reward_event_times[m][d])))
+
+        '''
+        print(m)
+        print(d)
+        print(min(diff))
+        '''
 
     pl.figure()
 
     pl.title(m)
     for nbins in (100, 200):
-        pl.hist(diff, bins=nbins)
+        pl.hist(diff[m], bins=nbins)
     pl.xlim((0,60))
 
 pl.show()
