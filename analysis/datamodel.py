@@ -48,13 +48,13 @@ class Subject:
 
         pl.title('ITIs ' + self.ID)
         if logscale:
-            pl.hist(np.log(diff), bins=nbins)
             pl.xlabel('log(ITI)/s')
             pl.xlim((0,7))
-        else:
-            pl.hist(diff, bins=nbins)
-            pl.xlabel('ITI/s')
+            return pl.hist(np.log(diff), bins=nbins)
 
+        else:
+            pl.xlabel('ITI/s')
+            return pl.hist(diff, bins=nbins)
 
 class CombinedData:
     def __init__(self, fps):#here the stuff that initializes bonsai objects plus the
