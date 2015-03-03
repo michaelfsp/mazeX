@@ -4,4 +4,4 @@ __author__   = "Michael Pereira"
 
 __version__ = "dev_git"
 
-from mazex.analysis import angle, deviations, distances, information, probs, data
+from . import angle, arduino, bonsai, datamodel, deviations, information, probs, distances

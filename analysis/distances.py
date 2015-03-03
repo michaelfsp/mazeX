@@ -4,7 +4,7 @@ import numpy as np
 import pylab as pl
 
 from mazex.exceptions import *
-import mazex.utils as utils
+from mazex import utils
 
 def distances_plot(maze, goals=None, plot=True, node_size=False,
         goal_color='r', **kwargs):
