@@ -50,6 +50,7 @@ class Subject:
         if logscale:
             pl.hist(np.log(diff), bins=nbins)
             pl.xlabel('log(ITI)/s')
+            pl.xlim((0,7))
         else:
             pl.hist(diff, bins=nbins)
             pl.xlabel('ITI/s')
