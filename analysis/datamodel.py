@@ -1,9 +1,64 @@
+import os.path
+
+import numpy as np
+import pylab as pl
+
 """Here come the objects that unite Arduino and Bonsai data.
 """
+class Experiment:
+    def __init__(self, data_folder, subject_ids, dates, maze=None):
+        self.subjects_ids = subjects_ids
+        self.dates = dates
+        self.maze = maze
+        self.data_folder = data_folder
 
-class FusedData:
-    def __init__(self, )#here the stuff that initializes bonsai objects plus the
-            #stuff that initalizes Arduino objects plus parameters like fps etc
+        """Here we should populate the objects that it contains"""
+
+
+class Subject:
+    def __init__(self, ID, data_folder, experiment_days):
+        """This container should be independent of its container, experiment"""
+        self.ID = ID
+        self.data_folder = data_folder
+        self.experiment_days = experiment_days
+
+        self.raw = {}
+        for d in experiment_days:
+            file_path = os.path.join(data_folder, 'arduino', d, ID+'.txt')
+            self.raw[d] = np.loadtxt(file_path)
+
+        self.reward_events = {}
+        for d in experiment_days:
+            self.reward_events[d] = self.raw[d][(self.raw[d][:,1]<100)&(self.raw[d][:,2]==0)][:-1][:,:2]
+
+    def ITI_dist(self, experiment_days=None, logscale=True, nbins=25):
+        if experiment_days:
+            experiment_days = experiment_days
+        else:
+            experiment_days = self.experiment_days
+
+        reward_event_times = {}
+        diff = []
+
+        for d in experiment_days:
+            reward_event_times[d] = self.reward_events[d][:,0]/1000 # convert to seconds
+            diff.extend(list(np.diff(reward_event_times[d])))
+
+        pl.figure()
+
+        pl.title('ITIs ' + self.ID)
+        if logscale:
+            pl.hist(np.log(diff), bins=nbins)
+            pl.xlabel('log(ITI)/s')
+        else:
+            pl.hist(diff, bins=nbins)
+            pl.xlabel('ITI/s')
+
+
+class CombinedData:
+    def __init__(self, fps):#here the stuff that initializes bonsai objects plus the
+        #stuff that initalizes Arduino objects plus parameters like fps etc
+        pass
 
     def score_tau(tau, fps, timed_centroid, candidate_indices, reward_events_xy):
         """Gives a score to the tested tau value.
@@ -40,7 +95,8 @@ class FusedData:
         
         return np.linalg.norm(centroid_xy_coord - reward_events_xy)
 
-    def find_shift(tau_min=None, tau_max=None, tau_res=None, fps=30, timed_centroid, candidate_indices
+    def find_shift(timed_centroid, candidate_indices, tau_min=None,
+            tau_max=None, tau_res=None, fps=30):
         """Calculate distance for every tau (shift).
         """
         reward_events_xy = np.zeros((reward_events.shape[0], 2))
@@ -104,5 +160,3 @@ class FusedData:
         print('\nTimes of reward events\n')
         for r in reward_events[:,0]:
             print(datetime.timedelta(seconds=(adjusted_tau + r)/1000))
-
-pl.show()
