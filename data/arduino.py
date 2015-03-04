@@ -14,7 +14,6 @@ class ArduinoDataFile:
             self.raw[:,2]==1)][:,:2]
         self.lightson_event_times = self.lightson_events[:,0]
 
-
     @property
     def ITIs(self):
         return np.diff(self.reward_event_times)
