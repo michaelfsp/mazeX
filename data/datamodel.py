@@ -3,6 +3,8 @@ import os.path
 import numpy as np
 import pylab as pl
 
+from mazex.data.arduino import ArduinoDataFile
+
 """Here come the objects that unite Arduino and Bonsai data.
 """
 class Experiment:
@@ -14,7 +16,6 @@ class Experiment:
 
         """Here we should populate the objects that it contains"""
 
-
 class Subject:
     def __init__(self, ID, data_folder, experiment_days):
         """This container should be independent of its container, experiment"""
@@ -22,14 +23,10 @@ class Subject:
         self.data_folder = data_folder
         self.experiment_days = experiment_days
 
-        self.raw = {}
+        self.raw_arduino = {}
         for d in experiment_days:
             file_path = os.path.join(data_folder, 'arduino', d, ID+'.txt')
-            self.raw[d] = np.loadtxt(file_path)
-
-        self.reward_events = {}
-        for d in experiment_days:
-            self.reward_events[d] = self.raw[d][(self.raw[d][:,1]<100)&(self.raw[d][:,2]==0)][:-1][:,:2]
+            self.raw_arduino[d] = ArduinoDataFile(file_path)
 
     def ITI_dist(self, experiment_days=None, logscale=True, nbins=25):
         if experiment_days:
@@ -37,12 +34,9 @@ class Subject:
         else:
             experiment_days = self.experiment_days
 
-        reward_event_times = {}
         diff = []
-
         for d in experiment_days:
-            reward_event_times[d] = self.reward_events[d][:,0]/1000 # convert to seconds
-            diff.extend(list(np.diff(reward_event_times[d])))
+            diff.extend(list(self.raw_arduino[d].ITIs/1000)) #/1000 to convert to seconds
 
         pl.title('ITIs ' + self.ID)
         if logscale:

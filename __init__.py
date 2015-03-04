@@ -88,8 +88,8 @@ from mazex.datamodel import *
 # Simmulation stuff
 from mazex.simtask import *
 
-from . import analysis
-from . import data
+import mazex.analysis as analysis
+import mazex.data as data
 
 """
 I believe we don't need these imports.
