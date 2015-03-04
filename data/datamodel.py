@@ -44,8 +44,6 @@ class Subject:
             reward_event_times[d] = self.reward_events[d][:,0]/1000 # convert to seconds
             diff.extend(list(np.diff(reward_event_times[d])))
 
-        pl.figure()
-
         pl.title('ITIs ' + self.ID)
         if logscale:
             pl.xlabel('log(ITI)/s')
