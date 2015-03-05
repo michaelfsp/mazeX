@@ -169,7 +169,7 @@ class BonsaiData:
         i_start = np.argmin(abs(self.time_axis - t_start))
         i_stop = np.argmin(abs(self.time_axis - t_stop))
 
-        return self.timed_centroid[i_start:i_stop]
+        return copy.deepcopy(self.timed_centroid[i_start:i_stop])
 
 
 class PortRegion(shapely.geometry.Polygon):
