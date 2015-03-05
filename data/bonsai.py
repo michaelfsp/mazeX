@@ -16,13 +16,14 @@ except ImportError:
 
 class BonsaiData:
     def __init__(self, centroid_file, metadata_file, fps=30,
-            background_file=None):
+            background_file=None, background_PNG=None):
         """Container of data files created by CV in Bonsai.
         """
         self.centroid_file = centroid_file
         self.medatata_file = metadata_file
         self.fps = fps
         self.background_file = background_file
+        self.background_PNG = background_PNG
 
         self.raw_array = np.loadtxt(self.centroid_file, skiprows=1)
         # it seems like we don't need this anymore
@@ -50,7 +51,9 @@ class BonsaiData:
         """
     def plot(self, picture=True):
         pl.plot(self.xy[:,0], self.xy[:,1]) 
-        pl.imshow(pl.imread(self.background_file))
+
+        if self.background_PNG:
+            pl.imshow(pl.imread(self.background_PNG))
 
     def to_poke_ports(self, mapping):
         list_ports_transversed = []
