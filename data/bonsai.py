@@ -93,7 +93,7 @@ class BonsaiData:
         return np.linalg.norm(centroid_xy_coord - reward_events_xy)
 
     def find_shift(self, arduino_data_object, tau_min=None,
-            tau_max=None, tau_res=None):
+            tau_max=None, tau_res=None, plot=False, verbose=False):
         """Calculate distance for every tau (shift).
         """
         reward_events = arduino_data_object.reward_events
@@ -132,11 +132,6 @@ class BonsaiData:
             n_steps += 1
             tau += tau_res
 
-        """Test tau.
-        """
-        pl.figure()
-        pl.plot(score_vs_tau[:,0], score_vs_tau[:,1])
-
         avg_dot_product = score_vs_tau.mean(axis=0)[1]
         abs_min_dot_product = np.min(score_vs_tau, axis=0)[1]
         mean_min_difference = abs_min_dot_product - avg_dot_product
@@ -149,20 +144,32 @@ class BonsaiData:
             reward_events_xy.shape[0]))
         threshold = abs_min_dot_product + residual_norm
 
-        xlim = pl.xlim()
-        pl.hlines(threshold, *xlim)
+        if plot:
+            pl.figure()
+            pl.plot(score_vs_tau[:,0], score_vs_tau[:,1])
+            xlim = pl.xlim()
+            pl.hlines(threshold, *xlim)
 
         index_first_point_below_threshold = np.nonzero(score_vs_tau < threshold)[0][0]
         best_tau = score_vs_tau[:,0][index_first_point_below_threshold]
 
         adjusted_tau = best_tau - time_to_first_reward
 
-        print('time of first reward: ', datetime.timedelta(seconds=best_tau/1000))
-        print('data acquisition start: ', datetime.timedelta(seconds=adjusted_tau/1000))
+        if verbose:
+            print('time of first reward: ', datetime.timedelta(seconds=best_tau/1000))
+            print('data acquisition start: ', datetime.timedelta(seconds=adjusted_tau/1000))
 
-        print('\nTimes of reward events\n')
-        for r in reward_events[:,0]:
-            print(datetime.timedelta(seconds=(adjusted_tau + r)/1000))
+            print('\nTimes of reward events\n')
+            for r in reward_events[:,0]:
+                print(datetime.timedelta(seconds=(adjusted_tau + r)/1000))
+
+        return adjusted_tau#this is when acquisition started
+
+    def get_time_slice(self, t_start, t_stop):
+        i_start = np.argmin(abs(self.time_axis - t_start))
+        i_stop = np.argmin(abs(self.time_axis - t_stop))
+
+        return self.timed_centroid[i_start:i_stop]
 
 
 class PortRegion(shapely.geometry.Polygon):
@@ -182,7 +189,8 @@ class RegionMapping:
         # of our polygons of interest
 
         self.portregions = []
-        
+        self.portregions_dic = {}
+
         # here we will detect the polygons and create PortRegions from them
         list_paths = self.root.findall('{http://www.w3.org/2000/svg}path')
 
@@ -209,9 +217,11 @@ class RegionMapping:
             poke_coord = eval(x.get(
                 '{http://www.inkscape.org/namespaces/inkscape}label'))
             poke_address = int(x.get('id'))
+            region = PortRegion(poke_coord, poke_address, list_coord_tuples)
 
-            self.portregions.append(PortRegion(poke_coord,
-                poke_address, list_coord_tuples))
+            self.portregions.append(region)
+            self.portregions_dic[poke_coord] = region
+
 
     def find_nearest_port(self, xy_tuple):
         point = shapely.geometry.Point(xy_tuple)
