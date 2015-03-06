@@ -8,10 +8,13 @@ import re
 import copy
 import datetime
 
+from PIL import Image
+
 try:
     import prettyplotlib as ppl
 except ImportError:
     print("Prettyplotlib not available. Falling back onto Matplotlib.")
+    import pylab as ppl
 
 
 class BonsaiData:
@@ -49,11 +52,35 @@ class BonsaiData:
         """Show where and how many frames were skipped.
         #TODO
         """
-    def plot(self, picture=True):
-        pl.plot(self.xy[:,0], self.xy[:,1]) 
+    def plot(self, t_start=None, t_stop=None, picture=True, color_map=None):
+        img = Image.open(self.background_PNG)
 
         if self.background_PNG:
-            pl.imshow(pl.imread(self.background_PNG))
+            pl.imshow(img, cmap='gray', vmin=0, vmax=255)
+
+        if t_start is None and t_stop is None: 
+            ppl.plot(self.xy[:,0], self.xy[:,1], linewidth=0, marker='o') 
+
+        else:
+            xy_slice = self.get_time_slice(t_start, t_stop)[:,1:3]
+            if not color_map:
+                ppl.plot(xy_slice[:,0], xy_slice[:,1], linewidth=0, marker='o')
+            else:
+                npoints = len(xy_slice)
+                #color_map='winter'
+
+                cm = pl.get_cmap(color_map)
+                fig = pl.gcf()
+                ax1 = fig.add_subplot(111)
+                ax1.set_color_cycle([cm(1.*i/(npoints-1)) for i in range(npoints-1)])
+
+                for i in range(npoints-1):
+                    ax1.plot(xy_slice[i:i+2,0], xy_slice[i:i+2,1])
+
+                pl.title('black=%i s, white=%i s'% (np.round(t_start/1000), np.round(t_stop/1000)))
+
+        pl.ylim(2048,0)
+        pl.xlim(0,2048)
 
     def to_poke_ports(self, mapping):
         list_ports_transversed = []
