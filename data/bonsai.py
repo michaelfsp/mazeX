@@ -4,6 +4,8 @@ import pylab as pl
 
 import xml.etree.ElementTree as ET
 import shapely.geometry 
+from descartes.patch import PolygonPatch
+
 import re
 import copy
 import datetime
@@ -208,10 +210,14 @@ class PortRegion(shapely.geometry.Polygon):
         self.poke_coord = poke_coord
         self.poke_address = poke_address
 
+    def as_patch(self, zorder=2):
+        return PolygonPatch(self, facecolor='r', edgecolor='k', alpha=0.5, zorder=zorder)
+
 
 class RegionMapping:
-    def __init__(self, svg_file):
+    def __init__(self, svg_file, bmp_file=None):
         self.svg_file = svg_file
+        self.bmp_file = bmp_file
         self.tree = ET.parse(svg_file)
         self.root = self.tree.getroot()
         self.g = None #sometimes inkscape will place paths inside a node
@@ -252,6 +258,23 @@ class RegionMapping:
             self.portregions.append(region)
             self.portregions_dic[poke_coord] = region
 
+
+    def draw_regions(self, bmp_file=None):
+        fig = pl.gcf()
+        ax = fig.add_subplot(111)
+        if not bmp_file:
+            if self.bmp_file:
+                bmp_file = self.bmp_file
+
+        if bmp_file:
+            img = Image.open(bmp_file)
+            pl.imshow(img, cmap='gray', vmin=0, vmax=255)
+
+        for r in self.portregions:
+            ax.add_patch(r.as_patch())
+
+        pl.xlim(0, 2048)
+        pl.ylim(2048, 0)
 
     def find_nearest_port(self, xy_tuple):
         point = shapely.geometry.Point(xy_tuple)
