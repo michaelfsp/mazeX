@@ -5,12 +5,13 @@ import pylab as pl
 import xml.etree.ElementTree as ET
 import shapely.geometry 
 from descartes.patch import PolygonPatch
+from PIL import Image
 
 import re
 import copy
 import datetime
 
-from PIL import Image
+from mazex.exceptions import InvalidMaze
 
 try:
     import prettyplotlib as ppl
@@ -21,7 +22,7 @@ except ImportError:
 
 class BonsaiData:
     def __init__(self, centroid_file, metadata_file, fps=30,
-            background_file=None, background_PNG=None):
+            background_file=None, background_PNG=None, maze=None):
         """Container of data files created by CV in Bonsai.
         """
         self.centroid_file = centroid_file
@@ -29,6 +30,7 @@ class BonsaiData:
         self.fps = fps
         self.background_file = background_file
         self.background_PNG = background_PNG
+        self.maze = maze
 
         self.raw_array = np.loadtxt(self.centroid_file, skiprows=1)
         # it seems like we don't need this anymore
@@ -43,86 +45,14 @@ class BonsaiData:
         # this last silly indexing expands the dimensions
         #of the vector so it can be stacked with the other matrix as follows:
         self.time_axis = self.time_axis[:, None]
+        self.t_start = float(self.time_axis[0])
+        self.t_stop = float(self.time_axis[-1])
 
         #TODO: think of a way of not duplicating the data...
         self.timed_centroid = np.hstack((self.time_axis, self.xy))
 
         self.region_mapping = RegionMapping(self.background_file)
         self.poke_xy_dic = self.region_mapping.get_region_centroid_xy()
-
-    def skipped_frames(self):
-        """Show where and how many frames were skipped.
-        #TODO
-        """
-    def plot(self, t_start=None, t_stop=None, picture=True, color_map=None):
-        img = Image.open(self.background_PNG)
-
-        if self.background_PNG:
-            pl.imshow(img, cmap='gray', vmin=0, vmax=255)
-
-        if t_start is None and t_stop is None: 
-            ppl.plot(self.xy[:,0], self.xy[:,1], linewidth=0, marker='o') 
-
-        else:
-            xy_slice = self.get_time_slice(t_start, t_stop)[:,1:3]
-            if not color_map:
-                ppl.plot(xy_slice[:,0], xy_slice[:,1], linewidth=0, marker='o')
-            else:
-                npoints = len(xy_slice)
-                #color_map='winter'
-
-                cm = pl.get_cmap(color_map)
-                fig = pl.gcf()
-                ax1 = fig.add_subplot(111)
-                ax1.set_color_cycle([cm(1.*i/(npoints-1)) for i in range(npoints-1)])
-
-                for i in range(npoints-1):
-                    ax1.plot(xy_slice[i:i+2,0], xy_slice[i:i+2,1])
-
-                pl.title('black=%i s, white=%i s'% (np.round(t_start/1000), np.round(t_stop/1000)))
-
-        pl.ylim(2048,0)
-        pl.xlim(0,2048)
-
-    def to_poke_ports(self, mapping):
-        list_ports_transversed = []
-        for xy in self.raw_array:
-            # the following is a bit hacky but it works
-            if np.any(xy == [None,None]):
-                list_ports_transversed.append(None)
-            else:
-                #here determine to which port point is nearest
-                list_ports_transversed.append(mapping.find_nearest_port(xy))
-
-        return list_ports_transversed
-
-    def score_tau(self, tau, candidate_indices, reward_events_xy):
-        """Gives a score to the tested tau value.
-
-        Parameters:
-        -----------
-        tau : int
-            Value of the shift in ms
-
-        reward_events : numpy.array
-            Numpy array containing time of poke (ms) and poke port address
-
-        mapping : RegionMapping object
-            Contains the mapping of poke port addresses to their X,Y coordinates
-            on the image/video.
-        """
-        # we find the indices on the timed_centroid array that correspond to the event
-        #  times in the reward_events array
-
-        tau_index_shift = round((tau/1000)*self.fps)
-           
-        re_indexed = copy.deepcopy(reward_events_xy)
-        re_indexed = re_indexed.astype('int')
-        re_indexed[:,0] = candidate_indices + tau_index_shift
-
-        centroid_xy_coord = self.timed_centroid[re_indexed[:,0], 1:3]
-        
-        return np.linalg.norm(centroid_xy_coord - reward_events_xy)
 
     def find_shift(self, arduino_data_object, tau_min=None,
             tau_max=None, tau_res=None, plot=False, verbose=False):
@@ -203,6 +133,109 @@ class BonsaiData:
 
         return copy.deepcopy(self.timed_centroid[i_start:i_stop])
 
+    def get_trajectory(self, t_start=None, t_stop=None, maze=None, tolerance=30):
+        if not maze:
+            maze = self.maze
+        if not maze:
+            raise InvalidMaze
+        if not t_start:
+            t_start = self.t_start
+        if not t_stop:
+            t_stop = self.t_stop
+
+        nearest_ports = []
+        visited_ports = []
+        t_axis = []
+        last_visited_port = None
+        time_visit = 0
+
+        timed_centroid = self.get_time_slice(t_start, t_stop)
+
+        for t, x, y in timed_centroid:
+            nearest_port = self.region_mapping.find_nearest_port((x,y))
+            nearest_ports.append(nearest_port)
+
+            #if self.region_mapping.portregions_dic[nearest_port].contains(shapely.geometry.Point(x,y)):
+            if self.region_mapping.portregions_dic[nearest_port].distance(shapely.geometry.Point(x,y)) < tolerance:
+                if not last_visited_port:
+                    visited_ports.append(nearest_port)
+                    last_visited_port = nearest_port
+                    t_axis.append(t)
+                    time_visit = t
+
+                elif nearest_port != last_visited_port:
+                    if nearest_port in maze.neighbors(last_visited_port):
+                        #check if it is connected to the last recognized port,i.e,
+                        #  is not a tracking error
+                        visited_ports.append(nearest_port)
+                        last_visited_port = nearest_port
+                        t_axis.append(t)
+                        time_visit = t
+
+        return t_axis, visited_ports
+
+    def plot(self, t_start=None, t_stop=None, picture=True, color_map=None):
+        img = Image.open(self.background_PNG)
+
+        if self.background_PNG:
+            pl.imshow(img, cmap='gray', vmin=0, vmax=255)
+
+        if t_start is None and t_stop is None: 
+            ppl.plot(self.xy[:,0], self.xy[:,1], linewidth=0, marker='o') 
+
+        else:
+            xy_slice = self.get_time_slice(t_start, t_stop)[:,1:3]
+            if not color_map:
+                ppl.plot(xy_slice[:,0], xy_slice[:,1], linewidth=0, marker='o')
+            else:
+                npoints = len(xy_slice)
+                #color_map='winter'
+
+                cm = pl.get_cmap(color_map)
+                fig = pl.gcf()
+                ax1 = fig.add_subplot(111)
+                ax1.set_color_cycle([cm(1.*i/(npoints-1)) for i in range(npoints-1)])
+
+                for i in range(npoints-1):
+                    ax1.plot(xy_slice[i:i+2,0], xy_slice[i:i+2,1])
+
+                pl.title('black=%i s, white=%i s'% (np.round(t_start/1000), np.round(t_stop/1000)))
+
+        pl.ylim(2048,0)
+        pl.xlim(0,2048)
+
+    def score_tau(self, tau, candidate_indices, reward_events_xy):
+        """Gives a score to the tested tau value.
+
+        Parameters:
+        -----------
+        tau : int
+            Value of the shift in ms
+
+        reward_events : numpy.array
+            Numpy array containing time of poke (ms) and poke port address
+
+        mapping : RegionMapping object
+            Contains the mapping of poke port addresses to their X,Y coordinates
+            on the image/video.
+        """
+        # we find the indices on the timed_centroid array that correspond to the event
+        #  times in the reward_events array
+
+        tau_index_shift = round((tau/1000)*self.fps)
+           
+        re_indexed = copy.deepcopy(reward_events_xy)
+        re_indexed = re_indexed.astype('int')
+        re_indexed[:,0] = candidate_indices + tau_index_shift
+
+        centroid_xy_coord = self.timed_centroid[re_indexed[:,0], 1:3]
+        
+        return np.linalg.norm(centroid_xy_coord - reward_events_xy)
+
+    def skipped_frames(self):
+        """Show where and how many frames were skipped.
+        #TODO
+        """
 
 class PortRegion(shapely.geometry.Polygon):
     def __init__(self, poke_coord, poke_address, shell=None, holes=None):
