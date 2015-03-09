@@ -2,6 +2,7 @@ import os.path
 
 import numpy as np
 import pylab as pl
+import prettyplotlib as ppl
 
 from mazex.data.arduino import ArduinoDataFile
 
@@ -33,7 +34,7 @@ class Subject:
         #   extract only the relevant coordinates to here
 
 
-    def ITI_dist(self, experiment_days=None, logscale=True, nbins=25):
+    def ITI_dist(self, experiment_days=None, logscale=True, base10=False, nbins=25, color=None, label=None):
         if experiment_days:
             experiment_days = experiment_days
         else:
@@ -45,9 +46,20 @@ class Subject:
 
         pl.title('ITIs ' + self.ID)
         if logscale:
-            pl.xlabel('log(ITI)/s')
-            pl.xlim((0,7))
-            return pl.hist(np.log(diff), bins=nbins)
+            if not base10:
+                pl.xlabel('log(ITI)/s')
+                pl.xlim((0,7))
+                if color:
+                    return pl.hist(np.log(diff), bins=nbins, histtype='step', normed=True, linewidth=2, color=color, label=label)
+                else:
+                    return pl.hist(np.log(diff), bins=nbins, histtype='step', normed=True, linewidth=2, label=label)
+            else:
+                pl.xlabel('log10(ITI)/s')
+                pl.xlim((0,3))
+                if color:
+                    return pl.hist(np.log10(diff), bins=nbins, histtype='step', normed=True, linewidth=2, color=color, label=label)
+                else:
+                    return pl.hist(np.log10(diff), bins=nbins, histtype='step', normed=True, linewidth=2, label=label)
 
         else:
             pl.xlabel('ITI/s')
