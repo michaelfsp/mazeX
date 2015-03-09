@@ -13,6 +13,7 @@ class ArduinoDataFile:
         self.lightson_events = self.raw[(self.raw[:,1]<100)&(
             self.raw[:,2]==1)][:,:2]
         self.lightson_event_times = self.lightson_events[:,0]
+        self.session_length = self.raw[-1,0] - self.lightson_event_times[0]
 
     @property
     def ITIs(self):
