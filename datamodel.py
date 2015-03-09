@@ -155,6 +155,15 @@ class Session:
         self._current_trial_index = None     
         self._current_trial_index_manually_set = False
 
+    def count_total_steps(self):
+        """Count total number of steps in session.
+        """
+        total_steps = 0
+        for t in self.trials:
+            total_steps += len(t.steps)
+
+        return total_steps
+
     @property
     def current_trial_index(self):
         if self._current_trial_index_manually_set:
