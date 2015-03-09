@@ -1,3 +1,5 @@
+import re
+
 import numpy as np
 import pylab as pl
 
@@ -28,6 +30,7 @@ class RegionMapping:
 
         self.portregions = []
         self.portregions_dic = {}
+        self.address_to_coord_dic = {}
 
         # here we will detect the polygons and create PortRegions from them
         list_paths = self.root.findall('{http://www.w3.org/2000/svg}path')
@@ -59,7 +62,7 @@ class RegionMapping:
 
             self.portregions.append(region)
             self.portregions_dic[poke_coord] = region
-
+            self.address_to_coord_dic[poke_address] = poke_coord
 
     def draw_regions(self, bmp_file=None):
         fig = pl.gcf()
@@ -104,3 +107,4 @@ class RegionMapping:
             dic[portregion.poke_address] = (x,y)
 
         return dic
+
