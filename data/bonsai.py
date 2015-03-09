@@ -74,12 +74,14 @@ class BonsaiData:
         candidate_indices -= candidate_indices[0] #so that when tau=0,
         #  candidate_indices[0] is also zero
 
-        recording_length = self.timed_centroid[-1,0]
-
-        tau_min = reward_events[0,0]
-        tau_res = 33.3333 #ms
-        tau_max = (recording_length - reward_events[-1,0]) - np.ceil(tau_res)
-
+                
+        if not tau_res:
+            tau_res = 33.3333 #ms
+        if not tau_min:
+            tau_min = reward_events[0,0]
+        if not tau_max:
+            recording_length = self.timed_centroid[-1,0]
+            tau_max = (recording_length - reward_events[-1,0]) - np.ceil(tau_res)
         total_steps = np.floor((tau_max-tau_min)/tau_res)# - delta_index
 
         score_vs_tau = np.zeros((total_steps, 2))
