@@ -3,7 +3,7 @@ from mazex.exceptions import *
 from mazex.utils import check_elements_equal
 
 class Step:
-    def __init__(self, loc, trial, previous=None):
+    def __init__(self, loc, trial, previous=None, time=None):
         """Initializes the Step.
         
         Parameters:
@@ -27,6 +27,7 @@ class Step:
         self.loc = loc
         self.trial = trial
         self.previous = previous
+        self.time = time
         # sets .subsequent for the previous step
         if previous:
             previous.subsequent = self
@@ -115,7 +116,15 @@ class Trial:
     @property
     def path(self):
         return self.step.path
- 
+
+    @property
+    def t_start(self):
+        return self.steps[-1].time
+
+    @property
+    def t_stop(self):
+        return self.steps[0].time
+     
     def termination_condition(self):
         """This is a helper function for the simmulation methods.
 
@@ -140,7 +149,7 @@ class Trial:
             return False
 
 class Session:
-    def __init__(self):
+    def __init__(self, date=None, subject=None):
         """Session initiation method.
 
         Parameters:
@@ -154,6 +163,9 @@ class Session:
         self.trials = []
         self._current_trial_index = None     
         self._current_trial_index_manually_set = False
+
+        self.date = date
+        self.subject = subject
 
     def count_total_steps(self):
         """Count total number of steps in session.

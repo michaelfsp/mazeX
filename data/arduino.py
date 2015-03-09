@@ -15,18 +15,23 @@ class ArduinoDataFile:
         self.lightson_event_times = self.lightson_events[:,0]
         self.session_length = self.raw[-1,0] - self.lightson_event_times[0]
 
+        self._delay_period = None
+
     @property
     def ITIs(self):
         return np.diff(self.reward_event_times)
     
     @property
     def delay_period(self):
-        # we cannot use all events because sometimes the task finishes within
-        #   the delay period
-        if len(self.lightson_event_times[1:]) < len(self.reward_event_times):
-            delays = self.lightson_event_times[1:] - self.reward_event_times[:-1]
-        elif len(self.lightson_event_times[1:]) > len(self.reward_event_times):
-            delays = self.lightson_event_times[1:-1] - self.reward_event_times
-        else:
-            delays = self.lightson_event_times[1:] - self.reward_event_times
-        return delays.mean()
+        if not self._delay_period:
+            # we cannot use all events because sometimes the task finishes within
+            #   the delay period
+            if len(self.lightson_event_times[1:]) < len(self.reward_event_times):
+                delays = self.lightson_event_times[1:] - self.reward_event_times[:-1]
+            elif len(self.lightson_event_times[1:]) > len(self.reward_event_times):
+                delays = self.lightson_event_times[1:-1] - self.reward_event_times
+            else:
+                delays = self.lightson_event_times[1:] - self.reward_event_times
+            self._delay_period = delays.mean()
+
+        return self._delay_period
