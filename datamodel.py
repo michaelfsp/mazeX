@@ -94,7 +94,7 @@ class Step:
 
 class Trial:
     def __init__(self, maze, goal, max_steps=0, goal_reached=True,
-            delay_period=0):
+            delay_period=0, shortened=False):
         if isinstance(maze, SquareMaze):
             self.maze = maze
         else:
@@ -104,12 +104,13 @@ class Trial:
         self.max_steps = max_steps
         self.goal_reached = goal_reached
         self.delay_period = delay_period
+        self.shortened = shortened
 
         self.steps = []
     
     @property
     def duration(self):
-        return (self.t_stop - self.t_start) - self.delay_period
+        return self.t_stop - self.t_start
 
     @property
     def loc(self):
