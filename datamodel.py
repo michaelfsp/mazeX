@@ -93,7 +93,8 @@ class Step:
         return path
 
 class Trial:
-    def __init__(self, maze, goal, max_steps=0, goal_reached=True):
+    def __init__(self, maze, goal, max_steps=0, goal_reached=True,
+            delay_period=0):
         if isinstance(maze, SquareMaze):
             self.maze = maze
         else:
@@ -102,9 +103,14 @@ class Trial:
         # Trial termination conditions
         self.max_steps = max_steps
         self.goal_reached = goal_reached
+        self.delay_period = delay_period
 
         self.steps = []
     
+    @property
+    def duration(self):
+        return (self.t_stop - self.t_start) - self.delay_period
+
     @property
     def loc(self):
         return self.step.loc
@@ -119,11 +125,11 @@ class Trial:
 
     @property
     def t_start(self):
-        return self.steps[-1].time
+        return self.steps[0].time
 
     @property
     def t_stop(self):
-        return self.steps[0].time
+        return self.steps[-1].time
      
     def termination_condition(self):
         """This is a helper function for the simmulation methods.
@@ -188,6 +194,13 @@ class Session:
     def current_trial_index(self, index):
         self._current_trial_index = index
         self._current_trial_index_manually_set = True
+
+    @property
+    def duration(self):
+        t_last_reward = self.trials[-1].t_stop
+        t_start = self.trials[0].t_start
+
+        return t_last_reward - t_start
 
     @property
     def maze(self):
