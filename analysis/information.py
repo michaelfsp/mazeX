@@ -3,6 +3,7 @@ Analysis methods that rely on information content.
 """
 import numpy as np
 import pylab as pl
+import matplotlib as mpl
 import scipy.optimize
 import networkx as nx
 
@@ -41,7 +42,7 @@ def psi(Ic, Ic_exp, Ic_max):
 
     return psi_fun(float(t), Ic_max, Ic)
 
-def dist_psi(session, point, first_exit_only=True):
+def dist_psi(session, point, first_exit_only=True, before_transformation=False):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
 
@@ -121,13 +122,86 @@ def dist_psi(session, point, first_exit_only=True):
 
     psi_values = np.zeros(4)
 
+    if before_transformation:
+        return np.array([Ic, Ic_exp, Ic_max]), availability
+
+    else:
+        for i in [0,1,2,3]:
+            psi_values[i] = psi(Ic[i], Ic_exp[i], Ic_max[i])
+
+        return psi_values, availability
+
+def avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
+        plot=True, scale_bar=False, xy=(0,0)):
+    x, y = xy
+
+    maze = session.maze
+
+    data = np.zeros((3,4))
+    total_availability = np.zeros(4)
+
+    for point in maze.distances_to_coord.keys():
+        Ics, availability = dist_psi(session, point,
+                first_exit_only=first_exit_only, before_transformation=True)
+        data += Ics
+        total_availability += availability
+
+    psi_values = np.zeros(4)
+
     for i in [0,1,2,3]:
-        psi_values[i] = psi(Ic[i], Ic_exp[i], Ic_max[i])
+        psi_values[i] = psi(data[0,i], data[1,i], data[2,i])
+
+    if plot:
+        dx_sign = (1, 1, -1, -1)
+        dy_sign = (1, -1, -1, 1)
+        max_proj = 1
+        # this is simply a scaling factor so that the arrows don't overlap on
+        # the plot
+        scale = 1.5/max_proj
+        norm = mpl.colors.Normalize(vmin=0, vmax=1)
+
+        for direction in range(0, 4):
+            surprisals_xy_proj = scale*np.sqrt(psi_values[direction]**2/2)
+
+            pl.quiver(x, y, dx_sign[direction]*surprisals_xy_proj,
+                   dy_sign[direction]*surprisals_xy_proj, surprisals_xy_proj,units='xy', scale=1,
+                   width = 0.10, headwidth=2, linewidth = 0.5, headaxislength=2,
+                   headlength=2, zorder=2, cmap='hsv', norm=norm) 
+            # now we overlay only the part of the 'arrow' that goes up to 0.5
+            # by passing it through a thresholding function
+
+            threshold = lambda x: 0.5 if 0.5<x<np.inf else x 
+            threshold = np.vectorize(threshold)
+            
+            # here we calculate the length of the vector that is going up to 0.5
+            surprisals_xy_proj_05 = scale*np.sqrt(threshold(psi_values[direction
+                ])**2/2)
+
+            # for visualization purposes let's plot the vectors of length 0.5
+            # and we call them scale vectors we do not plot for the directions
+            # that where available less than the number of times specified by
+            # the cutoff_availability
+            scale_vector_xy_proj = scale*np.sqrt(np.where(total_availability[
+                direction]>cutoff_availability, 0.5, np.nan)**2/2)
+
+            if scale_bar:
+                pl.quiver(x, y, dx_sign[direction]*scale_vector_xy_proj,
+                        dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
+                    color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
+            '''
+            pl.quiver(x, y, dx_sign[direction]*surprisals_xy_proj_05,
+                    dy_sign[direction]*surprisals_xy_proj_05, units='xy', scale=1,
+                    color='m', width=0.15, headwidth=1, headlength=0, zorder=5) 
+            '''
+            # pl.xlim(-1, 1)
+            # pl.ylim(-1, 1)
+            
+            # import ipdb; ipdb.set_trace()
 
     return psi_values, availability
-
+        
 def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
-        plot=True):
+        plot=True, plot_avg=True, scale_bar=True):
 
     max_dists = np.array([utils.max_distances(t.maze, t.goal) for t in session.trials]
             ).max(0)
@@ -147,7 +221,7 @@ def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
                 first_exit_only=first_exit_only)
         dir_surprisals[dist_coord[0], dist_coord[1], :] = surpr
         availability[dist_coord[0], dist_coord[1], :] = available
-
+    
     if not plot:
         return dir_surprisals
     else:
@@ -164,16 +238,27 @@ def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
         max_proj = 1
         # this is simply a scaling factor so that the arrows don't overlap on
         # the plot
-        scale = 0.5/max_proj
-
+        scale = 1/max_proj
+        
+        norm = mpl.colors.Normalize(vmin=0, vmax=1)
         for direction in range(0, 4):
+            dir_surprisals_dir = dir_surprisals[:,:,direction].transpose().flatten()
+            mask = ~np.isnan(dir_surprisals_dir)
+            '''
             surprisals_xy_proj = scale*np.sqrt(dir_surprisals[:,:,direction
                 ]**2/2).transpose().flatten()
-
+            ''' 
+            surprisals_xy_proj = scale*np.sqrt(dir_surprisals_dir**2/2)
+            '''
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj,
                    dy_sign[direction]*surprisals_xy_proj, units='xy', scale=1,
                    color='r', width=0.15, headwidth=1, headlength=0.5, zorder=2) 
-
+            '''
+            #import ipdb; ipdb.set_trace()
+            pl.quiver(xy[:,0][mask], xy[:,1][mask], dx_sign[direction]*surprisals_xy_proj[mask],
+                   dy_sign[direction]*surprisals_xy_proj[mask], dir_surprisals_dir[mask],
+                   units='xy', scale=1.33, width = 0.10, headwidth=2, linewidth = 0.5, headaxislength=2, headlength=2, zorder=2, cmap='hsv', norm=norm)
+            #scale=1, width=0.25, headwidth=2, headlength=2,
             # now we overlay only the part of the 'arrow' that goes up to 0.5
             # by passing it through a thresholding function
 
@@ -192,14 +277,19 @@ def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
                 :,:,direction]>cutoff_availability, 0.5, np.nan)**2/2
                 ).transpose().flatten()
 
-            pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*scale_vector_xy_proj,
-                    dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
-                color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
-
+            if scale_bar:
+                '''
+                pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*scale_vector_xy_proj,
+                        dy_sign[direction]*scale_vector_xy_proj, units='xy', scale=1,
+                    color='c', width=0.15, headwidth=1, headlength=0, zorder=4) 
+                '''
+            '''
             pl.quiver(xy[:,0], xy[:,1], dx_sign[direction]*surprisals_xy_proj_05,
                     dy_sign[direction]*surprisals_xy_proj_05, units='xy', scale=1,
                     color='m', width=0.15, headwidth=1, headlength=0, zorder=5) 
+            '''
+            if plot_avg:
+                avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
+                        plot=True, xy=(2.5,7.5))
 
-        pl.title('$\psi_{d,l}(\kappa)$', fontsize=30)
-
-
+        pl.title('Pseudo choice probability($\psi_{d,l}$)', fontsize=30)

@@ -64,3 +64,7 @@ class UnexpectedResult(MazeXException):
     def __str__(self):
         return ("This calculation was not conceived assuming this result"
                 " cannot occur. Please do not trust this result!")
+
+class AlgorithmFail(MazeXException):
+    def __str__(self):
+        return "Problem with algorithm detected!"

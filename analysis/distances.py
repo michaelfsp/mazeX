@@ -4,9 +4,10 @@ import numpy as np
 import pylab as pl
 
 from mazex.exceptions import *
-import mazex.utils as utils
+from mazex import utils
 
-def distances_plot(maze, goals=None, plot=True, **kwargs):
+def distances_plot(maze, goals=None, plot=True, node_size=False,
+        goal_color='r', **kwargs):
     """Produce a distance vs shortest path distance for a given maze and goal
     location.
     """
@@ -50,16 +51,30 @@ def distances_plot(maze, goals=None, plot=True, **kwargs):
     if plot:
         ax = pl.gca()
         ax.set_aspect('equal')
-        # multiplies the value to obtain number of pixels in the surface
-        area_factor = 15 * np.pi
-        pl.scatter(x.flatten(), y.flatten(),
-                    s=area_factor*distances.flatten(), c='k', **kwargs)
 
-        # Very ugly hack just to get some legend working
-        bullet_sizes = np.arange(1, distances.max()+1, 1)
-        for b in bullet_sizes:
-            pl.scatter(-1,-1, s=area_factor*b, c='k', label='%i' %b, **kwargs)
-        pl.legend(loc='upper left', scatterpoints=1, title='<nodes>')
+        if node_size:
+            # multiplies the value to obtain number of pixels in the surface
+            area_factor = 15 * np.pi
+            pl.scatter(x.flatten(), y.flatten(),
+                        s=area_factor*distances.flatten(), c='k', **kwargs)
+
+            pl.scatter(0, 0, s=area_factor, c=goal_color, **kwargs)
+
+            # Very ugly hack just to get some legend working
+            bullet_sizes = np.arange(1, distances.max()+1, 1)
+            for b in bullet_sizes:
+                pl.scatter(-1,-1, s=area_factor*b, c='k', label='%i' %b, **kwargs)
+
+                pl.legend(loc='upper left', scatterpoints=1, title='<nodes>')
+
+        else:
+            area_factor = 15 * np.pi
+            pl.scatter(x.flatten(), y.flatten(),
+                        s=area_factor*np.where(distances.flatten()>0, 1, 0),
+                        c='k', **kwargs)
+
+            # Plot once more the goal but this time in the color specified
+            pl.scatter(0, 0, s=area_factor, c=goal_color, **kwargs)
 
         pl.xlim([-0.5, max_distances_all[0]+0.5])
         pl.ylim([-0.5, max_distances_all[1]+0.5])
@@ -67,8 +82,8 @@ def distances_plot(maze, goals=None, plot=True, **kwargs):
         pl.yticks(range(0, max_distances_all[1]+1))
         pl.grid()
         ax.set_axisbelow(True) # sends the grid to the 'bottom layer'
-        pl.xlabel('Maze distance to goal')
-        pl.ylabel('Manhattan distance to goal')
+        pl.xlabel('Graph distance to goal', fontsize=22)
+        pl.ylabel('Manhattan distance to goal', fontsize=22)
 
     else:
         return distances, x, y
@@ -76,12 +91,12 @@ def distances_plot(maze, goals=None, plot=True, **kwargs):
 def distances_plot_path(trial):
     """Plot paths overlayed onto the distances plot.
     """
-    distances_plot(trial.step.maze, trial.step.goal, zorder=10)
+    distances_plot(trial.maze, trial.goal, zorder=10)
     for i in range(len(trial.path)-2):
-        first_node = utils.to_dist_coord(trial.path[i], trial.step.maze,
-                trial.step.goal)
-        second_node = utils.to_dist_coord(trial.path[i+1], trial.step.maze,
-                trial.step.goal)
+        first_node = utils.to_dist_coord(trial.path[i], trial.maze,
+                trial.goal)
+        second_node = utils.to_dist_coord(trial.path[i+1], trial.maze,
+                trial.goal)
         # zorder=1 sends the lines to the 'bottom layer'
         pl.plot([first_node[0], second_node[0]], [first_node[1],
             second_node[1]], 'g', linewidth=4, zorder=1)

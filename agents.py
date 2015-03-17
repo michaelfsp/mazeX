@@ -1,12 +1,15 @@
 import numpy as np
 import random
-from scipy.stats import vonmises
 from collections import OrderedDict
 
 from mazex.exceptions import *
-from mazex.utils import angle_between_nodes, assert_is_node, assert_nodes_adjacent 
+from mazex.utils import (angle_between_nodes, assert_is_node,
+assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
+get_angles_dictionary)
 
 from networkx.algorithms.shortest_paths import astar_path
+
+from scipy.stats import vonmises
 
 def _get_loc(self):
     return self._loc
@@ -200,7 +203,7 @@ class Agent:
 
         
 class HeuristicAgent(Agent):
-    def __init__(self, loc, beta, kappa, xi, heading=None):
+    def __init__(self, loc, beta, kappa, xi, heading=None, maze_size=6):
         """Creates an agent that follows a directional heuristic.
 
         Parameters:
@@ -220,7 +223,11 @@ class HeuristicAgent(Agent):
         # older entries by using self.edge_visit_cache.popitem(
         # last=False)
         self.edge_visit_cache = OrderedDict()
+        self.node_visit_cache = OrderedDict()
         self.step_count = 0
+        self.angles_dic = get_angles_dictionary(maze_size)
+        self.vm_dist = get_von_mises_array(maze_size, kappa)
+        self.max_vm = vonmises.pdf(0, kappa=kappa) 
 
     def set_loc(self, node):
         old_loc = self.loc
@@ -242,12 +249,18 @@ class HeuristicAgent(Agent):
             self.edge_visit_cache.pop(directed_edge);
 
         self.edge_visit_cache[directed_edge] = self.step_count
+        
+        #we do the same for the node visit cache
+        if node in self.node_visit_cache:
+            self.node_visit_cache.pop(node)
+
+        self.node_visit_cache[node] = self.step_count
 
         self.step_count += 1
     
     loc = property(_get_loc, set_loc)
 
-    def evaluate(self, nodeslist, goal):
+    def evaluate(self, nodeslist, goal, penalty='node', relative_penalty=False):
         """Returns a vector with the edge values of each edge given as
         input.
         
@@ -258,7 +271,22 @@ class HeuristicAgent(Agent):
 
         goal : node
             Location of goal.
+
+        penalty : 'node' or 'edge_unidir', 'edge_bidir' 
+            If 'node', the agent will penalize options that lead to nodes it has
+            already visited. If 'edge', the agent will only penalize edges it
+            has already visited.
+
+        relative_penalty : boolean
+            If True a percentage of the value is subtracted instead of an
+            absolute value.
+            Note that if False, xi is still scaled by the maximum von Mises
+            value for the chosen kappa.
         """
+
+        if penalty not in ('node', 'edge_unidir'):
+            raise NotSupported
+
         # this little trick makes the method work even if not a list
         # but a single node is passed
         try:
@@ -266,52 +294,79 @@ class HeuristicAgent(Agent):
             nodeslist = [nodeslist]
         except InvalidNode:
             pass
-
-        angles = [angle_between_nodes(
-            self.loc, goal, n) for n in nodeslist] 
         
-        values = np.array(vonmises.pdf(angles, kappa=self.kappa))
 
-        edgeslist = [(self.loc, n) for n in nodeslist]
+        angles = [self.angles_dic[self.loc][n][goal] for n in nodeslist]
         
-        step_count_at_last_visit = []
+        # since what is stored in self.vm_dist is a 2D array with angles
+        # and values, we first determine the index of the closes angle entry
+        # in the matrix and then retrieve the distribution value
+        vm_indices = [np.argmin(abs(self.vm_dist[0] - angle)) for angle in angles]
 
-        for e in edgeslist:
-            if e in self.edge_visit_cache:
-                step_count_at_last_visit.append(
-                        self.edge_visit_cache[e])
-            else:
-                # nodes that have never been visited we will
-                # assume they have been visited in "step -1"
-                # the value -1 doesn't play any actual role
-                # as these steps will have no penalization
-                step_count_at_last_visit.append(-1)
+        vm = self.vm_dist[1][vm_indices]
 
-        # This is the number of edges for which there is a visit
-        # record
-        
-        step_count_at_last_visit = np.array(step_count_at_last_visit)
+        penalties = np.zeros(len(nodeslist))
 
-        n_visited_edges = np.count_nonzero(
-                step_count_at_last_visit > 0)
-
-        penalties = np.zeros(len(edgeslist))
-
-
-        while n_visited_edges > 0:
-            max_step_count = max(step_count_at_last_visit)
-            index_max_step_count = np.where(step_count_at_last_visit
-                    == max_step_count)
-
-            penalties[index_max_step_count] = n_visited_edges * self.xi
-            # very dumb way of having max() finding the second
-            # max in the next iteration
-            step_count_at_last_visit[index_max_step_count] = -1
+        if penalty == 'edge_unidir':
+            edgeslist = [(self.loc, n) for n in nodeslist]
             
-            n_visited_edges -= 1
+            step_count_last_visit = []
 
-        values -= penalties
+            for e in edgeslist:
+                if e in self.edge_visit_cache:
+                    step_count_last_visit.append(
+                            self.edge_visit_cache[e])
+                else:
+                    # nodes that have never been visited we will
+                    # assume they have been visited in "step -1"
+                    # the value -1 doesn't play any actual role
+                    # as these steps will have no penalization
+                    step_count_last_visit.append(-1)
 
+        elif penalty == 'node':
+            step_count_last_visit = []
+
+            for n in nodeslist:
+                if n in self.node_visit_cache:
+                    step_count_last_visit.append(
+                            self.node_visit_cache[n])
+                else:
+                    # nodes that have never been visited we will
+                    # assume they have been visited in "step -1"
+                    # the value -1 doesn't play any actual role
+                    # as these steps will have no penalization
+                    step_count_last_visit.append(-1)
+
+        step_count_last_visit = np.array(step_count_last_visit)
+
+        penalties = np.zeros(len(nodeslist))
+
+        sorted_indices = np.argsort(step_count_last_visit)
+        sorted_step_count = np.sort(step_count_last_visit)
+        helper_index_matrix = np.vstack((sorted_indices, sorted_step_count))
+
+        helper_matrix_only_visited_ones = helper_index_matrix[
+                :,helper_index_matrix[1,:]>0]
+
+        n_penalties = helper_matrix_only_visited_ones.shape[1]
+        
+        if relative_penalty:
+            # this is a simple filter to prevent the penalty factors from
+            # becoming larger than 1, i.e., from discounting more than the value
+            # of the node
+            threshold = lambda x: x if x<1 else 1
+
+            for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
+                penalties[x] = threshold(self.xi/(n_penalties-i))
+
+            values = vm - vm*penalties
+
+        else:
+            for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
+                penalties[x] = self.xi/(n_penalties-i)
+
+            values = vm - penalties * self.max_vm
+ 
         return values
 
 class OmniscientAgent(Agent):
@@ -348,6 +403,28 @@ class OmniscientAgent(Agent):
 
         return path
         
+class MixtureAgent(HeuristicAgent):
+    def __init__(self, loc, beta, kappa, xi, maze,
+            heading=None, maze_size=6, switch_distance = 0):
+        super(MixtureAgent, self).__init__(loc, beta, kappa, xi, heading=None,
+                maze_size=6)
+        self.maze = maze
+        self.switch_distance = switch_distance
+        #self.switched = False
+    
+    def evaluate(self, nodeslist, goal, penalty='node', relative_penalty=False):
+
+        if self.maze.distances_dictionary[self.loc][goal] <= self.switch_distance:
+            omniscient_agent = OmniscientAgent(self.loc, self.maze)
+            values = omniscient_agent.evaluate(nodeslist, goal)
+            #self.switched = True
+            #print('omniscient!')
+        else:
+            values = super(MixtureAgent, self).evaluate(nodeslist, goal,
+                    penalty = penalty, relative_penalty = relative_penalty)
+            #print('heuristic!')
+
+        return values
 
 class DirectedRandomAgent(Agent):
     def __init__(self, loc, beta, conc, heading=None, direction=0):
@@ -383,3 +460,4 @@ class DirectedRandomAgent(Agent):
         """Calculates the position the agent wants to visit next.
         """
         pass
+

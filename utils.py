@@ -5,6 +5,19 @@ import numpy as np
 import networkx as nx
 from mazex.exceptions import *
 
+# These imports are only used by the generate_von_Mises_dictionary function
+#  and could be moved to inside the function, if one really wants to cut on
+#  the imports
+import shelve
+from scipy.stats import vonmises
+
+# this import was problematic when left here so I moved it to inside the
+# function where it was actually used
+#from mazex.mazes import RandomSquareMaze
+
+import os
+
+
 def angle_between_nodes(loc, node1, node2):
     """A common function that determines the angle between a given edge and
     the goal.
@@ -71,7 +84,7 @@ def assert_nodes_adjacent(node1, node2):
     if np.sqrt((node2[0] - node1[0])**2 + (node2[1] - node1[1])**2) == 1:
         return True
     else:
-        raise IlegalStep
+        pass#raise IlegalStep
 
 def check_elements_equal(lst):
     """Check that all elements of list are identical.
@@ -105,6 +118,146 @@ def check_list_is_empty(seq):
     except TypeError:
         return False
 
+def get_angles_dictionary(size):
+    cache_dir = '..mazex'+os.sep+'cache'
+    cache_file = cache_dir + os.sep + 'cached_angles'
+    cached_object = str(size)
+
+    try:
+        d = shelve.open(cache_file)
+        angles = d[cached_object]
+        
+    # this is bad practice because it will catch any exception while we only
+    #  want to catch it here if it is a 'file not found' exception
+    #  however, the 'file not found' exception spat by shelve is not specific
+    except:
+        #check that directory exists
+        if not os.path.isdir(cache_dir):
+            os.makedirs(cache_dir)
+
+        d = shelve.open(cache_file)
+
+        # and now do the calculations proper
+        from mazex.mazes import RandomSquareMaze
+
+        maze = RandomSquareMaze(size, 1)
+
+        angles = {}
+        for l in maze.nodes():
+            angles[l] = {}
+            n_list = maze.nodes()
+            n_list.remove(l)
+            for n in n_list:
+                angles[l][n] = {}
+                for g in n_list:
+                    angles[l][n][g] = angle_between_nodes(l, n, g)
+
+        # and store them for later use
+        d[cached_object] = angles
+    
+    # we close the dictionary so it doesn't stay in memory
+
+    finally:
+        d.close()
+        return angles
+
+def get_von_mises_array(size, kappa, decimals=2):
+    '''
+    Return a 2D array with angles and von Mises distribution values for all
+    the angles that could be encountered in a maze with size = size.
+
+    Decimals determines the precision of the array - TO BE IMPLEMENTED!
+    '''
+    #TODO: implement option decimals!
+
+    angles_dic = get_angles_dictionary(size)
+
+    angles = []
+
+    list_nested_dic_leaves(angles_dic, angles)
+
+    angles = np.sort(angles)
+
+    #remove nans
+    angles = angles[~np.isnan(angles)]
+
+    #remove redundant entries
+    angles = np.unique(angles)
+
+    vm_array = np.array([angles, vonmises.pdf(angles, kappa=kappa)])
+
+    return vm_array
+
+def get_von_mises_dictionary(size, kappa):
+    """Return a dictionary containing the von Mises probabilites for the value
+    corresponding to the chosen kappa and angle between any two contiguous
+    nodes in the maze
+    """
+    cache_dir = '.mazex'+os.sep+'cache'
+    cache_file = cache_dir + os.sep + 'cached_vm'
+
+    try:
+        d = shelve.open(cache_file)
+
+    # this is bad practice because it will catch any exception while we only
+    #  want to catch it here if it is a 'file not found' exception
+    #  however, the 'file not found' exception spat by shelve is not specific
+    except:
+        #check that directory exists
+        if not os.path.isdir(cache_dir):
+            os.makedirs(cache_dir)
+
+        d = shelve.open(cache_file)
+
+
+    try:
+        # check if already calculated for this size-kappa
+        size_kappa_dic = d['vm'][size][kappa]
+
+    except KeyError:
+        # then we calculate denovo
+
+        # if d['angles'] has not already been instantiated into a dictionary
+        #  then do so
+
+        if 'vm' in d.keys():
+            vm_dic = d['vm']
+
+            if not size in vm_dic.keys():
+                vm_dic[size] = {}
+
+        else:
+            vm_dic = {}
+            d[size] = {}
+
+        from mazex.mazes import RandomSquareMaze
+
+        angles = get_angles_dictionary(size)
+
+        maze = RandomSquareMaze(size, 1)
+
+        # here we generate the von Mises probabilites dictionary
+        # for the value corresponding to the chosen kappa and angle between
+        # any two contiguous nodes in the maze
+        vm_prob = {}
+        for l in maze.nodes():
+            vm_prob[l] = {}
+            n_list = maze.nodes()
+            n_list.remove(l)
+            for n in n_list:
+                vm_prob[l][n] = {}
+                for g in n_list:
+                    prob = vonmises.pdf(angles[l][n][g], kappa=kappa)
+                    vm_prob[l][n][g] = prob
+
+        size_kappa_dic = vm_prob
+
+    vm_dic[size][kappa] = size_kappa_dic
+    d['vm'] = vm_dic
+    d.close()
+
+    return size_kappa_dic
+
 def invert_dictionary(dic):
     """Return a dictionary with the inverse of the mapping of non-unique
     dictionary dict.
@@ -116,6 +269,52 @@ def invert_dictionary(dic):
         inv_map[v] = inv_map.get(v, [])
         inv_map[v].append(k)
     return inv_map
+
+def nested_dictionary_depth(dic):
+    """Checks the depth of a nested dictionary structure, e.g., dic = {
+    'a':{'z':1, 'y':2}, 'b':{'x':3, 'w': 4}}.    
+
+    It currently assumes that the dictionary depth is homogeneous across keys"""
+
+    level = 0
+
+    key_list = list(dic.keys())
+    lower_dic = dic[key_list[0]]
+    is_dic = True
+
+    while is_dic:
+        try:
+            key_list_lower_dic = list(lower_dic.keys())
+
+            lower_dic = lower_dic[key_list_lower_dic[0]]
+            level += 1
+
+        except AttributeError:
+            is_dic = False
+
+    return level
+
+"""
+def list_angles_in_dictionary(dic):
+    '''Lists all angles in a nested dictionary containing angles between nodes
+    .'''
+    values = list(dic.values())
+    
+    levels_to_go = nested_dictionary_depth(dic)
+
+    angles = []
+
+    while levels_to_go:
+        for d in
+"""
+
+def list_nested_dic_leaves(d, l):
+    for k, v in d.items():
+        if isinstance(v, dict):
+            list_nested_dic_leaves(v, l)
+        else:
+            l.append(v)
+
 
 def max_distances(maze, goals=None):
     # the output of this function is the maximum of an array called

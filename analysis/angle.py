@@ -4,7 +4,7 @@ Analysis methods based on angle of edge chosen.
 import numpy as np
 import pylab as pl
 
-import mazex.utils as utils
+from mazex import utils
 
 def cum_prob_angle_choice(session, first_exit_only=True, plot=True, **kwargs):
     """Calculate choice probability by cos of angle formed between edge and
