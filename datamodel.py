@@ -113,8 +113,17 @@ class Trial:
         return self.t_stop - self.t_start
 
     @property
+    def excess_steps(self):
+        return int(len(self.steps) - 1 - self.shortest_path_length)
+
+    @property
     def loc(self):
         return self.step.loc
+
+    @property
+    def manhattan_distance(self):
+        return abs(self.goal[0] - self.steps[0].loc[0]) + abs(
+                self.goal[1] - self.steps[0].loc[1])
 
     @property
     def step(self):
@@ -123,6 +132,11 @@ class Trial:
     @property
     def path(self):
         return self.step.path
+
+    @property
+    def shortest_path_length(self):
+        return self.maze.distances_dictionary[
+                self.steps[0].loc][self.goal]
 
     @property
     def t_start(self):

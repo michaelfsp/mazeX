@@ -43,6 +43,9 @@ class Subject:
         diff = []
         for d in experiment_days:
             diff.extend(list(self.raw_arduino[d].ITIs/1000)) #/1000 to convert to seconds
+        
+        diff = np.array(diff)
+        diff -= 2
 
         pl.title('ITIs ' + self.ID)
         if logscale:
