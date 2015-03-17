@@ -260,7 +260,8 @@ class HeuristicAgent(Agent):
     
     loc = property(_get_loc, set_loc)
 
-    def evaluate(self, nodeslist, goal, penalty='node', relative_penalty=False):
+    def evaluate(self, nodeslist, goal, penalty='node', relative_penalty=False,
+            distribution='cos'):
         """Returns a vector with the edge values of each edge given as
         input.
         
@@ -282,6 +283,11 @@ class HeuristicAgent(Agent):
             absolute value.
             Note that if False, xi is still scaled by the maximum von Mises
             value for the chosen kappa.
+
+        distribution : 'cos' or 'vonmises'
+            If 'cos', a cosine function is used to evaluate node choice. If
+            'vonmises' a von Mises distribution is used to evaluate node
+            choice.
         """
 
         if penalty not in ('node', 'edge_unidir'):
@@ -295,15 +301,22 @@ class HeuristicAgent(Agent):
         except InvalidNode:
             pass
         
-
         angles = [self.angles_dic[self.loc][n][goal] for n in nodeslist]
         
-        # since what is stored in self.vm_dist is a 2D array with angles
-        # and values, we first determine the index of the closes angle entry
-        # in the matrix and then retrieve the distribution value
-        vm_indices = [np.argmin(abs(self.vm_dist[0] - angle)) for angle in angles]
+        if distribution == 'vonmises':
+            # since what is stored in self.vm_dist is a 2D array with angles
+            # and values, we first determine the index of the closes angle entry
+            # in the matrix and then retrieve the distribution value
+            vm_indices = [np.argmin(abs(self.vm_dist[0] - angle)) for angle in angles]
 
-        vm = self.vm_dist[1][vm_indices]
+            dist_val = self.vm_dist[1][vm_indices]
+
+            dist_max = self.max_vm
+
+        elif distribution == 'cos':
+            dist_val = np.cos(angles)
+
+            dist_max = 1
 
         penalties = np.zeros(len(nodeslist))
 
@@ -359,13 +372,13 @@ class HeuristicAgent(Agent):
             for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
                 penalties[x] = threshold(self.xi/(n_penalties-i))
 
-            values = vm - vm*penalties
+            values = dist_val - dist_val*penalties
 
         else:
             for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
                 penalties[x] = self.xi/(n_penalties-i)
 
-            values = vm - penalties * self.max_vm
+            values = dist_val - penalties * dist_max
  
         return values
 
