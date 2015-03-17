@@ -389,7 +389,7 @@ class OmniscientAgent(Agent):
             if n == self._step_cache[0]:
                 values.append(1)
             else:
-                values.append(0)
+                values.append(-1)
 
         return values
 
