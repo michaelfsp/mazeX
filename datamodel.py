@@ -179,7 +179,7 @@ class Session:
         """
         total_steps = 0
         for t in self.trials:
-            total_steps += len(t.steps)
+            total_steps += len(t.steps) - 1
 
         return total_steps
 
