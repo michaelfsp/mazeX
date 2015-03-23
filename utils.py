@@ -315,6 +315,9 @@ def list_nested_dic_leaves(d, l):
         else:
             l.append(v)
 
+def manhattan_distance(node1, node2):
+    """Returns Manhattan distance between node1 and node2."""
+    return abs(node1[0] - node2[0]) + abs(node1[1] - node2[1])
 
 def max_distances(maze, goals=None):
     # the output of this function is the maximum of an array called
