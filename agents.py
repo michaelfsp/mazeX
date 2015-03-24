@@ -83,7 +83,7 @@ def softmax(beta, values):
 
 class Agent:
     def __init__(self, loc, beta, xi=0, penalty_criterium='node',
-            penalty_type='constant', heading=None):
+            penalty_type='exponential', heading=None):
         """Parameters:
         -----------
         beta : float, [0+, inf+]
