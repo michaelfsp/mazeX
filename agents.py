@@ -7,7 +7,8 @@ from mazex.utils import (angle_between_nodes, assert_is_node,
 assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
 get_angles_dictionary)
 
-from networkx.algorithms.shortest_paths import astar_path
+from networkx.algorithms.shortest_paths import (astar_path,
+single_source_shortest_path_length)
 
 from scipy.stats import vonmises
 
@@ -30,6 +31,31 @@ def _set_loc(self, node):
 
     if self._step_cache and self._step_cache[0] == node:
         self._step_cache.pop(0);
+
+def n_degree_neighborhood(G, node, n):
+    """Find the n degree neighborhood of node in graph G. Returns the list of
+    nodes in graph G that are at a distance of exactly n.
+    """
+    path_lengths = single_source_shortest_path_length(G, node)
+    return [node for node, length in path_lengths.items() if length == n]
+
+def nodes_reachable_n_steps(G, node, n):
+    """Find all nodes reachable in exactly n steps starting from node. This
+    includes nodes reachable by backtracking.
+    """
+    # in practice this is obtained by getting the n, n-2, n-4, ...
+    # neighborhood of the node
+    reachable_nodes = []
+    neighborhood_degree = n
+
+    reachable_nodes.append(n_degree_neighborhood(G, node, n))
+    neighborhood_degree -= 2
+
+    while neighborhood_degree > 0:
+        reachable_nodes.append(n_degree_neighborhood(G, node, n))
+        neighborhood_degree -= 2
+
+    return reachable_nodes
     
 def softmax(beta, values):
     """A Softmax function.
@@ -414,12 +440,13 @@ class HeuristicAgent(Agent):
 
             dist_val = self.vm_dist[1][vm_indices]
 
-            dist_max = self.max_vm
+            dist_max = self.max_vm # deprecated
 
         elif distribution == 'cos':
             dist_val = np.cos(angles)
 
-            dist_max = 1
+            # deprecated: formerly used for relative penalties
+            dist_max = 1 # deprecated
 
         penalties = self.penalty_factor(nodeslist)
 
@@ -428,15 +455,16 @@ class HeuristicAgent(Agent):
         return values
 
 class NStepsAgent(Agent):
-    def __init__(self, loc, maze, nsteps, beta = float('inf'), xi=0,
-            penalty_criterium='node', heading=None):
+    def __init__(self, loc, maze, nsteps, beta = float('inf'), xi=3,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None):
         """Creates an agent that has full knowledge of the maze and
         uses Graph Theory algorithms to determine the shortest path
         to goal"""
         
         super(NStepsAgent, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium,
-                heading=heading) 
+                penalty_type=penalty_type, heading=heading) 
 
         self.maze = maze
         self.nsteps = nsteps
@@ -463,7 +491,8 @@ class NStepsAgent(Agent):
             # reached by backtracking, i.e., the agent reverts steps
 
             endpoint_distances = [
-                    mx.utils.manhattan_distance(e,g) for e in endpoints]
+                    mx.utils.manhattan_distance(e,goal) for e in endpoints]
+
             values[i] = min(endpoint_distances)
 
         penalties = self.penalty_factor(nodeslist)
