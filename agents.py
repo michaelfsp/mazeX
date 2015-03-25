@@ -45,17 +45,11 @@ def nodes_reachable_n_steps(G, node, n):
     """
     # in practice this is obtained by getting the n, n-2, n-4, ...
     # neighborhood of the node
-    reachable_nodes = []
-    neighborhood_degree = n
+    path_lengths = single_source_shortest_path_length(G, node)
+    valid_lengths = range(n, -1, -2)
 
-    reachable_nodes.append(n_degree_neighborhood(G, node, n))
-    neighborhood_degree -= 2
-
-    while neighborhood_degree > 0:
-        reachable_nodes.append(n_degree_neighborhood(G, node, n))
-        neighborhood_degree -= 2
-
-    return reachable_nodes
+    return [node for node, length in path_lengths.items() if length in
+            valid_lengths]
     
 def softmax(beta, values):
     """A Softmax function.
