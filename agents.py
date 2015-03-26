@@ -5,7 +5,7 @@ from collections import OrderedDict
 from mazex.exceptions import *
 from mazex.utils import (angle_between_nodes, assert_is_node,
 assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
-get_angles_dictionary)
+get_angles_dictionary, manhattan_distance)
 
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
@@ -301,7 +301,6 @@ class Agent:
         self.xi*2**-1 for before last visited, self.xi*2**-2 for before before
         last visited, ...
         """
-        
         penalties = np.zeros(len(nodeslist))
 
         if self.penalty_criterium == 'edge_unidir':
@@ -374,7 +373,7 @@ class Agent:
 
 class HeuristicAgent(Agent):
     def __init__(self, loc, beta, xi, penalty_criterium='node',
-            penalty_type='constant', heading=None, distribution='cos',
+            penalty_type='exponential', heading=None, distribution='cos',
             kappa=None, maze_size=6):
         """Creates an agent that follows a directional heuristic.
 
@@ -469,25 +468,12 @@ class NStepsAgent(Agent):
 
         for i, c in enumerate(nodeslist):
            
-            endpoints = [c]
-            cycles = 0
-            #while nsteps -1 because we are already starting from the choice
-            # nodes and not from the start node
-            while cycles < self.nsteps - 1:
-                middlepoints = copy.deepcopy(endpoints)
-                endpoints = []
-                for e in middlepoints:
-                    endpoints.extend(maze.neighbors(e))
-                cycles += 1
-
-            #the idea is to collect all points that can be reached in n steps
-            # from the starting point c. this includes enpoints that are
-            # reached by backtracking, i.e., the agent reverts steps
+            endpoints = nodes_reachable_n_steps(self.maze, c, self.nsteps -1) 
 
             endpoint_distances = [
-                    mx.utils.manhattan_distance(e,goal) for e in endpoints]
+                    manhattan_distance(e, goal) for e in endpoints]
 
-            values[i] = min(endpoint_distances)
+            values[i] = -min(endpoint_distances)
 
         penalties = self.penalty_factor(nodeslist)
 
@@ -497,14 +483,15 @@ class NStepsAgent(Agent):
 
 class OmniscientAgent(Agent):
     def __init__(self, loc, maze, beta = float('inf'), xi=0,
-            penalty_criterium='node', heading=None):
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None):
         """Creates an agent that has full knowledge of the maze and
         uses Graph Theory algorithms to determine the shortest path
         to goal"""
         
         super(OmniscientAgent, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium,
-                heading=heading) 
+                penalty_type=penalty_type, heading=heading) 
 
         self.maze = maze
 
@@ -540,11 +527,12 @@ class OmniscientAgent(Agent):
         
 class MixtureAgent(HeuristicAgent):
     def __init__(self, loc, beta, maze, xi, penalty_criterium='node',
-            distribution='cos', kappa=None,
+            penalty_type='exponential', distribution='cos', kappa=None,
             heading=None, maze_size=6, switch_distance=0):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi,
-                penalty_criterium=penalty_criterium, heading=heading,
-                distribution=distribution, kappa=kappa, maze_size=maze_size)
+                penalty_criterium=penalty_criterium, penalty_type=penalty_type,
+                heading=heading, distribution=distribution, kappa=kappa,
+                maze_size=maze_size)
         self.maze = maze
         self.switch_distance = switch_distance
         #self.switched = False
