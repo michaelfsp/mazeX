@@ -1,6 +1,9 @@
-import numpy as np
+import copy
 import random
 from collections import OrderedDict
+
+import numpy as np
+from scipy.stats import vonmises
 
 from mazex.exceptions import *
 from mazex.utils import (angle_between_nodes, assert_is_node,
@@ -10,7 +13,6 @@ get_angles_dictionary, manhattan_distance)
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
 
-from scipy.stats import vonmises
 
 def _get_loc(self):
     return self._loc
@@ -69,14 +71,35 @@ def n_degree_neighborhood(G, node, n):
 def nodes_reachable_n_steps(G, node, n):
     """Find all nodes reachable in exactly n steps starting from node. This
     includes nodes reachable by backtracking.
+
+    Output:
+    -------
+    endpoints : list
+        Points reached in exactly n steps
+    midpoints : dictionary
+        Points traveled through and their respective distances from node. 
+        Note: Includes node.
     """
     # in practice this is obtained by getting the n, n-2, n-4, ...
     # neighborhood of the node
-    path_lengths = single_source_shortest_path_length(G, node)
+    path_lengths = single_source_shortest_path_length(G, node, cutoff=n)
     valid_lengths = range(n, -1, -2)
 
-    return [node for node, length in path_lengths.items() if length in
+    endpoints = [node for node, length in path_lengths.items() if length in
             valid_lengths]
+    
+    # now we prepare a dictionary with the midpoints crossed and their
+    #  respective distances from starting point. for that we just need to
+    #  remove the entries in path_lengths that correspond to the endpoints
+    # we have to iterate over a deepcopy of the original dictionary because
+    #  modifying the dictionary during the iteration results in problems
+    for node, distance in copy.deepcopy(path_lengths).items():
+        if distance == n:
+            path_lengths.pop(node); # semi colon suppresses output of item
+
+    midpoints = path_lengths
+
+    return endpoints, midpoints
     
 def softmax(beta, values):
     """A Softmax function.
@@ -457,12 +480,18 @@ class NStepsAgent(Agent):
 
         for i, c in enumerate(nodeslist):
            
-            endpoints = nodes_reachable_n_steps(self.maze, c, self.nsteps -1) 
+            endpoints, midpoints = nodes_reachable_n_steps(self.maze, c,
+                    self.nsteps -1) 
 
             endpoint_distances = [
                     manhattan_distance(e, goal) for e in endpoints]
 
             values[i] = -min(endpoint_distances)
+
+            # In case the goal was already transversed during those steps this
+            #  option gets added the number of remaining steps.
+            if goal in midpoints:
+                values[i] += self.nsteps - midpoints[goal]
 
         penalties = self.penalty_factor(nodeslist)
 
