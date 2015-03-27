@@ -302,52 +302,43 @@ class Agent:
         penalties = np.zeros(len(nodeslist))
 
         if self.penalty_criterium == 'edge_unidir':
+            i_visited = []
             edgeslist = [(self.loc, n) for n in nodeslist]
             
             step_count_last_visit = []
 
-            for e in edgeslist:
+            for i, e in enumerate(edgeslist):
                 if e in self.edge_visit_cache:
                     step_count_last_visit.append(
                             self.edge_visit_cache[e])
-                else:
-                    # nodes that have never been visited we will
-                    # assume they have been visited in "step -1"
-                    # the value -1 doesn't play any actual role
-                    # as these steps will have no penalization
-                    step_count_last_visit.append(-1)
+                    i_visited.append(i)
 
         elif self.penalty_criterium == 'node':
+            i_visited = []
             step_count_last_visit = []
 
-            for n in nodeslist:
+            for i, n in enumerate(nodeslist):
                 if n in self.node_visit_cache:
                     step_count_last_visit.append(
                             self.node_visit_cache[n])
-                else:
-                    # nodes that have never been visited we will
-                    # assume they have been visited in "step -1"
-                    # the value -1 doesn't play any actual role
-                    # as these steps will have no penalization
-                    step_count_last_visit.append(-1)
-
-        step_count_last_visit = np.array(step_count_last_visit)
-
+                    i_visited.append(i)
+        
         #by sorting on -step_count_last_visit we get the reverse order, i.e.,
         # the indices for sorting by decreasing value
         #TODO: instead of using this matrix voodoo this algorithm could use
         # instead the order of the elements in the dictionaries since they are
         # actually OrderedDict. e.g.: list(d.keys()).index(node)
+        step_count_last_visit = np.array(step_count_last_visit)
         sorting_indices = np.argsort(-step_count_last_visit)
-        sorted_step_count = step_count_last_visit[sorting_indices]
-        helper_index_matrix = np.vstack((sorting_indices, sorted_step_count))
 
-        helper_matrix_only_visited_ones = helper_index_matrix[
-                :,helper_index_matrix[1,:]>0]
+        # first we have to make it an array so we can later use fancy sorting
+        i_visited = np.array(i_visited)
 
-        for i,x in enumerate(helper_matrix_only_visited_ones[0,:]):
+        i_visited_sorted = i_visited[sorting_indices]
+
+        for i,x in enumerate(i_visited_sorted):
             penalties[x] = self.xi * 2**-i
-
+        
         return penalties
 
     def penalty_factor(self, nodeslist):
