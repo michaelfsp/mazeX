@@ -18,6 +18,32 @@ def _get_loc(self):
 def _set_loc(self, node):
     """Performs all the necessary operations when location is changed except
     for caching taken steps."""
+    old_loc = self.loc
+    new_loc = node
+
+    # I am calling it a directed edge because our edges normally
+    # have a specific node order specification but here we care
+    # about node order in that it specifies a direction
+    directed_edge = (old_loc, new_loc)
+
+    if directed_edge in self.edge_visit_cache:
+        # pop() deletes the entry AND spits an output we
+        # want to silence with the ;
+        # it's necessary to delete the item with pop()
+        # and re-add it because only then it assumes the
+        # desired order in the ordered dictionary
+        self.edge_visit_cache.pop(directed_edge);
+
+    self.edge_visit_cache[directed_edge] = self.step_count
+    
+    #we do the same for the node visit cache
+    if node in self.node_visit_cache:
+        self.node_visit_cache.pop(node)
+
+    self.node_visit_cache[node] = self.step_count
+    self.step_count += 1
+
+    # set heading
     if assert_nodes_adjacent(self.loc, node):
         if node[1] > self.loc[1]:
             self.heading = '^'
@@ -29,6 +55,7 @@ def _set_loc(self, node):
             self.heading = '<'
         self._loc = node
 
+    # remove from the step cache
     if self._step_cache and self._step_cache[0] == node:
         self._step_cache.pop(0);
 
@@ -146,36 +173,7 @@ class Agent:
         if assert_is_node(loc):
             self._loc = loc 
 
-    def set_loc(self, node):
-        old_loc = self.loc
-        new_loc = node
-
-        # I am calling it a directed edge because our edges normally
-        # have a specific node order specification but here we care
-        # about node order in that it specifies a direction
-        directed_edge = (old_loc, new_loc)
-
-        if directed_edge in self.edge_visit_cache:
-            # pop() deletes the entry AND spits an output we
-            # want to silence with the ;
-            # it's necessary to delete the item with pop()
-            # and re-add it because only then it assumes the
-            # desired order in the ordered dictionary
-            self.edge_visit_cache.pop(directed_edge);
-
-        self.edge_visit_cache[directed_edge] = self.step_count
-        
-        #we do the same for the node visit cache
-        if node in self.node_visit_cache:
-            self.node_visit_cache.pop(node)
-
-        self.node_visit_cache[node] = self.step_count
-
-        self.step_count += 1
-
-        _set_loc(self, new_loc)
-
-    loc = property(_get_loc, set_loc)
+    loc = property(_get_loc, _set_loc)
 
     def __reset_loc_to__(self, loc):
         """Since setting the agent's location for proximity checks for
