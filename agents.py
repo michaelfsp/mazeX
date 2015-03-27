@@ -23,43 +23,50 @@ def _set_loc(self, node):
     old_loc = self.loc
     new_loc = node
 
-    # I am calling it a directed edge because our edges normally
-    # have a specific node order specification but here we care
-    # about node order in that it specifies a direction
-    directed_edge = (old_loc, new_loc)
+    if old_loc is None:
+        self._loc = node
 
-    if directed_edge in self.edge_visit_cache:
-        # pop() deletes the entry AND spits an output we
-        # want to silence with the ;
-        # it's necessary to delete the item with pop()
-        # and re-add it because only then it assumes the
-        # desired order in the ordered dictionary
-        self.edge_visit_cache.pop(directed_edge);
+    elif new_loc is None:
+        self._loc = None
 
-    self.edge_visit_cache[directed_edge] = self.step_count
-    
+    elif not old_loc is None and not node is None:
+        # I am calling it a directed edge because our edges normally
+        # have a specific node order specification but here we care
+        # about node order in that it specifies a direction
+        directed_edge = (old_loc, new_loc)
+
+        if directed_edge in self.edge_visit_cache:
+            # pop() deletes the entry AND spits an output we
+            # want to silence with the ;
+            # it's necessary to delete the item with pop()
+            # and re-add it because only then it assumes the
+            # desired order in the ordered dictionary
+            self.edge_visit_cache.pop(directed_edge);
+
+        self.edge_visit_cache[directed_edge] = self.step_count
+        
+        # set heading and update loc
+        if assert_nodes_adjacent(self.loc, node):
+            if node[1] > self.loc[1]:
+                self.heading = '^'
+            elif node[1] < self.loc[1]:
+                self.heading = 'v'
+            elif node[0] > self.loc[0]:
+                self.heading = '>'
+            elif node[0] < self.loc[0]:
+                self.heading = '<'
+            self._loc = node
+
+        # remove from the step cache
+        if self._step_cache and self._step_cache[0] == node:
+            self._step_cache.pop(0);
+
     #we do the same for the node visit cache
     if node in self.node_visit_cache:
         self.node_visit_cache.pop(node)
 
     self.node_visit_cache[node] = self.step_count
     self.step_count += 1
-
-    # set heading
-    if assert_nodes_adjacent(self.loc, node):
-        if node[1] > self.loc[1]:
-            self.heading = '^'
-        elif node[1] < self.loc[1]:
-            self.heading = 'v'
-        elif node[0] > self.loc[0]:
-            self.heading = '>'
-        elif node[0] < self.loc[0]:
-            self.heading = '<'
-        self._loc = node
-
-    # remove from the step cache
-    if self._step_cache and self._step_cache[0] == node:
-        self._step_cache.pop(0);
 
 def n_degree_neighborhood(G, node, n):
     """Find the n degree neighborhood of node in graph G. Returns the list of
@@ -152,7 +159,7 @@ def softmax(beta, values):
 
 
 class Agent:
-    def __init__(self, loc, beta, xi=0, penalty_criterium='node',
+    def __init__(self, beta, loc=None, xi=0, penalty_criterium='node',
             penalty_type='exponential', heading=None):
         """Parameters:
         -----------
@@ -193,8 +200,19 @@ class Agent:
         # we will use the property decorator to turn self.loc into
         # a smart property that agents with position memory will make
         # use of
-        if assert_is_node(loc):
-            self._loc = loc 
+      
+        # It's a bit klugey but necessary to first set to None or else the
+        #  function call of _set_loc() will fail
+        self._loc = None
+
+        # we use _set_loc() rather than setting self._loc directly because 
+        #  this way we make sure that even the loc on which the Agent is
+        #  initialized is recorded in the node and edge visit caches
+        if loc is None:
+            _set_loc(self, loc)
+
+        elif assert_is_node(loc):
+            _set_loc(self, loc) 
 
     loc = property(_get_loc, _set_loc)
 
@@ -202,6 +220,10 @@ class Agent:
         """Since setting the agent's location for proximity checks for
         adjacency and complains if the nodes are not adjacent, this
         method can be called to force reset location to a specific one.
+        
+        Use with caution! Recommended usage is now first agent.loc = None,
+        then agent.loc = new_node. The user should manage the node and edge
+        visit caches himself when using these transitions.
 
         Parameters:
         -----------
@@ -384,7 +406,7 @@ class Agent:
             return self._exponential_penalty_factor(nodeslist)
 
 class HeuristicAgent(Agent):
-    def __init__(self, loc, beta, xi, penalty_criterium='node',
+    def __init__(self, beta, xi, loc=None, penalty_criterium='node',
             penalty_type='exponential', heading=None, distribution='cos',
             kappa=None, maze_size=6):
         """Creates an agent that follows a directional heuristic.
@@ -460,7 +482,7 @@ class HeuristicAgent(Agent):
         return values
 
 class NStepsAgent(Agent):
-    def __init__(self, loc, maze, nsteps, beta = float('inf'), xi=3,
+    def __init__(self, maze, nsteps, loc=None, beta = float('inf'), xi=3,
             penalty_criterium='node', penalty_type='exponential',
             heading=None):
         """Creates an agent that has full knowledge of the maze and
@@ -500,7 +522,7 @@ class NStepsAgent(Agent):
         return values
 
 class OmniscientAgent(Agent):
-    def __init__(self, loc, maze, beta = float('inf'), xi=0,
+    def __init__(self, maze, loc=None, beta = float('inf'), xi=0,
             penalty_criterium='node', penalty_type='exponential',
             heading=None):
         """Creates an agent that has full knowledge of the maze and
@@ -544,7 +566,7 @@ class OmniscientAgent(Agent):
         return path
         
 class MixtureAgent(HeuristicAgent):
-    def __init__(self, loc, beta, maze, xi, penalty_criterium='node',
+    def __init__(self, beta, maze, xi, loc=None, penalty_criterium='node',
             penalty_type='exponential', distribution='cos', kappa=None,
             heading=None, maze_size=6, switch_distance=0):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi,
@@ -571,7 +593,7 @@ class MixtureAgent(HeuristicAgent):
         return values
 
 class DirectedRandomAgent(Agent):
-    def __init__(self, loc, beta, conc, xi=0, penalty_criterium='node',
+    def __init__(self, beta, conc, loc=None, xi=0, penalty_criterium='node',
             heading=None, direction=0):
         """Creates an agent that follows semi-random motion.
         The choice probabilities of this agent follow
