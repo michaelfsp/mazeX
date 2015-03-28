@@ -6,13 +6,12 @@ import random
 import numpy as np
 
 def choose(probs):
-    """Choose one edge using softmax decision rule based on the
-    edges values
+    """Choose one option based on given decision probabilities.
 
     Output:
     -------
     index : int
-        Index of the chosen edge
+        Index of the picked choice
     """
     # This function is 5X faster than numpy.random.choice!!
     cum_prob = np.cumsum(probs)
@@ -27,9 +26,11 @@ class SimStep(Step):
         # for the initial step this will be altered later by
         # SimTrial.__init__() a bit of a hugly hack but will do it for now
         super(SimStep, self).__init__(loc, trial, previous = previous)
-
+        
+        # should in principle have the same order as Step.available_nodes
         self.values = []
         self.probs = []
+        self.penalties = [] # may be used later for debugging
 
 class SimTrial(Trial):
     def __init__(self, maze, goal, initial_step, agent, max_steps=0,
@@ -42,11 +43,17 @@ class SimTrial(Trial):
         initial_step.trial = self
 
     def go_to_next_step(self):
+        #TODO: do not calculate penalties once in order to store them and then
+        #  once again when evaluate is called.
+        self.step.penalties = self.agent.penalty_factor(
+                self.step.available_nodes)
+
         self.step.values = self.agent.evaluate(
             self.step.available_nodes, self.goal)
         
         self.step.probs = self.agent.choice_probs(self.step.values)
 
+        
         next_node = self.step.available_nodes[choose(self.step.probs)]
 
         self.agent.loc = next_node
