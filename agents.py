@@ -536,19 +536,23 @@ class OmniscientAgent(Agent):
         self.maze = maze
 
     def evaluate(self, nodeslist, goal):
-        """Gets the next node in the node cache"""
-        if not self._step_cache:
-            self.plan_path(goal, self.maze);
-
+        """Gets the next node in the node cache."""
         values = []
 
+        current_distance_to_goal = self.maze.distances_dictionary[self.loc][
+                goal]
+
         for n in nodeslist:
-            if n == self._step_cache[0]:
+            # if a node is along the shortest path to goal it's distance to
+            #  goal is less than the distance from current location
+            if self.maze.distances_dictionary[n][
+                    goal] < current_distance_to_goal:
                 values.append(1)
             else:
                 values.append(-1)
 
-        # penalties are only relevant for exploration
+        # penalties are only relevant when there is exploration, i.e.,
+        #  beta < +inf
         penalties = self.penalty_factor(nodeslist)
 
         values -= penalties
