@@ -90,6 +90,7 @@ from mazex.simtask import *
 
 import mazex.analysis as analysis
 import mazex.data as data
+import mazex.fitting as fitting
 
 """
 I believe we don't need these imports.
