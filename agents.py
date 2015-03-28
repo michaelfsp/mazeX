@@ -144,7 +144,7 @@ def softmax(beta, values):
         #all values, we subtract the mean of the values in order to avoid
         #numerical overflows (see Daw 2009 (manuscript for Attention &
         #Performance XXIII)
-        values-=np.mean(values)
+        values = values - np.mean(values)
 
         #this is the calculation of the numerator of the equation
         exp_elements = np.exp(beta*values)
