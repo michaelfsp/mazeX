@@ -1,1 +1,1 @@
-from mazex.fitting.fitting import *
+from .likelihood import *
