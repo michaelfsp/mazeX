@@ -124,18 +124,19 @@ def get_angles_dictionary(size):
     cached_object = str(size)
 
     try:
-        d = shelve.open(cache_file)
-        angles = d[cached_object]
+        dic = shelve.open(cache_file)
+        angles = dic[cached_object]
         
     # this is bad practice because it will catch any exception while we only
     #  want to catch it here if it is a 'file not found' exception
     #  however, the 'file not found' exception spat by shelve is not specific
     except:
+        print('angles_dictionary_not_found')
         #check that directory exists
         if not os.path.isdir(cache_dir):
             os.makedirs(cache_dir)
 
-        d = shelve.open(cache_file)
+        dic = shelve.open(cache_file)
 
         # and now do the calculations proper
         from mazex.mazes import RandomSquareMaze
@@ -153,12 +154,12 @@ def get_angles_dictionary(size):
                     angles[l][n][g] = angle_between_nodes(l, n, g)
 
         # and store them for later use
-        d[cached_object] = angles
+        dic[cached_object] = angles
     
     # we close the dictionary so it doesn't stay in memory
 
     finally:
-        d.close()
+        dic.close()
         return angles
 
 def get_von_mises_array(size, kappa, decimals=2):
