@@ -13,7 +13,8 @@ get_angles_dictionary, manhattan_distance)
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
 
-
+#TODO: Equip main Agent class with reset method that resets visit_caches,
+#  planned step caches, etc...
 def _get_loc(self):
     return self._loc
 
@@ -431,7 +432,7 @@ class HeuristicAgent(Agent):
         
         self.angles_dic = get_angles_dictionary(maze_size)
    
-    def evaluate(self, nodeslist, goal, distribution='cos'):
+    def evaluate(self, nodeslist, goal, distribution='cos', penalties=True):
         """Returns a vector with the edge values of each edge given as
         input.
         
@@ -475,9 +476,13 @@ class HeuristicAgent(Agent):
             # deprecated: formerly used for relative penalties
             dist_max = 1 # deprecated
 
-        penalties = self.penalty_factor(nodeslist)
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
 
-        values = dist_val - penalties
+            values = dist_val - penalties
+
+        else:
+            values = dist_val
  
         return values
 
@@ -496,7 +501,7 @@ class NStepsAgent(Agent):
         self.maze = maze
         self.nsteps = nsteps
 
-    def evaluate(self, nodeslist, goal):
+    def evaluate(self, nodeslist, goal, penalties=True):
         """Gets the next node in the node cache"""
         values = np.zeros(len(nodeslist))
 
@@ -515,9 +520,10 @@ class NStepsAgent(Agent):
             if goal in midpoints:
                 values[i] += self.nsteps - midpoints[goal]
 
-        penalties = self.penalty_factor(nodeslist)
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
 
-        values -= penalties
+            values -= penalties
 
         return values
 
@@ -535,7 +541,7 @@ class OmniscientAgent(Agent):
 
         self.maze = maze
 
-    def evaluate(self, nodeslist, goal):
+    def evaluate(self, nodeslist, goal, penalties=True):
         """Gets the next node in the node cache."""
         values = []
 
@@ -553,9 +559,12 @@ class OmniscientAgent(Agent):
 
         # penalties are only relevant when there is exploration, i.e.,
         #  beta < +inf
-        penalties = self.penalty_factor(nodeslist)
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
 
-        values -= penalties
+            values -= penalties
+
+        values = np.array(values)
 
         return values
 
@@ -569,11 +578,51 @@ class OmniscientAgent(Agent):
 
         return path
         
-class MixtureAgent(HeuristicAgent):
+class MixtureAgent(Agent):
+    def __init__(self, maze, beta, xi, gamma, delta, epsilon, nsteps, loc):
+        super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi)
+
+        self.maze = maze
+
+        self.gamma = gamma
+        self.delta = delta
+        self.epsilon = epsilon
+
+        self.nsteps = nsteps
+
+        self.heuristic_agent = HeuristicAgent(beta, xi, loc=loc)
+        self.omniscient_agent = OmniscientAgent(maze, loc=loc)
+        self.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc) 
+
+
+    def evaluate(self, nodeslist, goal):
+        heuristic_value = self.heuristic_agent.evaluate(nodeslist, goal,
+                penalties = False)
+        omniscient_value = self.omniscient_agent.evaluate(nodeslist, goal,
+                penalties = False)
+        nsteps_value = self.nsteps_agent.evaluate(nodeslist, goal,
+                penalties = False)
+        penalties = self.penalty_factor(nodeslist)
+
+        value = (self.gamma*heuristic_value + self.delta*omniscient_value +
+                self.epsilon*nsteps_value) - penalties
+
+        return value
+
+    def set_loc(self, node):
+        _set_loc(self, node)
+
+        self.heuristic_agent.loc = node
+        self.omniscient_agent.loc = node
+        self.nsteps_agent.loc = node
+
+    loc = property(_get_loc, set_loc)
+
+class SwitchAgent(HeuristicAgent):
     def __init__(self, beta, maze, xi, loc=None, penalty_criterium='node',
             penalty_type='exponential', distribution='cos', kappa=None,
             heading=None, maze_size=6, switch_distance=0):
-        super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi,
+        super(SwitchAgent, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium, penalty_type=penalty_type,
                 heading=heading, distribution=distribution, kappa=kappa,
                 maze_size=maze_size)
