@@ -48,6 +48,16 @@ class MixtureLikelihood(Likelihood):
                 loc = None)
         return self.neg_log_likelihood(agent)
 
+    def nll_xi(self, params_array):
+        xi, gamma, delta, epsilon = params_array 
+
+        agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = xi,
+                gamma = gamma, delta = delta, epsilon = epsilon, nsteps = 3,
+                loc = None)
+        return self.neg_log_likelihood(agent)
+
+
+
 
 class HeuristicLikelihood(Likelihood):
 
