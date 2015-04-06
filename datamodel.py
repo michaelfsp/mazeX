@@ -190,10 +190,15 @@ class Session:
 
     def count_total_steps(self):
         """Count total number of steps in session.
+
+        Note: it will discount the step where the agent is at the goal.
         """
         total_steps = 0
         for t in self.trials:
-            total_steps += len(t.steps) - 1
+            if t.goal_reached:
+                total_steps += len(t.steps) - 1
+            else:
+                total_steps += len(t.steps)
 
         return total_steps
 
