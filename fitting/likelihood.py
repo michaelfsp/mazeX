@@ -22,6 +22,8 @@ class Likelihood(object):
 
         log_likelihood = 0
         for t in self.session.trials:
+            agent.loc = None # klugey but necessary because otherwise agent
+            # won't allow teleportation
             agent.node_visit_cache.clear()
             agent.edge_visit_cache.clear()
 
@@ -39,23 +41,26 @@ class MixtureLikelihood(Likelihood):
 
     def __init__(self, session):
         self.session = session
+        self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 3,
+                gamma = None, delta = None, epsilon = None, nsteps = 2,
+                loc = None)
 
     def nll(self, params_array):
-        gamma, delta, epsilon = params_array
+        
+        self.agent.gamma, self.agent.delta, self.agent.epsilon = params_array
 
-        agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 3,
-                gamma = gamma, delta = delta, epsilon = epsilon, nsteps = 3,
-                loc = None)
-        return self.neg_log_likelihood(agent)
+        return self.neg_log_likelihood(self.agent)
 
     def nll_xi(self, params_array):
-        xi, gamma, delta, epsilon = params_array 
+        (self.agent.xi, self.agent.gamma, self.agent.delta,
+                self.agent.epsilon) = params_array 
 
-        agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = xi,
-                gamma = gamma, delta = delta, epsilon = epsilon, nsteps = 3,
-                loc = None)
-        return self.neg_log_likelihood(agent)
+        return self.neg_log_likelihood(self.agent)
 
+    def nll_gd(self, params_array):
+        self.agent.gamma, self.agent.delta = params_array
+
+        return self.neg_log_likelihood(self.agent)
 
 
 
