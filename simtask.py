@@ -27,11 +27,7 @@ class SimStep(Step):
         # SimTrial.__init__() a bit of a hugly hack but will do it for now
         super(SimStep, self).__init__(loc, trial, previous = previous)
         
-        # should in principle have the same order as Step.available_nodes
-        self.values = []
-        self.probs = []
-        self.penalties = [] # may be used later for debugging
-
+        
 class SimTrial(Trial):
     def __init__(self, maze, goal, initial_step, agent, max_steps=0,
             goal_reached=True):

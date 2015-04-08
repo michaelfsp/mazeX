@@ -35,6 +35,11 @@ class Step:
         self.subsequent = None
         self._heading = None
 
+        # should in principle have the same order as Step.available_nodes
+        self.values = []
+        self.probs = []
+        self.penalties = [] # may be used later for debugging
+
     @property
     def available_nodes(self):
         return self.trial.maze.neighbors(self.loc)
