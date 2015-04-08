@@ -1,3 +1,4 @@
+import copy
 import numpy as np
 from mazex.agents import HeuristicAgent, MixtureAgent
 
@@ -11,7 +12,7 @@ class Likelihood(object):
     def __init__(self, session):
         """Agent should be initialized with 'loc' None.
         """
-        self.session = session
+        self.session = copy.deepcopy(session)
 
     def neg_log_likelihood(self, agent):
         """Compute the likelihood of the data in the session gien the
@@ -30,7 +31,9 @@ class Likelihood(object):
             for s in t.steps[:-1]: # last step is the goal
                 agent.loc = s.loc
                 values = agent.evaluate(s.available_nodes, t.goal)
+                s.values.append(values) # we save it for troubleshooting
                 choice_prob = agent.choice_probs(values)[s.choice]
+                s.probs.append(choice_prob)
 
                 #TODO: change to protected log
                 log_likelihood += protected_log(choice_prob)
@@ -40,17 +43,53 @@ class Likelihood(object):
 class MixtureLikelihood(Likelihood):
 
     def __init__(self, session):
-        self.session = session
-        self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 3,
+        super(MixtureLikelihood, self).__init__(session)
+        self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 0,
                 gamma = None, delta = None, epsilon = None, nsteps = 2,
                 loc = None)
 
-    def nll(self, params_array):
+        (self.heuristic_chosen_values, self.heuristic_values) = (
+                self.agent.heuristic_agent.evaluate_session(session))
+        self.sum_heuristic_values = np.nansum(self.heuristic_values, axis=1)
         
+        (self.omniscient_chosen_values, self.omniscient_values) = (
+                self.agent.omniscient_agent.evaluate_session(session))
+        self.sum_omniscient_values = np.nansum(self.omniscient_values, axis=1)
+
+        (self.nsteps_chosen_values, self.nsteps_values) = (
+                self.agent.nsteps_agent.evaluate_session(session))
+        self.sum_nsteps_values = np.nansum(self.nsteps_values, axis=1)
+
+        #not being used yet
+        self.chosen_values = np.vstack((self.heuristic_chosen_values,
+            self.omniscient_chosen_values, self.nsteps_chosen_values))
+
+    def nll(self, params_array):
         self.agent.gamma, self.agent.delta, self.agent.epsilon = params_array
 
         return self.neg_log_likelihood(self.agent)
 
+    def vect_nll(self, params_array):
+        gamma, delta, epsilon = params_array
+
+        # this is essentially a vectorized softmax with beta = 1
+        self.comb_chosen_values = (gamma * self.heuristic_chosen_values +
+                delta * self.omniscient_chosen_values +
+                epsilon * self.nsteps_chosen_values)
+
+        self.comb_values = (gamma * self.heuristic_values +
+                delta * self.omniscient_values +
+                epsilon * self.nsteps_values)
+
+        # for the denominator we have to use np.nansum instead of a normal sum
+        # because for some steps there aren't 4 options and therefore the
+        # 'missing' elements are nan on the values array
+        
+        self.choice_probs = np.exp(self.comb_chosen_values)/np.nansum(
+                np.exp(self.comb_values), axis=1)
+
+        return -np.sum(protected_log(self.choice_probs))
+        
     def nll_xi(self, params_array):
         (self.agent.xi, self.agent.gamma, self.agent.delta,
                 self.agent.epsilon) = params_array 
