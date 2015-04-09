@@ -2,10 +2,24 @@ import numpy as np
 import networkx as nx
 import random
 import copy
+from functools import lru_cache
 
 from mazex.exceptions import *
 from mazex.utils import copydoc
 import mazex.analysis
+
+
+@lru_cache(maxsize=10)
+def cached_betweenness_centrality(maze):
+    return nx.algorithms.betweenness_centrality(maze)
+
+@lru_cache(maxsize=10)
+def cached_edge_betweenness_centrality(maze):
+    return nx.algorithms.edge_betweenness_centrality(maze)
+
+@lru_cache(maxsize=10)
+def cached_closeness_centrality(maze):
+    return nx.algorithms.closeness_centrality(maze)
 
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
@@ -31,6 +45,17 @@ class SquareMaze(nx.classes.graph.Graph):
         self._distances_to_coord_map = None
 
     @property
+    def betweenness_centrality(self):
+        return cached_betweenness_centrality(self)
+    
+    @property
+    def edge_betweenness_centrality(self):
+        return cached_edge_betweenness_centrality(self)
+
+    @property
+    def closeness_centrality(self):
+        return cached_closeness_centrality(self)
+
     @property
     def distances_matrix(self):
         # If the graph has not changed since last calculation of the matrix:
