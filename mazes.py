@@ -39,9 +39,11 @@ class SquareMaze(nx.classes.graph.Graph):
         # recalculate if either the nodes or eges of the maze have changed
         # We save the snapshot of both at time of calculation in these objects
         self._has_changed_since_matrix = True
+        self._has_changed_since_dictionary = True
         self._has_changed_since_to_coord_map = True
 
         self._distances_matrix = None
+        self._distances_dictionary = None
         self._distances_to_coord_map = None
 
     @property
@@ -71,8 +73,14 @@ class SquareMaze(nx.classes.graph.Graph):
 
     @property
     def distances_dictionary(self):
-        return nx.algorithms.floyd_warshall(self)
+        if not self._has_changed_since_dictionary:
+            return self._distances_dictionary
+        else:
+            self._distances_dictionary = nx.algorithms.floyd_warshall(self)
+            self._has_changed_since_dictionary = False
+            return self._distances_dictionary
 
+    @property
     def distances_to_coord(self):
         if not self._has_changed_since_to_coord_map:
             return self._distances_to_coord_map
@@ -98,7 +106,7 @@ class SquareMaze(nx.classes.graph.Graph):
             self._distances_to_coord_map = mapping_dict
             self._has_changed_since_to_coord_map = False
             return self._distances_to_coord_map
-
+    
     @property
     def pos(self):
         return nx.get_node_attributes(self, 'pos')
