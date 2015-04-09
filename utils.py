@@ -16,6 +16,7 @@ from scipy.stats import vonmises
 #from mazex.mazes import RandomSquareMaze
 
 import os
+from functools import lru_cache
 
 
 def angle_between_nodes(loc, node1, node2):
@@ -38,6 +39,25 @@ def angle_between_nodes(loc, node1, node2):
     
     return np.arccos(np.dot(node1_vec, node2_vec) / (np.linalg.norm(
         node1_vec)*np.linalg.norm(node2_vec)))
+
+@lru_cache(maxsize=10)
+def angles_dictionary(size):
+    from mazex.mazes import SquareMaze
+    maze = SquareMaze(size)
+
+    angles = {}
+    for l in maze.nodes():
+        angles[l] = {}
+        n_list = maze.nodes()
+        n_list.remove(l)
+        for n in n_list:
+            angles[l][n] = {}
+            g_list = maze.nodes()
+            g_list.remove(l)
+            g_list.remove(n)
+            for g in g_list:
+                angles[l][n][g] = angle_between_nodes(l, n, g)
+    return angles
 
 def cos_between_nodes(loc, node1, node2):
     """A common function that determines the angle between a given edge and
@@ -138,20 +158,7 @@ def get_angles_dictionary(size):
 
         dic = shelve.open(cache_file)
 
-        # and now do the calculations proper
-        from mazex.mazes import RandomSquareMaze
-
-        maze = RandomSquareMaze(size, 1)
-
-        angles = {}
-        for l in maze.nodes():
-            angles[l] = {}
-            n_list = maze.nodes()
-            n_list.remove(l)
-            for n in n_list:
-                angles[l][n] = {}
-                for g in n_list:
-                    angles[l][n][g] = angle_between_nodes(l, n, g)
+        angles = angles_dictionary(size)
 
         # and store them for later use
         dic[cached_object] = angles
