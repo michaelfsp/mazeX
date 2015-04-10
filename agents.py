@@ -8,10 +8,11 @@ from scipy.stats import vonmises
 from mazex.exceptions import *
 from mazex.utils import (angle_between_nodes, assert_is_node,
 assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
-get_angles_dictionary, manhattan_distance)
+get_angles_dictionary, manhattan_distance, scale_dict_values)
 
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
+
 
 #TODO: Equip main Agent class with reset method that resets visit_caches,
 #  planned step caches, etc...
@@ -532,6 +533,61 @@ class HeuristicAgent(Agent):
         else:
             values = dist_val
  
+        return values
+
+class CentralityAgent(Agent):
+    def __init__(self, maze, centrality='edge_betweenness', loc=None, beta=1,
+            xi=3, penalty_criterium='node', penalty_type='exponential',
+            heading=None):
+        """Creates an agent which evaluates options according to centrality
+        measures.
+
+        Parameters:
+        -----------
+        centrality: 'edge_betweenness', 'node_betweenness' or 'node_closeness'
+        """
+        super(CentralityAgent, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading) 
+
+        self.maze = maze
+        self.centrality = centrality
+        
+        for c in ['edge_betweenness_centrality', 'betweenness_centrality',
+                'closeness_centrality']:
+            c_dict = eval('self.maze.'+c)
+            # we scale the values such that they span the range [-1, 1]
+            #  as all other agents produce values in this range
+            scaled_c_dict = scale_dict_values(c_dict, high=1, low=-1)
+            setattr(self, 'scaled_'+c, scaled_c_dict) 
+
+    def evaluate(self, nodeslist, goal, centrality=None, penalties=True):
+        if not centrality:
+            centrality = self.centrality
+
+        if centrality == 'edge_betweenness':
+            edgeslist = [(self.loc, n) for n in nodeslist]
+            values = []
+            for e in edgeslist:
+                # first we check under which name the edge is stored in the
+                #  maze object because each edge is only addressable by either
+                #  (n1, n2) or (n2, n1)
+                if not e in self.scaled_edge_betweenness_centrality:
+                    e = (e[1], e[0])
+                values.append(self.scaled_edge_betweenness_centrality[e])
+            
+        elif centrality == 'node_betweenness':
+            values = [self.scaled_betweenness_centrality[n] for n in nodeslist]
+
+        elif centrality == 'node_closeness':
+            values = [self.scaled_closeness_centrality[n] for n in nodeslist]
+
+        values = np.array(values)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+            values -= penalties
+        
         return values
 
 class NStepsAgent(Agent):

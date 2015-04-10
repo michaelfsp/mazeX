@@ -8,7 +8,7 @@ from mazex.exceptions import *
 from mazex.utils import copydoc
 import mazex.analysis
 
-
+#TODO: save centrality measures as attributes of edges and nodes
 @lru_cache(maxsize=10)
 def cached_betweenness_centrality(maze):
     return nx.algorithms.betweenness_centrality(maze)
