@@ -364,6 +364,21 @@ def max_distances(maze, goals=None):
     max_distances_all = np.array(max_distances_all)
     return max_distances_all.max(0)
 
+def scale_dict_values(dic, high=1.0, low=0.0):
+    """Scale the values in a dictionary to a [low, high] range while
+    preserving the key->value pairing.
+    """
+    dic_val_array = np.array(list(dic.values()))
+    dic_scaled_val_array = scale_vector(dic_val_array, high=high, low=low)
+    scaled_dic = dict((k,v) for k,v in zip(dic.keys(), dic_scaled_val_array))
+    return scaled_dic
+
+def scale_vector(rawvector, high=1.0, low=0.0):
+    minval = min(rawvector)
+    maxval = max(rawvector)
+    rng = maxval - minval
+    return high - (((high - low) * (maxval - rawvector)) / rng)
+
 def to_dist_direction(n, loc, maze, goal):
     """Calculate the direction in the distances space of a given transition
     from loc to n.
