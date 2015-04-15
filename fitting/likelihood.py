@@ -69,7 +69,7 @@ class MixtureLikelihood(Likelihood):
 
         return self.neg_log_likelihood(self.agent)
 
-    def vect_nll(self, params_array):
+    def vect_nll(self, params_array, subtract_mean=True):
         gamma, delta, epsilon = params_array
 
         # this is essentially a vectorized softmax with beta = 1
@@ -80,6 +80,15 @@ class MixtureLikelihood(Likelihood):
         self.comb_values = (gamma * self.heuristic_values +
                 delta * self.omniscient_values +
                 epsilon * self.nsteps_values)
+        
+        if subtract_mean:
+            self.mean_values = np.nanmean(self.comb_values, axis=1)
+            self.comb_chosen_values = self.comb_chosen_values - self.mean_values
+            # before we subtract the mean to self.comb_values (has 2 dims) we have
+            #  to add the empty dimension to self.mean_values but not before
+            #  subtracting self.mean_values from self.comb_chosen_values!!!
+            self.mean_values = self.mean_values[..., np.newaxis]
+            self.comb_values = self.comb_values - self.mean_values
 
         # for the denominator we have to use np.nansum instead of a normal sum
         # because for some steps there aren't 4 options and therefore the
