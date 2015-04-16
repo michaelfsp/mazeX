@@ -169,6 +169,39 @@ class SquareMaze(nx.classes.graph.Graph):
 
         return adj_neighbors
 
+    def randomgoals(self, n):
+        """Retrieve a generator of a node sequence where nodes have been
+        randomly sampled ensuring no repetition in every cycle of size**2
+        elements or between any two subsequent elements (relevant for the
+        transition between cycles.
+
+        Parameters:
+        -----------
+        n   : int
+            Length of sequence to be generated.
+        """
+        # very first iteration
+        n_retrieved = 0
+        last_retrieved = None
+
+        while n_retrieved < n:
+            if n_retrieved == 0 or n_retrieved % self.size**2 == 0:
+                goals = self.nodes()
+                random.shuffle(goals)
+
+            n_retrieved += 1
+            goal = goals.pop()
+
+            if goal != last_retrieved:
+                last_retrieved = goal
+                yield goal
+
+            else:
+                goals.append(goal)
+                goal = goals.pop(0)
+                last_retrieved = goal
+                yield goal
+
     @copydoc(nx.classes.graph.Graph)
     def add_edge(self, u, v, attr_dict=None, **attr):
         super(SquareMaze, self).add_edge(u, v, attr_dict=attr_dict, **attr)
