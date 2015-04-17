@@ -2,6 +2,7 @@
 Analysis methods that don't rely on fitting should come here
 """
 from mazex.exceptions import *
+from mazex.analysis.iterators import first_exit
 import mazex.utils as utils
 import networkx as nx
 import numpy as np
@@ -22,6 +23,31 @@ def prob(step, null='random'):
 
     else:
         raise NotSupported
+
+def avg_fraction(session):
+    available = np.zeros(4)
+    chosen = np.zeros(4)
+
+    for s in first_exit(session):
+        for a in s.available_nodes:
+            available[utils.to_dist_direction(a, s.loc, session.maze,
+                s.trial.goal)] += 1
+        chosen[utils.to_dist_direction(s.subsequent.loc, s.loc, session.maze,
+            s.trial.goal)] += 1
+    return chosen, available
+
+def dir_vector(session):
+    chosen, available = avg_fraction(session)
+
+    unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
+    chosen_vectors = chosen[..., np.newaxis] * unit_vectors
+    chosen_vector = np.sum(chosen_vectors, axis=0)
+
+    available_vectors = available[..., np.newaxis] * unit_vectors
+    available_vector = np.sum(available_vectors, axis=0)
+
+    return chosen_vector, available_vector
+
 
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
