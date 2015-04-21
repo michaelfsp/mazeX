@@ -2,7 +2,7 @@
 Analysis methods that don't rely on fitting should come here
 """
 from mazex.exceptions import *
-from mazex.analysis.iterators import first_exit
+from mazex.analysis.iterators import first_exit, first_edge_crossing
 import mazex.utils as utils
 import networkx as nx
 import numpy as np
@@ -24,11 +24,17 @@ def prob(step, null='random'):
     else:
         raise NotSupported
 
-def avg_fraction(session):
+def avg_fraction(session, exclusion_criterium='node'):
     available = np.zeros(4)
     chosen = np.zeros(4)
 
-    for s in first_exit(session):
+    if exclusion_criterium == 'node':
+        step_iterator = first_exit(session)
+
+    elif exclusion_criterium == 'edge':
+        step_iterator = first_edge_crossing(session)
+
+    for s in step_iterator:
         for a in s.available_nodes:
             available[utils.to_dist_direction(a, s.loc, session.maze,
                 s.trial.goal)] += 1
@@ -36,18 +42,81 @@ def avg_fraction(session):
             s.trial.goal)] += 1
     return chosen, available
 
-def dir_vector(session):
-    chosen, available = avg_fraction(session)
+def avg_vector_difference(session, geometric_distance='euclidian', exclusion_criterium='node'):
+    chosen_vectors = []
+    available_mean_vectors = []
+    sum_vector = np.zeros(2)
+    step_count = 0
+
+    if exclusion_criterium == 'node':
+        step_iterator = first_exit(session)
+
+    elif exclusion_criterium == 'edge':
+        step_iterator = first_edge_crossing(session)
+
+    if geometric_distance == 'manhattan':
+        unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
+
+    for s in step_iterator:
+        step_count +=1
+
+        if geometric_distance == 'manhattan':
+            available = np.array([np.nan]*4) 
+            for a in s.available_nodes:
+                available[utils.to_dist_direction(a, s.loc, session.maze,
+                    s.trial.goal)] = np.nansum((available[utils.to_dist_direction(
+                        a, s.loc, session.maze, s.trial.goal)], 1))
+
+            available_vectors = available[..., np.newaxis] * unit_vectors
+            chosen_vector = unit_vectors[utils.to_dist_direction(s.subsequent.loc,
+                s.loc, session.maze, s.trial.goal)]
+
+        elif geometric_distance == 'euclidian':
+            current_geodesic_dist = session.maze.distances_dictionary[s.loc][
+                    s.trial.goal]
+            current_euclidian_dist = utils.euclidian_distance(
+                    s.loc, s.trial.goal)
+            available_vectors = []
+            for a in s.available_nodes:
+                choice_geodesic_dist = session.maze.distances_dictionary[
+                        a][s.trial.goal]
+                choice_euclidian_dist = utils.euclidian_distance(
+                        a, s.trial.goal)
+
+                available_vectors.append((
+                    choice_geodesic_dist - current_geodesic_dist,
+                    choice_euclidian_dist - current_euclidian_dist))
+            available_vectors = np.array(available_vectors)
+            chosen_vector = available_vectors[s.choice]
+
+        available_mean_vector = np.nanmean(available_vectors, axis=0)
+        available_mean_vectors.append(list(available_mean_vector))
+
+        chosen_vectors.append(list(chosen_vector))
+
+        sum_vector += chosen_vector - available_mean_vector
+
+    return chosen_vectors, available_mean_vectors, sum_vector/step_count
+
+def dir_vector(session, exclusion_criterium='node'):
+    chosen, available = avg_fraction(session, exclusion_criterium)
+    fraction = chosen / available
 
     unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
-    chosen_vectors = chosen[..., np.newaxis] * unit_vectors
-    chosen_vector = np.sum(chosen_vectors, axis=0)
+    fraction_vectors = fraction[..., np.newaxis] * unit_vectors
+    fraction_vector = np.sum(fraction_vectors, axis=0)
 
-    available_vectors = available[..., np.newaxis] * unit_vectors
-    available_vector = np.sum(available_vectors, axis=0)
+    tan_vector = fraction_vector[1]/fraction_vector[0]
+    angle = np.arctan(tan_vector)
 
-    return chosen_vector, available_vector
+    return fraction_vector, angle
 
+'''
+def fraction_geodesic_steps(session):
+    available = np.zeros(2)
+    chosen = 
+    for s in first_exit(session):
+'''
 
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
