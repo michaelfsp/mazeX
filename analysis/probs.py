@@ -24,25 +24,8 @@ def prob(step, null='random'):
     else:
         raise NotSupported
 
-def avg_fraction(session, exclusion_criterium='node'):
-    available = np.zeros(4)
-    chosen = np.zeros(4)
-
-    if exclusion_criterium == 'node':
-        step_iterator = first_exit(session)
-
-    elif exclusion_criterium == 'edge':
-        step_iterator = first_edge_crossing(session)
-
-    for s in step_iterator:
-        for a in s.available_nodes:
-            available[utils.to_dist_direction(a, s.loc, session.maze,
-                s.trial.goal)] += 1
-        chosen[utils.to_dist_direction(s.subsequent.loc, s.loc, session.maze,
-            s.trial.goal)] += 1
-    return chosen, available
-
-def avg_vector_difference(session, geometric_distance='euclidian', exclusion_criterium='node'):
+def avg_vector_difference(session, geometric_distance='euclidian',
+        exclusion_criterium='node', plot=False, **kwargs):
     chosen_vectors = []
     available_mean_vectors = []
     sum_vector = np.zeros(2)
@@ -96,9 +79,42 @@ def avg_vector_difference(session, geometric_distance='euclidian', exclusion_cri
 
         sum_vector += chosen_vector - available_mean_vector
 
-    return chosen_vectors, available_mean_vectors, sum_vector/step_count
+    normed_sum_vector = sum_vector/step_count
+    if plot:
+        pl.arrow(0, 0, *normed_sum_vector, **kwargs)
+        # we compute the right xlim and ylim
+        lower_bound = min(np.floor(normed_sum_vector.min()), -1)
+        upper_bound = max(np.ceil(normed_sum_vector.max()), 1)
 
-def dir_vector(session, exclusion_criterium='node'):
+        pl.ylim(lower_bound, upper_bound)
+        pl.xlim(lower_bound, upper_bound)
+        ax = pl.gca()
+        ax.set_aspect(1, adjustable='box')
+        pl.grid(True)
+        pl.tight_layout()
+
+        #return chosen_vectors, available_mean_vectors, sum_vector/step_count
+    return normed_sum_vector
+
+def avg_fraction(session, exclusion_criterium='node'):
+    available = np.zeros(4)
+    chosen = np.zeros(4)
+
+    if exclusion_criterium == 'node':
+        step_iterator = first_exit(session)
+
+    elif exclusion_criterium == 'edge':
+        step_iterator = first_edge_crossing(session)
+
+    for s in step_iterator:
+        for a in s.available_nodes:
+            available[utils.to_dist_direction(a, s.loc, session.maze,
+                s.trial.goal)] += 1
+        chosen[utils.to_dist_direction(s.subsequent.loc, s.loc, session.maze,
+            s.trial.goal)] += 1
+    return chosen, available
+
+def fraction_dir_vector(session, exclusion_criterium='node'):
     chosen, available = avg_fraction(session, exclusion_criterium)
     fraction = chosen / available
 
@@ -110,13 +126,6 @@ def dir_vector(session, exclusion_criterium='node'):
     angle = np.arctan(tan_vector)
 
     return fraction_vector, angle
-
-'''
-def fraction_geodesic_steps(session):
-    available = np.zeros(2)
-    chosen = 
-    for s in first_exit(session):
-'''
 
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
