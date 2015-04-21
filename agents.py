@@ -13,7 +13,10 @@ get_angles_dictionary, manhattan_distance, scale_dict_values)
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
 
-
+#TODO: Have Agent.evaluate() which takes care of handling penalties, etc..
+#  which would then invoke {HeuristiAgent, OmniscientAgent, ...}.eval_fun()
+#  which would contain the evaluation bits which are truly different from 
+#  agent to agent
 #TODO: Equip main Agent class with reset method that resets visit_caches,
 #  planned step caches, etc...
 def _get_loc(self):
@@ -158,7 +161,6 @@ def softmax(beta, values):
         probs = exp_elements/denominator    
 
     return probs
-
 
 class Agent:
     def __init__(self, beta, loc=None, xi=0, penalty_criterium='node',
@@ -749,41 +751,22 @@ class SwitchAgent(HeuristicAgent):
 
         return values
 
-class DirectedRandomAgent(Agent):
-    def __init__(self, beta, conc, loc=None, xi=0, penalty_criterium='node',
-            heading=None, direction=0):
-        """Creates an agent that follows semi-random motion.
-        The choice probabilities of this agent follow
-        the circular von Mises distribution.
+class BrownianAgent(Agent):
+    def __init__(self, beta, loc=None, xi=0, penalty_criterium='node',
+            penalty_type='exponential', heading=None):
+        """Creates an agent that follows semi-Brownian motion or truly
+        Brownian for xi=0.
         
-        Parameters:
-        -----------
-        conc : float
-            Concentration parameter for the von Mises distribution.
-
-        direction : float , optional, [0, 2*pi]
-            Direction (location parameter for the von Mises
-            distribution in radians off the center.
         """
-        super(DirectedRandomAgent, self).__init__(loc=loc, beta=beta, xi=xi,
-                penalty_criterium=penalty_criterium, heading=heading) 
+        super(BrownianAgent, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading) 
 
-        self.direction = direction
-        self.conc = conc
+    def evaluate(self, nodeslist, goal, penalties=True):
+        values = np.zeros(len(nodeslist))
 
-    def edge_value(self, edges):
-        """Calculates the value of each edge available to the agent.
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+            values = values - penalties
 
-        Parameters:
-        -----------
-
-        edges : list
-            List of edges to evaluate
-        """
-        pass
-
-    def next_path_seg(self, loc, goal, mazemodel, memory=None):
-        """Calculates the position the agent wants to visit next.
-        """
-        pass
-
+        return values
