@@ -41,43 +41,59 @@ def avg_vector_difference(session, geometric_distance='euclidian',
         unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
 
     for s in step_iterator:
-        step_count +=1
+        if s.previous: 
+            forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
+        else:
+            forward_nodes = []
 
-        if geometric_distance == 'manhattan':
-            available = np.array([np.nan]*4) 
-            for a in s.available_nodes:
-                available[utils.to_dist_direction(a, s.loc, session.maze,
-                    s.trial.goal)] = np.nansum((available[utils.to_dist_direction(
-                        a, s.loc, session.maze, s.trial.goal)], 1))
+        if len(forward_nodes) > 1:
+            step_count +=1
 
-            available_vectors = available[..., np.newaxis] * unit_vectors
-            chosen_vector = unit_vectors[utils.to_dist_direction(s.subsequent.loc,
-                s.loc, session.maze, s.trial.goal)]
+            if geometric_distance == 'manhattan':
+                available = np.array([np.nan]*4) 
+                for a in forward_nodes:
+                    available[utils.to_dist_direction(a, s.loc, session.maze,
+                        s.trial.goal)] = np.nansum((available[utils.to_dist_direction(
+                            a, s.loc, session.maze, s.trial.goal)], 1))
 
-        elif geometric_distance == 'euclidian':
-            current_geodesic_dist = session.maze.distances_dictionary[s.loc][
-                    s.trial.goal]
-            current_euclidian_dist = utils.euclidian_distance(
-                    s.loc, s.trial.goal)
-            available_vectors = []
-            for a in s.available_nodes:
-                choice_geodesic_dist = session.maze.distances_dictionary[
-                        a][s.trial.goal]
-                choice_euclidian_dist = utils.euclidian_distance(
-                        a, s.trial.goal)
+                available_vectors = available[..., np.newaxis] * unit_vectors
+                chosen_vector = unit_vectors[utils.to_dist_direction(s.subsequent.loc,
+                    s.loc, session.maze, s.trial.goal)]
 
-                available_vectors.append((
-                    choice_geodesic_dist - current_geodesic_dist,
-                    choice_euclidian_dist - current_euclidian_dist))
-            available_vectors = np.array(available_vectors)
-            chosen_vector = available_vectors[s.choice]
+            elif geometric_distance == 'euclidian':
+                current_geodesic_dist = session.maze.distances_dictionary[s.loc][
+                        s.trial.goal]
+                current_euclidian_dist = utils.euclidian_distance(
+                        s.loc, s.trial.goal)
+                available_vectors = []
+                for a in forward_nodes:
+                    choice_geodesic_dist = session.maze.distances_dictionary[
+                            a][s.trial.goal]
+                    choice_euclidian_dist = utils.euclidian_distance(
+                            a, s.trial.goal)
 
-        available_mean_vector = np.nanmean(available_vectors, axis=0)
-        available_mean_vectors.append(list(available_mean_vector))
+                    available_vectors.append((
+                        choice_geodesic_dist - current_geodesic_dist,
+                        choice_euclidian_dist - current_euclidian_dist))
+                available_vectors = np.array(available_vectors)
 
-        chosen_vectors.append(list(chosen_vector))
+                # we compute the chosen vector
+                chosen_geodesic_dist = session.maze.distances_dictionary[
+                            s.subsequent.loc][s.trial.goal]
+                chosen_euclidian_dist = utils.euclidian_distance(
+                            s.subsequent.loc, s.trial.goal)
 
-        sum_vector += chosen_vector - available_mean_vector
+                d_geodesic_dist = chosen_geodesic_dist - current_geodesic_dist
+                d_euclidian_dist = chosen_euclidian_dist - current_euclidian_dist
+
+                chosen_vector = np.array([d_geodesic_dist, d_euclidian_dist])
+
+            available_mean_vector = np.nanmean(available_vectors, axis=0)
+            available_mean_vectors.append(list(available_mean_vector))
+
+            chosen_vectors.append(list(chosen_vector))
+
+            sum_vector += chosen_vector - available_mean_vector
 
     normed_sum_vector = sum_vector/step_count
     if plot:
