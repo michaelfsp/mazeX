@@ -143,6 +143,41 @@ def fraction_dir_vector(session, exclusion_criterium='node'):
 
     return fraction_vector, angle
 
+def prob_m_vs_prob_g(steps):
+    unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
+    S_d_M = 0
+    available_M = 0
+    S_d_G = 0
+    available_G = 0
+    step_count = 0
+
+    for s in steps:
+        if s.previous: 
+            forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
+            import ipdb; ipdb.set_trace()
+        else:
+            forward_nodes = s.available_nodes
+
+        if len(forward_nodes) > 1:
+            directions = np.array([unit_vectors[utils.to_dist_direction(
+                a, s.loc, s.trial.maze, s.trial.goal)] for a in forward_nodes])
+
+            # We check if there were options along the Geodesical axis
+            if np.any(directions[:,0] == -1) and np.any(directions[:,0] == 1):
+                available_G += 1
+                d_G, d_M = unit_vectors[utils.to_dist_direction(s.subsequent.loc, s.loc, 
+                        s.trial.maze, s.trial.goal)]
+                S_d_G += d_G
+
+            if np.any(directions[:,1] == -1) and np.any(directions[:,1] == 1):
+                available_M += 1
+                d_G, d_M = unit_vectors[utils.to_dist_direction(s.subsequent.loc, s.loc, 
+                        s.trial.maze, s.trial.goal)]
+                S_d_M += d_M
+    
+    return np.array([S_d_G/available_G, S_d_M/available_M]), (
+            available_G, available_M)
+
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
 #   separate function
