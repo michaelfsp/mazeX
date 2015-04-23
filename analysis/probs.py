@@ -144,17 +144,20 @@ def fraction_dir_vector(session, exclusion_criterium='node'):
     return fraction_vector, angle
 
 def prob_m_vs_prob_g(steps):
+    """Calculate the average change in Geodesic and Manhattan distance on the
+    trials when the agent had both the option to reduce or increase either
+    distance."""
     unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
     S_d_M = 0
+    S_best_forward_M = 0
     available_M = 0
     S_d_G = 0
+    S_best_forward_G = 0
     available_G = 0
-    step_count = 0
 
     for s in steps:
         if s.previous: 
             forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
-            import ipdb; ipdb.set_trace()
         else:
             forward_nodes = s.available_nodes
 
@@ -164,18 +167,34 @@ def prob_m_vs_prob_g(steps):
 
             # We check if there were options along the Geodesical axis
             if np.any(directions[:,0] == -1) and np.any(directions[:,0] == 1):
-                available_G += 1
+                available_G += 1 # a simple counter
                 d_G, d_M = unit_vectors[utils.to_dist_direction(s.subsequent.loc, s.loc, 
                         s.trial.maze, s.trial.goal)]
-                S_d_G += d_G
+                
+                i_dir_available_nodes = [utils.to_dist_direction(n, s.loc,
+                    s.trial.maze, s.trial.goal) for n in s.available_nodes]
+                d_GM_available_nodes = unit_vectors[i_dir_available_nodes]
+                # expected value of d_G
+                E_d_G = np.mean(d_GM_available_nodes[:,0])
+                S_best_forward_G += -1 - E_d_G
+
+                S_d_G += d_G - E_d_G
 
             if np.any(directions[:,1] == -1) and np.any(directions[:,1] == 1):
-                available_M += 1
+                available_M += 1 # a simple counter
                 d_G, d_M = unit_vectors[utils.to_dist_direction(s.subsequent.loc, s.loc, 
                         s.trial.maze, s.trial.goal)]
-                S_d_M += d_M
-    
-    return np.array([S_d_G/available_G, S_d_M/available_M]), (
+                
+                i_dir_available_nodes = [utils.to_dist_direction(n, s.loc,
+                    s.trial.maze, s.trial.goal) for n in s.available_nodes]
+                d_GM_available_nodes = unit_vectors[i_dir_available_nodes]
+                # expected value of d_G
+                E_d_M = np.mean(d_GM_available_nodes[:,1])
+                S_best_forward_M += -1 - E_d_M
+
+                S_d_M += d_M - E_d_M
+
+    return np.array([S_d_G/S_best_forward_G, S_d_M/S_best_forward_M]), (
             available_G, available_M)
 
 
