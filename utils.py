@@ -413,6 +413,38 @@ def to_dist_direction(n, loc, maze, goal):
     else:
         raise WeirdDirection
 
+def to_dist_direction_euclidian(n, loc, maze, goal):
+    """Calculate the direction in the distances space of a given transition
+    from loc to n.
+    
+    I am not sure if it is possible to have something other than
+    the 4 possible transitions I have identified so I will make
+    conditions very explicit in order to detect eventual
+    exceptions
+    """
+    loc_G = to_dist_coord_euclidian(loc, maze, goal)
+    n = to_dist_coord_euclidian(n, maze, goal)
+
+    dists_available = np.array([to_dist_coord_euclidian(a, maze, goal) for a in
+            maze.neighbors(loc)])
+
+    best_euclidian = np.min(dists_available[:,1])
+
+    if n[0]>loc_G[0] and n[1] != best_euclidian:
+        "NE transition in our convention for the axis on this diagram"
+        return 0
+    elif n[0]>loc_G[0] and n[1] == best_euclidian:
+        "SE transition in our convention for the axis on this diagram"
+        return 1
+    elif n[0]<loc_G[0] and n[1] == best_euclidian:
+        "SW transition in our convention for the axis on this diagram"
+        return 2
+    elif n[0]<loc_G[0] and n[1] != best_euclidian:
+        "NW transition in our convention for the axis on this diagram"
+        return 3
+    else:
+        raise WeirdDirection
+
 def to_dist_coord(n, maze, goal):
     """Returns the coordinates of node n in distance coordinates in a tuple
     of the shape (maze_distance, manhattan_distance).
@@ -420,3 +452,9 @@ def to_dist_coord(n, maze, goal):
     return (int(maze.distances_dictionary[n][goal]),
             abs(goal[0] - n[0]) + abs(goal[1] - n[1]))
 
+def to_dist_coord_euclidian(n, maze, goal):
+    """Returns the coordinates of node n in distance coordinates in a tuple
+    of the shape (maze_distance, manhattan_distance).
+    """
+    return (int(maze.distances_dictionary[n][goal]),
+            np.sqrt((goal[0] - n[0])**2 + (goal[1] - n[1])**2))

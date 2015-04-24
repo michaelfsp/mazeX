@@ -143,7 +143,7 @@ def fraction_dir_vector(session, exclusion_criterium='node'):
 
     return fraction_vector, angle
 
-def prob_m_vs_prob_g(steps):
+def prob_m_vs_prob_g(steps, geometric_distance='euclidian'):
     """Calculate the average change in Geodesic and Manhattan distance on the
     trials when the agent had both the option to reduce or increase either
     distance."""
@@ -155,6 +155,12 @@ def prob_m_vs_prob_g(steps):
     S_best_forward_G = 0
     available_G = 0
 
+    if geometric_distance == 'euclidian':
+        to_dist_direction = utils.to_dist_direction_euclidian
+
+    elif geometric_distance == 'manhattan':
+        to_dist_direction = utils.to_dist_direction
+
     for s in steps:
         if s.previous: 
             forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
@@ -162,16 +168,16 @@ def prob_m_vs_prob_g(steps):
             forward_nodes = s.available_nodes
 
         if len(forward_nodes) > 1:
-            directions = np.array([unit_vectors[utils.to_dist_direction(
+            directions = np.array([unit_vectors[to_dist_direction(
                 a, s.loc, s.trial.maze, s.trial.goal)] for a in forward_nodes])
 
             # We check if there were options along the Geodesical axis
             if np.any(directions[:,0] == -1) and np.any(directions[:,0] == 1):
                 available_G += 1 # a simple counter
-                d_G, d_M = unit_vectors[utils.to_dist_direction(s.subsequent.loc, s.loc, 
+                d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc, 
                         s.trial.maze, s.trial.goal)]
                 
-                i_dir_available_nodes = [utils.to_dist_direction(n, s.loc,
+                i_dir_available_nodes = [to_dist_direction(n, s.loc,
                     s.trial.maze, s.trial.goal) for n in s.available_nodes]
                 d_GM_available_nodes = unit_vectors[i_dir_available_nodes]
                 # expected value of d_G
@@ -182,10 +188,10 @@ def prob_m_vs_prob_g(steps):
 
             if np.any(directions[:,1] == -1) and np.any(directions[:,1] == 1):
                 available_M += 1 # a simple counter
-                d_G, d_M = unit_vectors[utils.to_dist_direction(s.subsequent.loc, s.loc, 
+                d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc, 
                         s.trial.maze, s.trial.goal)]
                 
-                i_dir_available_nodes = [utils.to_dist_direction(n, s.loc,
+                i_dir_available_nodes = [to_dist_direction(n, s.loc,
                     s.trial.maze, s.trial.goal) for n in s.available_nodes]
                 d_GM_available_nodes = unit_vectors[i_dir_available_nodes]
                 # expected value of d_G
