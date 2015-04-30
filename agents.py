@@ -390,6 +390,49 @@ class Agent:
         
         return penalties
 
+    def evaluate_penalties_session(self, session):
+        """Return a vector with value of each chosen step and a matrix with
+        values for every choice at every given step such that it can be fed to
+        a likelihood function for fitting purposes.
+
+        Note: it will change agent's loc and node and edge visit_caches
+        """
+        self.loc = None # stupid hack just to prevent that the change of
+        # location later on is not assumed if it fails some validity check
+        # usually for contiguity / possible transtion
+        first_loc = session.trials[0].steps[0].loc
+        self.loc = first_loc
+
+        # Find out the size of the array we need
+        # Since when the agent is at the goal there is no decision to be made
+        # we need n-1 rows per trial as the last one is the goal, or n in case
+        # the goal was not reached
+        # Session.count_total_steps already takes care of that
+        n_steps = session.count_total_steps()
+        value_chosen = np.zeros(n_steps)
+
+        values = np.empty((n_steps, 4))
+        values.fill(np.nan)
+
+        step_number = 0
+        for t in session.trials:
+            self.loc = None # klugey but necessary because otherwise agent
+            # won't allow teleportation
+            self.node_visit_cache.clear()
+            self.edge_visit_cache.clear()
+
+            for s in t.steps[:-1]: # last step is the goal
+                self.loc = s.loc
+
+                step_values = self.penalty_factor(s.available_nodes)
+
+                value_chosen[step_number] = step_values[s.choice]
+                values[step_number, 0:len(step_values)] = step_values
+
+                step_number += 1
+
+        return (value_chosen, values)
+
     def evaluate_session(self, session, penalties=False):
         """Return a vector with value of each chosen step and a matrix with
         values for every choice at every given step such that it can be fed to
