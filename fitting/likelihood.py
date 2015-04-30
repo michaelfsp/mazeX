@@ -44,7 +44,7 @@ class MixtureLikelihood(Likelihood):
 
     def __init__(self, session):
         super(MixtureLikelihood, self).__init__(session)
-        self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 0,
+        self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 1,
                 gamma = None, delta = None, epsilon = None, nsteps = 2,
                 loc = None)
 
@@ -60,9 +60,9 @@ class MixtureLikelihood(Likelihood):
                 self.agent.nsteps_agent.evaluate_session(session))
         self.sum_nsteps_values = np.nansum(self.nsteps_values, axis=1)
 
-        #not being used yet
-        self.chosen_values = np.vstack((self.heuristic_chosen_values,
-            self.omniscient_chosen_values, self.nsteps_chosen_values))
+        (self.penalty_chosen_values, self.penalty_values) = (
+                self.agent.evaluate_penalties_session(session))
+        self.sum_penalty_values = np.nansum(self.nsteps_values, axis=1)
 
     def nll(self, params_array):
         self.agent.gamma, self.agent.delta, self.agent.epsilon = params_array
@@ -70,16 +70,18 @@ class MixtureLikelihood(Likelihood):
         return self.neg_log_likelihood(self.agent)
 
     def vect_nll(self, params_array, subtract_mean=True):
-        gamma, delta, epsilon = params_array
+        gamma, delta, epsilon, xi = params_array
 
         # this is essentially a vectorized softmax with beta = 1
         self.comb_chosen_values = (gamma * self.heuristic_chosen_values +
                 delta * self.omniscient_chosen_values +
-                epsilon * self.nsteps_chosen_values)
+                epsilon * self.nsteps_chosen_values +
+                xi * self.penalty_chosen_values)
 
         self.comb_values = (gamma * self.heuristic_values +
                 delta * self.omniscient_values +
-                epsilon * self.nsteps_values)
+                epsilon * self.nsteps_values +
+                xi * self.penalty_values)
         
         if subtract_mean:
             self.mean_values = np.nanmean(self.comb_values, axis=1)
@@ -109,8 +111,6 @@ class MixtureLikelihood(Likelihood):
         self.agent.gamma, self.agent.delta = params_array
 
         return self.neg_log_likelihood(self.agent)
-
-
 
 class HeuristicLikelihood(Likelihood):
 
