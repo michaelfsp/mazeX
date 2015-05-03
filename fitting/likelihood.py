@@ -2,6 +2,8 @@ import copy
 import numpy as np
 from mazex.agents import HeuristicAgent, MixtureAgent
 
+from numba import jit
+
 def protected_log(x):
     'Return log of x protected against giving -inf for very small values of x.'
     return np.log(((1e-200)/2)+(1-(1e-200))*x)
@@ -40,6 +42,41 @@ class Likelihood(object):
 
         return -log_likelihood
 
+
+
+def novect_nll(gamma, delta, epsilon, xi, heuristic_chosen_values,
+        omniscient_chosen_values, nsteps_chosen_values, penalty_chosen_values,
+        heuristic_values, omniscient_values, nsteps_values, penalty_values):
+
+    # this is essentially a vectorized softmax with beta = 1
+    comb_chosen_values = (gamma * heuristic_chosen_values +
+            delta * omniscient_chosen_values +
+            epsilon * nsteps_chosen_values -
+            xi * penalty_chosen_values)
+
+    comb_values = (gamma * heuristic_values +
+            delta * omniscient_values +
+            epsilon * nsteps_values -
+            xi * penalty_values)
+    
+    mean_values = np.nanmean(comb_values, axis=1)
+    comb_chosen_values = comb_chosen_values - mean_values
+    # before we subtract the mean to self.comb_values (has 2 dims) we have
+    #  to add the empty dimension to self.mean_values but not before
+    #  subtracting self.mean_values from self.comb_chosen_values!!!
+    mean_values = mean_values[..., np.newaxis]
+    comb_values = comb_values - mean_values
+
+    # for the denominator we have to use np.nansum instead of a normal sum
+    # because for some steps there aren't 4 options and therefore the
+    # 'missing' elements are nan on the values array
+    
+    self.choice_probs = np.exp(self.comb_chosen_values)/np.nansum(
+            np.exp(self.comb_values), axis=1)
+
+    return -np.sum(protected_log(self.choice_probs))
+
+
 class MixtureLikelihood(Likelihood):
 
     def __init__(self, session):
@@ -64,23 +101,60 @@ class MixtureLikelihood(Likelihood):
                 self.agent.evaluate_penalties_session(session))
         self.sum_penalty_values = np.nansum(self.nsteps_values, axis=1)
 
-    def nll(self, params_array):
+    def slow_nll(self, params_array):
         self.agent.gamma, self.agent.delta, self.agent.epsilon = params_array
 
         return self.neg_log_likelihood(self.agent)
 
-    def vect_nll(self, params_array, subtract_mean=True):
+    def gdex_nll(self, params_array, subtract_mean=True):
         gamma, delta, epsilon, xi = params_array
+
+        return self.vect_nll(gamma, delta, epsilon, xi,
+                subtract_mean=subtract_mean)
+
+    def gdx_nll(self, params_array, subtract_mean=True):
+        gamma, delta, xi = params_array
+        epsilon = 0
+
+        return self.vect_nll(gamma, delta, epsilon, xi,
+                subtract_mean=subtract_mean)
+
+    def gx_nll(self, params_array, subtract_mean=True):
+        gamma, xi = params_array
+        delta = 0
+        epsilon = 0
+
+        return self.vect_nll(gamma, delta, epsilon, xi,
+                subtract_mean=subtract_mean)
+
+    def dx_nll(self, params_array, subtract_mean=True):
+        delta, xi = params_array
+        gamma = 0
+        epsilon = 0
+
+        return self.vect_nll(gamma, delta, epsilon, xi,
+                subtract_mean=subtract_mean)
+
+    def x_nll(self, xi, subtract_mean=True):
+        gamma = 0
+        delta = 0
+        epsilon = 0
+
+        return self.vect_nll(gamma, delta, epsilon, xi,
+                subtract_mean=subtract_mean)
+
+    #@jit(nogil=True)
+    def vect_nll(self, gamma, delta, epsilon, xi, subtract_mean=True):
 
         # this is essentially a vectorized softmax with beta = 1
         self.comb_chosen_values = (gamma * self.heuristic_chosen_values +
                 delta * self.omniscient_chosen_values +
-                epsilon * self.nsteps_chosen_values +
+                epsilon * self.nsteps_chosen_values -
                 xi * self.penalty_chosen_values)
 
         self.comb_values = (gamma * self.heuristic_values +
                 delta * self.omniscient_values +
-                epsilon * self.nsteps_values +
+                epsilon * self.nsteps_values -
                 xi * self.penalty_values)
         
         if subtract_mean:
@@ -100,7 +174,7 @@ class MixtureLikelihood(Likelihood):
                 np.exp(self.comb_values), axis=1)
 
         return -np.sum(protected_log(self.choice_probs))
-        
+
     def nll_xi(self, params_array):
         (self.agent.xi, self.agent.gamma, self.agent.delta,
                 self.agent.epsilon) = params_array 
