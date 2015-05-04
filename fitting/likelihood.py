@@ -158,7 +158,6 @@ class MixtureLikelihood(Likelihood):
         return self.vect_nll(gamma, delta, epsilon, xi,
                 subtract_mean=subtract_mean)
 
-    #@jit(nogil=True)
     def vect_nll(self, gamma, delta, epsilon, xi, subtract_mean=True):
 
         # this is essentially a vectorized softmax with beta = 1
@@ -173,7 +172,10 @@ class MixtureLikelihood(Likelihood):
                 xi * self.penalty_values)
         
         if subtract_mean:
-            self.mean_values = np.nanmean(self.comb_values, axis=1)
+            #self.mean_values = np.nanmean(self.comb_values, axis=1)
+            self.mean_values = value_mean(self.comb_values[:,0],
+            self.comb_values[:,1], self.comb_values[:,2], self.comb_values[:,3])
+
             self.comb_chosen_values = self.comb_chosen_values - self.mean_values
             # before we subtract the mean to self.comb_values (has 2 dims) we have
             #  to add the empty dimension to self.mean_values but not before
@@ -185,10 +187,21 @@ class MixtureLikelihood(Likelihood):
         # because for some steps there aren't 4 options and therefore the
         # 'missing' elements are nan on the values array
         
-        self.choice_probs = np.exp(self.comb_chosen_values)/np.nansum(
-                np.exp(self.comb_values), axis=1)
+        # Below is an alternative, cleaner but slower form of the same
+        # calculation
+        #self.choice_probs = np.exp(self.comb_chosen_values)/np.nansum(
+        #        np.exp(self.comb_values), axis=1)
+        #
+        #denominator = softmax_denominator(self.comb_values[:,0],
+        #self.comb_values[:,1], self.comb_values[:,2], self.comb_values[:,3])
+        #self.choice_probs = np.exp(self.comb_chosen_values) / denominator
+        #return -np.sum(protected_log(self.choice_probs))
 
-        return -np.sum(protected_log(self.choice_probs))
+        log_likes = np.empty(self.comb_chosen_values.shape[0])
+        log_likelihoods(self.comb_chosen_values, self.comb_values, log_likes)
+
+        return -np.sum(log_likes)
+        
 
     def nll_xi(self, params_array):
         (self.agent.xi, self.agent.gamma, self.agent.delta,
