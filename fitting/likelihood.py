@@ -2,8 +2,57 @@ import copy
 import numpy as np
 from mazex.agents import HeuristicAgent, MixtureAgent
 
-from numba import jit
+import math
+import numba
 
+# Not being used
+@numba.vectorize('float64(float64, float64, float64, float64)', nopython=True)
+def value_mean(a, b, c, d):
+    """Calculate the mean of option values where absent options are NaN."""
+    counts = 0
+    tot = 0
+    for w in (a, b, c, d):
+        if not math.isnan(w):
+            tot += w 
+            counts += 1
+    return tot/counts
+
+# Not being used
+@numba.vectorize('float64(float64, float64, float64, float64)', nopython=True)
+def softmax_denominator(a, b, c, d):
+    """Calculate the denominator of the softmax function."""
+    tot = 0
+    for w in (a, b, c, d):
+        if not math.isnan(w):
+            tot += np.exp(w) 
+    return tot
+
+# Not being used
+@numba.guvectorize('void(float64[:,:], float64[:])', '(m,n)->(m)', nopython=True)
+def softmax_denominator_vec(val_arr, denom):
+    """Calculate the denominator of the softmax function."""
+    for i in range(val_arr.shape[0]):
+        vals = val_arr[i]
+        for v in vals:
+            if not math.isnan(v):
+                denom[i] += np.exp(v) 
+
+@numba.guvectorize('void(float64[:], float64[:,:], float64[:])',
+'(n),(n,m)->(n)', nopython=True) 
+def log_likelihoods(chosen_values, choice_values, likelihoods):
+    """Calculate the log likelihood for an array of chosen_values. The output
+    is saved to the array likelihoods, which has to have the same shape as
+    chosen_values."""
+    for i in range(chosen_values.shape[0]):
+        choice_vals = choice_values[i,:]
+        denominator = 0
+        for v in choice_vals:
+            if not math.isnan(v):
+                denominator += np.exp(v) 
+        likelihood = np.exp(chosen_values[i]) / denominator
+        # the line below implements a protected log
+        likelihoods[i] = np.log(((1e-200)/2)+(1-(1e-200))*likelihood)
+        
 def protected_log(x):
     'Return log of x protected against giving -inf for very small values of x.'
     return np.log(((1e-200)/2)+(1-(1e-200))*x)
@@ -41,40 +90,6 @@ class Likelihood(object):
                 log_likelihood += protected_log(choice_prob)
 
         return -log_likelihood
-
-
-
-def novect_nll(gamma, delta, epsilon, xi, heuristic_chosen_values,
-        omniscient_chosen_values, nsteps_chosen_values, penalty_chosen_values,
-        heuristic_values, omniscient_values, nsteps_values, penalty_values):
-
-    # this is essentially a vectorized softmax with beta = 1
-    comb_chosen_values = (gamma * heuristic_chosen_values +
-            delta * omniscient_chosen_values +
-            epsilon * nsteps_chosen_values -
-            xi * penalty_chosen_values)
-
-    comb_values = (gamma * heuristic_values +
-            delta * omniscient_values +
-            epsilon * nsteps_values -
-            xi * penalty_values)
-    
-    mean_values = np.nanmean(comb_values, axis=1)
-    comb_chosen_values = comb_chosen_values - mean_values
-    # before we subtract the mean to self.comb_values (has 2 dims) we have
-    #  to add the empty dimension to self.mean_values but not before
-    #  subtracting self.mean_values from self.comb_chosen_values!!!
-    mean_values = mean_values[..., np.newaxis]
-    comb_values = comb_values - mean_values
-
-    # for the denominator we have to use np.nansum instead of a normal sum
-    # because for some steps there aren't 4 options and therefore the
-    # 'missing' elements are nan on the values array
-    
-    self.choice_probs = np.exp(self.comb_chosen_values)/np.nansum(
-            np.exp(self.comb_values), axis=1)
-
-    return -np.sum(protected_log(self.choice_probs))
 
 
 class MixtureLikelihood(Likelihood):
