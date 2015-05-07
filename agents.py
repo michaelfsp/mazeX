@@ -732,7 +732,8 @@ class OmniscientAgent(Agent):
         return path
         
 class MixtureAgent(Agent):
-    def __init__(self, maze, beta, xi, gamma, delta, epsilon, nsteps, loc):
+    def __init__(self, maze, beta, xi, gamma, delta, epsilon, zeta, nsteps,
+            loc, centrality='node_betweenness'):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi)
 
         self.maze = maze
@@ -740,13 +741,16 @@ class MixtureAgent(Agent):
         self.gamma = gamma
         self.delta = delta
         self.epsilon = epsilon
+        self.zeta = zeta
 
         self.nsteps = nsteps
+        self.centrality = centrality
 
         self.heuristic_agent = HeuristicAgent(beta, xi, loc=loc)
         self.omniscient_agent = OmniscientAgent(maze, loc=loc)
         self.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc) 
-
+        self.centrality_agent = CentralityAgent(maze, centrality=centrality,
+                loc=loc)
 
     def evaluate(self, nodeslist, goal):
         heuristic_value = self.heuristic_agent.evaluate(nodeslist, goal,
@@ -755,11 +759,13 @@ class MixtureAgent(Agent):
                 penalties = False)
         nsteps_value = self.nsteps_agent.evaluate(nodeslist, goal,
                 penalties = False)
+        centrality_value = self.centrality_agent.evaluate(nodeslist, goal,
+                penalties = False)
         penalties = self.penalty_factor(nodeslist)
 
-        value = (self.gamma*heuristic_value + self.delta*omniscient_value +
-                self.epsilon*nsteps_value) - penalties
-
+        value = ((self.gamma*heuristic_value + self.delta*omniscient_value +
+                self.epsilon*nsteps_value + self.zeta*centrality_value)
+                - penalties)
         return value
 
     def set_loc(self, node):
@@ -768,6 +774,7 @@ class MixtureAgent(Agent):
         self.heuristic_agent.loc = node
         self.omniscient_agent.loc = node
         self.nsteps_agent.loc = node
+        self.centrality_agent.loc = node
 
     loc = property(_get_loc, set_loc)
 
