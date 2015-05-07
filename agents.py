@@ -311,7 +311,7 @@ class Agent:
         index : int
             Index of the chosen edge
         """
-        choice_prob = softmax(self.beta, values)
+        choice_prob = self.choice_probs(values)
 
         cum_prob = np.cumsum(choice_prob)
         
