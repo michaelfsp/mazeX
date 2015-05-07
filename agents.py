@@ -504,6 +504,27 @@ class Agent:
         elif self.penalty_type == 'exponential':
             return self._exponential_penalty_factor(nodeslist)
 
+    def simulate_session(self, maze, goals, init_loc=(0,0)):
+        trials = []
+        self.node_visit_cache.clear()
+        self.edge_visit_cache.clear()
+        self.loc = init_loc
+        for goal in goals:
+            init_step = mx.SimStep(self.loc)
+            self.node_visit_cache.clear()
+            self.edge_visit_cache.clear()
+            # we set loc to current loc such that loc gets added to edge and
+            #  node_visit_cache
+            self.loc = self.loc
+            trial = mx.SimTrial(maze, goal, init_step, self)
+            trial.solve()
+            print('Solved trial %i' %len(trials))
+            trials.append(trial)
+
+        session = mx.Session()
+        session.trials+=(trials)
+        return session
+
 class HeuristicAgent(Agent):
     def __init__(self, beta, xi, loc=None, penalty_criterium='node',
             penalty_type='exponential', heading=None, distribution='cos',
