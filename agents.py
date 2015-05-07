@@ -2,9 +2,12 @@ import copy
 import random
 from collections import OrderedDict
 
+from functools import lru_cache
+
 import numpy as np
 from scipy.stats import vonmises
 
+import mazex as mx
 from mazex.exceptions import *
 from mazex.utils import (angle_between_nodes, assert_is_node,
 assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
@@ -80,6 +83,7 @@ def n_degree_neighborhood(G, node, n):
     path_lengths = single_source_shortest_path_length(G, node)
     return [node for node, length in path_lengths.items() if length == n]
 
+@lru_cache(maxsize=36*10)
 def nodes_reachable_n_steps(G, node, n):
     """Find all nodes reachable in exactly n steps starting from node. This
     includes nodes reachable by backtracking.
