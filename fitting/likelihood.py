@@ -4,8 +4,8 @@ from mazex.agents import HeuristicAgent, MixtureAgent
 
 import math
 import numba
+import numexpr as ne
 
-# Not being used
 @numba.vectorize('float64(float64, float64, float64, float64)', nopython=True)
 def value_mean(a, b, c, d):
     """Calculate the mean of option values where absent options are NaN."""
@@ -16,6 +16,21 @@ def value_mean(a, b, c, d):
             tot += w 
             counts += 1
     return tot/counts
+
+@numba.guvectorize('void(float64[:,:], float64[:])', '(m,n)->(m)',
+        nopython=True)
+def matrix_column_mean(matrix, output):
+     """Calculate the mean of option values where absent options are NaN."""
+     for i in range(matrix.shape[0]):
+         row = matrix[i,:]
+         counts = 0
+         tot = 0
+         for j in range(row.shape[0]):
+             w = row[j]
+             if not math.isnan(w):
+                 tot += w 
+                 counts += 1
+         output[i] = tot/counts
 
 # Not being used
 @numba.vectorize('float64(float64, float64, float64, float64)', nopython=True)
