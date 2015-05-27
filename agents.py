@@ -664,6 +664,7 @@ class NStepsAgent(Agent):
     def __init__(self, maze, nsteps, loc=None, beta = float('inf'), xi=3,
             penalty_criterium='node', penalty_type='exponential',
             heading=None):
+        #TODO: Allow manhattan as well as euclidian distance
         """Creates an agent that has full knowledge of the maze and
         uses Graph Theory algorithms to determine the shortest path
         to goal"""
@@ -680,7 +681,6 @@ class NStepsAgent(Agent):
         values = np.zeros(len(nodeslist))
 
         for i, c in enumerate(nodeslist):
-           
             endpoints, midpoints = nodes_reachable_n_steps(self.maze, c,
                     self.nsteps -1) 
 
