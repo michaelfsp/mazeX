@@ -109,87 +109,131 @@ class Likelihood(object):
 
 class MixtureLikelihood(Likelihood):
 
-    def __init__(self, session):
+    def __init__(self, session, nsteps=2):
+        #TODO: turn nsteps into a property and make it such that changing it
+        # triggers recalculation of (only) the nsteps likelihood components
         super(MixtureLikelihood, self).__init__(session)
         self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 1,
-                gamma = None, delta = None, epsilon = None, nsteps = 2,
-                loc = None)
-
+                gamma = None, delta = None, epsilon = None, zeta = None,
+                nsteps=nsteps, centrality = 'node_betweenness', loc = None)
         (self.heuristic_chosen_values, self.heuristic_values) = (
                 self.agent.heuristic_agent.evaluate_session(session))
-        self.sum_heuristic_values = np.nansum(self.heuristic_values, axis=1)
         
         (self.omniscient_chosen_values, self.omniscient_values) = (
                 self.agent.omniscient_agent.evaluate_session(session))
-        self.sum_omniscient_values = np.nansum(self.omniscient_values, axis=1)
 
         (self.nsteps_chosen_values, self.nsteps_values) = (
                 self.agent.nsteps_agent.evaluate_session(session))
-        self.sum_nsteps_values = np.nansum(self.nsteps_values, axis=1)
+
+        (self.centrality_chosen_values, self.centrality_values) = (
+                self.agent.centrality_agent.evaluate_session(session))
 
         (self.penalty_chosen_values, self.penalty_values) = (
                 self.agent.evaluate_penalties_session(session))
-        self.sum_penalty_values = np.nansum(self.nsteps_values, axis=1)
 
+    # Deprecated!
     def slow_nll(self, params_array):
+        """Deprecated!"""
         self.agent.gamma, self.agent.delta, self.agent.epsilon = params_array
-
         return self.neg_log_likelihood(self.agent)
 
     def gdex_nll(self, params_array, subtract_mean=True):
         gamma, delta, epsilon, xi = params_array
+        zeta = 0
+        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
+                subtract_mean=subtract_mean)
 
-        return self.vect_nll(gamma, delta, epsilon, xi,
+    def gdzx_nll(self, params_array, subtract_mean=True):
+        gamma, delta, zeta, xi = params_array
+        epsilon = 0
+        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
+                subtract_mean=subtract_mean)
+
+    def gdezx_nll(self, params_array, subtract_mean=True):
+        gamma, delta, epsilon, zeta, xi = params_array
+        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
+                subtract_mean=subtract_mean)
+
+    def gex_nll(self, params_array, subtract_mean=True):
+        gamma, epsilon, xi = params_array
+        delta = 0
+        zeta = 0
+        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
                 subtract_mean=subtract_mean)
 
     def gdx_nll(self, params_array, subtract_mean=True):
         gamma, delta, xi = params_array
         epsilon = 0
-
-        return self.vect_nll(gamma, delta, epsilon, xi,
+        zeta = 0
+        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
                 subtract_mean=subtract_mean)
 
     def gx_nll(self, params_array, subtract_mean=True):
         gamma, xi = params_array
         delta = 0
         epsilon = 0
-
-        return self.vect_nll(gamma, delta, epsilon, xi,
+        zeta = 0
+        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
                 subtract_mean=subtract_mean)
 
     def dx_nll(self, params_array, subtract_mean=True):
         delta, xi = params_array
         gamma = 0
         epsilon = 0
-
-        return self.vect_nll(gamma, delta, epsilon, xi,
+        zeta = 0
+        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
                 subtract_mean=subtract_mean)
 
     def x_nll(self, xi, subtract_mean=True):
         gamma = 0
         delta = 0
         epsilon = 0
-
-        return self.vect_nll(gamma, delta, epsilon, xi,
+        zeta = 0
+        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
                 subtract_mean=subtract_mean)
 
-    def vect_nll(self, gamma, delta, epsilon, xi, subtract_mean=True):
-
+    def vect_nll(self, gamma, delta, epsilon, zeta, xi, subtract_mean=True, numexpr=True):
         # this is essentially a vectorized softmax with beta = 1
-        self.comb_chosen_values = (gamma * self.heuristic_chosen_values +
-                delta * self.omniscient_chosen_values +
-                epsilon * self.nsteps_chosen_values -
-                xi * self.penalty_chosen_values)
+        if numexpr:
+            shcv = self.heuristic_chosen_values
+            socv = self.omniscient_chosen_values
+            sncv = self.nsteps_chosen_values
+            sccv = self.centrality_chosen_values
+            spcv = self.penalty_chosen_values
 
-        self.comb_values = (gamma * self.heuristic_values +
-                delta * self.omniscient_values +
-                epsilon * self.nsteps_values -
-                xi * self.penalty_values)
+            self.comb_chosen_values = ne.evaluate('(gamma * shcv\
+                    + delta * socv\
+                    + epsilon * sncv\
+                    + zeta * sccv\
+                    - xi * spcv)')
+
+            shv = self.heuristic_values
+            sov = self.omniscient_values
+            snv = self.nsteps_values
+            scv = self.centrality_values
+            spv = self.penalty_values
+
+            self.comb_values = ne.evaluate('(gamma * shv\
+                    + delta * sov\
+                    + epsilon * snv\
+                    + zeta * scv\
+                    - xi * spv)')
+        else:
+            self.comb_chosen_values = (gamma * self.heuristic_chosen_values
+                    + delta * self.omniscient_chosen_values
+                    + epsilon * self.nsteps_chosen_values
+                    + zeta * self.centrality_chosen_values
+                    - xi * self.penalty_chosen_values)
+
+            self.comb_values = (gamma * self.heuristic_values
+                    + delta * self.omniscient_values
+                    + epsilon * self.nsteps_values
+                    + zeta * self.centrality_values
+                    - xi * self.penalty_values)
         
         if subtract_mean:
             #self.mean_values = np.nanmean(self.comb_values, axis=1)
-            self.mean_values = value_mean(self.comb_values[:,0],
-            self.comb_values[:,1], self.comb_values[:,2], self.comb_values[:,3])
+            self.mean_values = matrix_column_mean(self.comb_values)
 
             self.comb_chosen_values = self.comb_chosen_values - self.mean_values
             # before we subtract the mean to self.comb_values (has 2 dims) we have
@@ -217,17 +261,6 @@ class MixtureLikelihood(Likelihood):
 
         return -np.sum(log_likes)
         
-
-    def nll_xi(self, params_array):
-        (self.agent.xi, self.agent.gamma, self.agent.delta,
-                self.agent.epsilon) = params_array 
-
-        return self.neg_log_likelihood(self.agent)
-
-    def nll_gd(self, params_array):
-        self.agent.gamma, self.agent.delta = params_array
-
-        return self.neg_log_likelihood(self.agent)
 
 class HeuristicLikelihood(Likelihood):
 
