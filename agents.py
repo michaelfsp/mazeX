@@ -301,21 +301,53 @@ class Agent:
 
         return angle_between_nodes(self.loc, node, heading_node)
 
-    def choice_probs(self, values):
+    def choice_probs(self, values, debug=False):
         """Return choice probabilities given edge_values.
-        """
-        return softmax(self.beta, values)
+        Inputs:
+        -------
+        values : list or Numpy array
+            List of choice values.
 
-    def choose_edge_index(self, values):
+        debug : boolean
+            If debug mode is on, when two choices have the same probability and
+            are the best choice, then the first one is always picked instead
+            of choosing either with 50% chance. Should only be used with
+            beta = float('inf')
+        """
+        if debug:
+            if type(values) == list:
+                values = np.array([values])
+            if np.count_nonzero(values == max(values)) > 1:
+                if self.beta == float('inf'):
+                   probs = np.zeros(len(values)) 
+                   probs[values.index(max(values))] == 1
+
+        else:
+            probs = softmax(self.beta, values)
+
+        return probs
+
+    def choose_edge_index(self, values, debug=False):
         """Choose one edge using softmax decision rule based on the
         edges values
+
+        Inputs:
+        -------
+        values : list
+            List of choice values.
+
+        debug : boolean
+            If debug mode is on, when two choices have the same probability and
+            are the best choice, then the first one is always picked instead
+            of choosing either with 50% chance. Should only be used with
+            beta = float('inf')
 
         Output:
         -------
         index : int
             Index of the chosen edge
         """
-        choice_prob = self.choice_probs(values)
+        choice_prob = self.choice_probs(values, debug=debug)
 
         cum_prob = np.cumsum(choice_prob)
         
