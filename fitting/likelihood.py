@@ -108,14 +108,13 @@ class Likelihood(object):
 
 
 class MixtureLikelihood(Likelihood):
-
-    def __init__(self, session, nsteps=2):
+    def __init__(self, session, nsteps=2, centrality='edge_betweenness'):
         #TODO: turn nsteps into a property and make it such that changing it
         # triggers recalculation of (only) the nsteps likelihood components
         super(MixtureLikelihood, self).__init__(session)
         self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 1,
                 gamma = None, delta = None, epsilon = None, zeta = None,
-                nsteps=nsteps, centrality = 'node_betweenness', loc = None)
+                nsteps=nsteps, centrality = centrality, loc = None)
         (self.heuristic_chosen_values, self.heuristic_values) = (
                 self.agent.heuristic_agent.evaluate_session(session))
         
@@ -140,58 +139,58 @@ class MixtureLikelihood(Likelihood):
     def gdex_nll(self, params_array, subtract_mean=True):
         gamma, delta, epsilon, xi = params_array
         zeta = 0
-        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
-                subtract_mean=subtract_mean)
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
 
     def gdzx_nll(self, params_array, subtract_mean=True):
         gamma, delta, zeta, xi = params_array
         epsilon = 0
-        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
-                subtract_mean=subtract_mean)
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
 
     def gdezx_nll(self, params_array, subtract_mean=True):
         gamma, delta, epsilon, zeta, xi = params_array
-        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
-                subtract_mean=subtract_mean)
-
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
+         
     def gex_nll(self, params_array, subtract_mean=True):
         gamma, epsilon, xi = params_array
         delta = 0
         zeta = 0
-        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
-                subtract_mean=subtract_mean)
-
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
+  
     def gdx_nll(self, params_array, subtract_mean=True):
         gamma, delta, xi = params_array
         epsilon = 0
         zeta = 0
-        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
-                subtract_mean=subtract_mean)
-
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
+  
     def gx_nll(self, params_array, subtract_mean=True):
         gamma, xi = params_array
         delta = 0
         epsilon = 0
         zeta = 0
-        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
-                subtract_mean=subtract_mean)
-
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
+   
     def dx_nll(self, params_array, subtract_mean=True):
         delta, xi = params_array
         gamma = 0
         epsilon = 0
         zeta = 0
-        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
-                subtract_mean=subtract_mean)
-
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
+ 
     def x_nll(self, xi, subtract_mean=True):
         gamma = 0
         delta = 0
         epsilon = 0
         zeta = 0
-        return self.vect_nll(gamma, delta, epsilon, zeta, xi,
-                subtract_mean=subtract_mean)
-
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
+ 
     def vect_nll(self, gamma, delta, epsilon, zeta, xi, subtract_mean=True, numexpr=True):
         # this is essentially a vectorized softmax with beta = 1
         if numexpr:
