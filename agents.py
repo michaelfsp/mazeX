@@ -785,8 +785,8 @@ class OmniscientAgent(Agent):
         return path
         
 class MixtureAgent(Agent):
-    def __init__(self, maze, beta, xi, gamma, delta, epsilon, zeta, nsteps,
-            loc, centrality='node_betweenness'):
+    def __init__(self, maze, loc, beta=1, xi=0, gamma=0, delta=0, epsilon=0,
+            zeta=0, nsteps=0, centrality='edge_betweenness'):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi)
 
         self.maze = maze
@@ -806,15 +806,34 @@ class MixtureAgent(Agent):
                 loc=loc)
 
     def evaluate(self, nodeslist, goal):
-        heuristic_value = self.heuristic_agent.evaluate(nodeslist, goal,
-                penalties = False)
-        omniscient_value = self.omniscient_agent.evaluate(nodeslist, goal,
-                penalties = False)
-        nsteps_value = self.nsteps_agent.evaluate(nodeslist, goal,
-                penalties = False)
-        centrality_value = self.centrality_agent.evaluate(nodeslist, goal,
-                penalties = False)
-        penalties = self.penalty_factor(nodeslist)
+        if self.gamma:
+            heuristic_value = self.heuristic_agent.evaluate(nodeslist, goal,
+                    penalties = False)
+        else:
+            heuristic_value = 0
+
+        if self.delta:
+            omniscient_value = self.omniscient_agent.evaluate(nodeslist, goal,
+                    penalties = False)
+        else:
+            omniscient_value = 0
+
+        if self.epsilon:
+            nsteps_value = self.nsteps_agent.evaluate(nodeslist, goal,
+                    penalties = False)
+        else:
+            nsteps_value = 0
+
+        if self.zeta:
+            centrality_value = self.centrality_agent.evaluate(nodeslist, goal,
+                    penalties = False)
+        else:
+            centrality_value = 0
+
+        if self.xi:
+            penalties = self.penalty_factor(nodeslist)
+        else:
+            penalties = 0
 
         value = ((self.gamma*heuristic_value + self.delta*omniscient_value +
                 self.epsilon*nsteps_value + self.zeta*centrality_value)
