@@ -16,8 +16,10 @@ get_angles_dictionary, manhattan_distance, scale_dict_values)
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
 
+from numba import jit
+
 #TODO: Have Agent.evaluate() which takes care of handling penalties, etc..
-#  which would then invoke {HeuristiAgent, OmniscientAgent, ...}.eval_fun()
+#  which would then invoke {HeuristicAgent, OmniscientAgent, ...}.eval_fun()
 #  which would contain the evaluation bits which are truly different from 
 #  agent to agent
 #TODO: Equip main Agent class with reset method that resets visit_caches,
@@ -117,7 +119,57 @@ def nodes_reachable_n_steps(G, node, n):
 
     return endpoints, midpoints
     
-def softmax(beta, values):
+#def softmax(beta, values):
+#    """A Softmax function.
+#
+#    Parameters:
+#    -----------
+#    beta : float, [0+, inf+]
+#        The inverse temperature parameter of the softmax function. A
+#        very high value causes greedy action, whereas a low value very
+#        stochastic action selection (more exploration).
+#
+#    values : list or numpy.array
+#        The list of values of the actions available to the agent.
+#    """
+#    # Reduce dimensionality of values to 1, if it is an array, else
+#    # transform it into an array
+#    try:
+#        values = values.ravel() #will fail if it is not a numpy array
+#    except AttributeError:
+#        values = np.array(values)
+#
+#    if beta == float('inf'):
+#        probs = np.zeros(len(values))
+#        max_value = np.max(values)
+#        index_maxs = np.flatnonzero(values == max_value)
+#        n_maxs = index_maxs.size
+#
+#        probs[index_maxs] = 1/n_maxs
+#
+#    elif beta == float('-inf'):
+#        probs = np.ones(len(values)) * 1/(len(values))
+#    
+#    else:
+#        #since the softmax is insensitive to subtraction of a value from
+#        #all values, we subtract the mean of the values in order to avoid
+#        #numerical overflows (see Daw 2009 (manuscript for Attention &
+#        #Performance XXIII)
+#        values = values - np.mean(values)
+#
+#        #this is the calculation of the numerator of the equation
+#        exp_elements = np.exp(beta*values)
+#
+#        #this is the calculation of the denominator of the equation
+#        denominator = np.sum(exp_elements)  
+#
+#        #and hnndore we compute the action probabilities
+#        probs = exp_elements/denominator    
+#
+#    return probs
+
+@jit(nopython=True, nogil=True)
+def softmax(beta, avalues):
     """A Softmax function.
 
     Parameters:
@@ -132,42 +184,28 @@ def softmax(beta, values):
     """
     # Reduce dimensionality of values to 1, if it is an array, else
     # transform it into an array
-    try:
-        values = values.ravel() #will fail if it is not a numpy array
-    except AttributeError:
-        values = np.array(values)
 
-    if beta == float('inf'):
-        probs = np.zeros(len(values))
-        max_value = np.max(values)
-        index_maxs = np.flatnonzero(values == max_value)
-        n_maxs = index_maxs.size
+    #since the softmax is insensitive to subtraction of a value from
+    #all values, we subtract the mean of the values in order to avoid
+    #numerical overflows (see Daw 2009 (manuscript for Attention &
+    #Performance XXIII)
 
-        probs[index_maxs] = 1/n_maxs
+    mavalues = avalues - np.mean(avalues)
 
-    elif beta == float('-inf'):
-        probs = np.ones(len(values)) * 1/(len(values))
-    
-    else:
-        #since the softmax is insensitive to subtraction of a value from
-        #all values, we subtract the mean of the values in order to avoid
-        #numerical overflows (see Daw 2009 (manuscript for Attention &
-        #Performance XXIII)
-        values = values - np.mean(values)
+    #this is the calculation of the numerator of the equation
+    exp_elements = np.exp(beta*mavalues)
 
-        #this is the calculation of the numerator of the equation
-        exp_elements = np.exp(beta*values)
+    #this is the calculation of the denominator of the equation
+    denominator = np.sum(exp_elements)  
 
-        #this is the calculation of the denominator of the equation
-        denominator = np.sum(exp_elements)  
-
-        #and hnndore we compute the action probabilities
-        probs = exp_elements/denominator    
+    #and hnndore we compute the action probabilities
+    probs = exp_elements/denominator    
 
     return probs
 
+
 class Agent:
-    def __init__(self, beta, loc=None, xi=0, penalty_criterium='node',
+    def __init__(self, beta=1, loc=None, xi=0, penalty_criterium='node',
             penalty_type='exponential', heading=None):
         """Parameters:
         -----------
@@ -558,7 +596,7 @@ class Agent:
         return session
 
 class HeuristicAgent(Agent):
-    def __init__(self, beta, xi, loc=None, penalty_criterium='node',
+    def __init__(self, beta=1, xi=3, loc=None, penalty_criterium='node',
             penalty_type='exponential', heading=None, distribution='cos',
             kappa=None, maze_size=6):
         """Creates an agent that follows a directional heuristic.
@@ -581,7 +619,8 @@ class HeuristicAgent(Agent):
             self.vm_dist = get_von_mises_array(maze_size, kappa)
             self.max_vm = vonmises.pdf(0, kappa=kappa) 
         
-        self.angles_dic = get_angles_dictionary(maze_size)
+        #self.angles_dic = get_angles_dictionary(maze_size)
+        #self.angles_dic = angle_between_nodes
    
     def evaluate(self, nodeslist, goal, distribution='cos', penalties=True):
         """Returns a vector with the edge values of each edge given as
@@ -609,7 +648,7 @@ class HeuristicAgent(Agent):
         except InvalidNode:
             pass
         
-        angles = [self.angles_dic[self.loc][n][goal] for n in nodeslist]
+        angles = [angle_between_nodes(self.loc, n, goal) for n in nodeslist]
         
         if distribution == 'vonmises':
             # since what is stored in self.vm_dist is a 2D array with angles
@@ -785,7 +824,39 @@ class OmniscientAgent(Agent):
         return path
         
 class MixtureAgent(Agent):
-    def __init__(self, maze, loc, beta=1, xi=0, gamma=0, delta=0, epsilon=0,
+    #def __new__(cls, maze, loc=None, beta=1, xi=0, gamma=0, delta=0, epsilon=0,
+    #        zeta=0, nsteps=0, centrality='edge_betweenness'):
+    #    #obj = super(MixtureAgent, cls).__new__(cls, )
+    #    #obj = super( Agent(beta, loc, xi)
+
+    #    obj.maze = maze
+
+    #    obj.gamma = gamma
+    #    obj.delta = delta
+    #    obj.epsilon = epsilon
+    #    obj.zeta = zeta
+
+    #    obj.nsteps = nsteps
+    #    obj.centrality = centrality
+
+    #    if gamma:
+    #        heuristic_agent = HeuristicAgent
+    #        heuristic_agent.loc = cls.loc
+    #        obj.heuristic_agent = HeuristicAgent(beta, loc=loc)
+
+    #    if delta:
+    #        obj.omniscient_agent = OmniscientAgent(maze, loc=loc)
+    #    if epsilon:
+    #        obj.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc) 
+    #    if zeta:
+    #        obj.centrality_agent = CentralityAgent(maze, centrality=centrality,
+    #                loc=loc)
+
+    #    #super(MixtureAgent, obj).__init__(loc=loc, beta=beta, xi=xi)
+    #    return obj
+
+
+    def __init__(self, maze, loc=None, beta=1, xi=0, gamma=0, delta=0, epsilon=0,
             zeta=0, nsteps=0, centrality='edge_betweenness'):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi)
 
@@ -799,11 +870,15 @@ class MixtureAgent(Agent):
         self.nsteps = nsteps
         self.centrality = centrality
 
-        self.heuristic_agent = HeuristicAgent(beta, xi, loc=loc)
-        self.omniscient_agent = OmniscientAgent(maze, loc=loc)
-        self.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc) 
-        self.centrality_agent = CentralityAgent(maze, centrality=centrality,
-                loc=loc)
+        if self.gamma:
+            self.heuristic_agent = HeuristicAgent(beta, loc=loc)
+        if self.delta:
+            self.omniscient_agent = OmniscientAgent(maze, loc=loc)
+        if self.epsilon:
+            self.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc) 
+        if self.zeta:
+            self.centrality_agent = CentralityAgent(maze, centrality=centrality,
+                    loc=loc)
 
     def evaluate(self, nodeslist, goal):
         if self.gamma:
@@ -842,11 +917,19 @@ class MixtureAgent(Agent):
 
     def set_loc(self, node):
         _set_loc(self, node)
-
-        self.heuristic_agent.loc = node
-        self.omniscient_agent.loc = node
-        self.nsteps_agent.loc = node
-        self.centrality_agent.loc = node
+        #TODO: Warning this is klugey!!! I am ignoring the individual agents'
+        # _set_loc and setting _loc directly. Could lead to unexpected behavior
+        # if evaluate functions depend on information generated by _set_loc,
+        # other than for penalty factor which is defined at the superclass
+        # Agent level
+        if self.gamma:
+            self.heuristic_agent._loc = node
+        if self.delta:
+            self.omniscient_agent._loc = node
+        if self.epsilon:
+            self.nsteps_agent._loc = node
+        if self.zeta:
+            self.centrality_agent._loc = node
 
     loc = property(_get_loc, set_loc)
 

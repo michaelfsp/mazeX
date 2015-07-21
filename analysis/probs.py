@@ -143,7 +143,8 @@ def fraction_dir_vector(session, exclusion_criterium='node'):
 
     return fraction_vector, angle
 
-def prob_m_vs_prob_g(steps, geometric_distance='euclidian'):
+def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
+        hold=None, **kwargs):
     """Calculate the average change in Geodesic and Manhattan distance on the
     trials when the agent had both the option to reduce or increase either
     distance."""
@@ -163,15 +164,20 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian'):
 
     for s in steps:
         if s.previous: 
+            # we start by removing the node the agent just came from, from the
+            #  list of available_nodes. we call that forward_nodes
             forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
         else:
             forward_nodes = s.available_nodes
 
         if len(forward_nodes) > 1:
+            # we change from physical coordinates of the forward nodes to
+            #  changes in the geodesical and physical distance
             directions = np.array([unit_vectors[to_dist_direction(
                 a, s.loc, s.trial.maze, s.trial.goal)] for a in forward_nodes])
 
             # We check if there were options along the Geodesical axis
+            import ipdb; ipdb.set_trace() # BREAKPOINT
             if np.any(directions[:,0] == -1) and np.any(directions[:,0] == 1):
                 available_G += 1 # a simple counter
                 d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc, 
@@ -200,8 +206,29 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian'):
 
                 S_d_M += d_M - E_d_M
 
+    if plot:
+        # we need to save the matplotlib artist for the arrow object for legend
+        #  building purposes
+        arrow_artist = pl.arrow(0, 0, S_d_G/S_best_forward_G,
+                S_d_M/S_best_forward_M, hold=hold,
+                edgecolor='none', length_includes_head=True, **kwargs)
+
+        if kwargs:
+            if 'label' in kwargs:
+                # now we create the legend in this complex way because arrow
+                #  does not support automatic legend building
+                from mazex.drawing import make_legend_arrow
+                import matplotlib.patches as mpatches
+                from matplotlib.legend_handler import HandlerPatch
+                pl.legend([arrow_artist], [kwargs['label']], handler_map={
+                    mpatches.FancyArrow : HandlerPatch(patch_func=
+                        make_legend_arrow)})
+                pl.gca().set_aspect('equal')
+                pl.xlim(0, 1.1)
+                pl.ylim(0, 1.1)
+
     return np.array([S_d_G/S_best_forward_G, S_d_M/S_best_forward_M]), (
-            available_G, available_M)
+        available_G, available_M)
 
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into

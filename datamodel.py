@@ -152,7 +152,7 @@ class Trial:
         return self.steps[-1].time
      
     def termination_condition(self):
-        """This is a helper function for the simmulation methods.
+        """This is a helper function for the simulation methods.
 
         Parameters:
         -----------
@@ -173,6 +173,21 @@ class Trial:
 
         else:
             return False
+
+    def excess_steps(self):
+        """Count total excess steps made in trial (vs shortest path).
+        """
+        if self.goal_reached:
+            shortest_path_length = self.maze.distances_dictionary[
+                    self.path[0]][self.goal]
+            actual_path_length = len(self.path) -1 #we have to subtract one
+            #   because the path includes the goal location
+
+            return int(actual_path_length - shortest_path_length)
+
+        else:
+            raise TrialNotSuccessful
+
 
 class Session:
     def __init__(self, date=None, subject=None):
@@ -207,6 +222,16 @@ class Session:
 
         return total_steps
 
+    def count_excess_steps(self):
+        """Count total number of excess steps accross trials.
+        """
+        excess_steps = 0
+        for t in self.trials:
+            if t.goal_reached:
+                excess_steps += t.excess_steps()
+
+        return excess_steps
+
     @property
     def current_trial_index(self):
         if self._current_trial_index_manually_set:
@@ -238,6 +263,11 @@ class Session:
             return mazes[0]
         else:
             return mazes
+
+    def steps(self):
+        for t in self.trials:
+            for s in t.steps:
+                yield s
 
     @property
     def trial(self):

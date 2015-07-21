@@ -108,12 +108,12 @@ class Likelihood(object):
 
 
 class MixtureLikelihood(Likelihood):
-    def __init__(self, session, nsteps=2, centrality='edge_betweenness'):
+    def __init__(self, session, nsteps=2, centrality='node_betweenness'):
         #TODO: turn nsteps into a property and make it such that changing it
         # triggers recalculation of (only) the nsteps likelihood components
         super(MixtureLikelihood, self).__init__(session)
         self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 1,
-                gamma = None, delta = None, epsilon = None, zeta = None,
+                gamma = 1, delta = 1, epsilon = 1, zeta = 1,
                 nsteps=nsteps, centrality = centrality, loc = None)
         (self.heuristic_chosen_values, self.heuristic_values) = (
                 self.agent.heuristic_agent.evaluate_session(session))

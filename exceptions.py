@@ -68,3 +68,8 @@ class UnexpectedResult(MazeXException):
 class AlgorithmFail(MazeXException):
     def __str__(self):
         return "Problem with algorithm detected!"
+
+class TrialNotSuccessful(MazeXException):
+    def __str__(self):
+        return ("This analysis method only works on successful trials (i.e. "
+                "when the goal has been reached")

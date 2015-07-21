@@ -19,6 +19,7 @@ import os
 from functools import lru_cache
 
 
+@lru_cache(maxsize=5040)
 def angle_between_nodes(loc, node1, node2):
     """A common function that determines the angle between a given edge and
     the goal.
@@ -104,6 +105,7 @@ def assert_nodes_adjacent(node1, node2):
     if np.sqrt((node2[0] - node1[0])**2 + (node2[1] - node1[1])**2) == 1:
         return True
     else:
+        #TODO: Fix this ugly hack!
         pass#raise IlegalStep
 
 def check_elements_equal(lst):
@@ -138,6 +140,7 @@ def check_list_is_empty(seq):
     except TypeError:
         return False
 
+ 
 #2520 is the number of possible combinations for a maze of 6x6
 # speed gains of caching this are in the order of only 5%
 #@lru_cache(maxsize=2520)

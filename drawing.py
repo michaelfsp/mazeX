@@ -39,6 +39,17 @@ def get_cubehelix_RGB(x, nsteps=10, vmin=0, vmax=1, scheme='green',
 #green_cubehelix_cmap = cubehelix.cmap(reverse=True, start=0, rot=0.4)
 #pink_cubehelix_cmap = cubehelix.cmap(reverse=True, start=0.5, rot=-0.75)
 
+def make_legend_arrow(legend, orig_handle, xdescent, ydescent, width, height,
+        fontsize):
+    
+    """Helper function for creating a legend for matplotlib arrow objects.
+    """
+    import matplotlib.patches as mpatches
+
+    p = mpatches.FancyArrow(0, 0.5*height, width, 0, length_includes_head=True,
+            head_width=0.75*height )
+    return p
+
 def draw_maze(M, centrality=None, ax=None, hold=None, **kwds):
     """Draw a maze configuration.
     """

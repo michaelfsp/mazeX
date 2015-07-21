@@ -42,6 +42,80 @@ def psi(Ic, Ic_exp, Ic_max):
 
     return psi_fun(float(t), Ic_max, Ic)
 
+def dist_fract(session, point, first_exit_only=True, before_transformation=False):
+    """Calculate the average direction of choices in distances metric for a
+    single point on the distances space.
+
+    It outputs 'normalized surprisal'
+
+    Parameters:
+    -----------
+        first_exit_only : Boolean
+            Consider for the analysis only the first transition out of a node
+    """
+    #TODO: Spit an error if the point does not exist
+    #FIXME: These storage of maze and goal in a step will be deprecated
+    maze = session.trial.maze
+
+    Ic = np.zeros(4)
+    Ic_max = np.zeros(4)
+    Ic_frac = np.zeros(4)
+
+    availability = np.zeros(4)
+
+    for t in session.trials:
+        try:
+            nodes_on_point = maze.distances_to_coord[point][t.goal]
+        except KeyError: # this point doesn't exist on this trial
+            continue # ignores the remaining calculations for the current
+        # iteration of this for loop
+
+        if first_exit_only:
+            step_indices = [t.path.index(n) for n in nodes_on_point if n in
+                    t.path]
+        else:
+            step_indices = []
+            for n in nodes_on_point:
+                # This list comprehension finds all occurrences of n in list 
+                # t.path, unlinke t.path.index() which returns only the first
+                # occurrence
+                # += 'appends' it to the list step_indices
+                step_indices += [i for i, x in enumerate(
+                    t.path) if x == n]
+
+        # just to save on text we will save here the parameters we need to
+        # call the function to_dist_coord()
+
+        for i in step_indices:
+            step = t.steps[i]
+            try:
+                # will fail if it is the last in the path
+                next_step = t.steps[i+1]
+            except IndexError:
+                continue # ignore current step and go to next...
+            # makes sense to not break instead in case the trial was aborted
+            # before goal was reached.
+            dist_params = (step.loc, t.maze, t.goal)
+
+            available_directions = []
+            for a in step.available_nodes:
+                available_directions.append(utils.to_dist_direction(a, *dist_params))
+            # list() so I can use output as an index
+            # set() gets only the unique indices in the list
+            # NOTE: if in the same step two maze arms represent the same
+            # direction in the distances space, that direction is counted as
+            # available only once
+            availability_indices = list(set(available_directions))
+            # [[]] makes use of advanced indexing
+            availability[[availability_indices]] += 1
+
+            index_chosen = utils.to_dist_direction(step.subsequent.loc, *dist_params)
+
+            Ic[index_chosen] += 1
+
+    return Ic/availability
+
+
 def dist_psi(session, point, first_exit_only=True, before_transformation=False):
     """Calculate the average direction of choices in distances metric for a
     single point on the distances space.
@@ -131,6 +205,20 @@ def dist_psi(session, point, first_exit_only=True, before_transformation=False):
 
         return psi_values, availability
 
+def avg_dist_fraction(session, first_exit_only=True, cutoff_availability=4,
+        plot=True, scale_bar=False, xy=(0,0)):
+    x, y = xy
+
+    maze = session.maze
+    
+    per_dist_fracs = np.zeros((len(maze.distances_to_coord.keys()),4))
+
+    for i, point in enumerate(maze.distances_to_coord.keys()):
+        per_dist_fracs[i,:] = dist_fract(session, point)
+
+    
+    return np.nanmean(per_dist_fracs, axis = 0)
+ 
 def avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
         plot=True, scale_bar=False, xy=(0,0)):
     x, y = xy
@@ -166,7 +254,7 @@ def avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
             pl.quiver(x, y, dx_sign[direction]*surprisals_xy_proj,
                    dy_sign[direction]*surprisals_xy_proj, surprisals_xy_proj,units='xy', scale=1,
                    width = 0.10, headwidth=2, linewidth = 0.5, headaxislength=2,
-                   headlength=2, zorder=2, cmap='hsv', norm=norm) 
+                   headlength=2, zorder=2, cmap='cubehelix_r', norm=norm) 
             # now we overlay only the part of the 'arrow' that goes up to 0.5
             # by passing it through a thresholding function
 
@@ -196,8 +284,6 @@ def avg_dist_psi(session, first_exit_only=True, cutoff_availability=4,
             # pl.xlim(-1, 1)
             # pl.ylim(-1, 1)
             
-            # import ipdb; ipdb.set_trace()
-
     return psi_values, availability
         
 def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
@@ -254,10 +340,13 @@ def per_dist_psi(session, first_exit_only=True, cutoff_availability=4,
                    dy_sign[direction]*surprisals_xy_proj, units='xy', scale=1,
                    color='r', width=0.15, headwidth=1, headlength=0.5, zorder=2) 
             '''
-            #import ipdb; ipdb.set_trace()
-            pl.quiver(xy[:,0][mask], xy[:,1][mask], dx_sign[direction]*surprisals_xy_proj[mask],
-                   dy_sign[direction]*surprisals_xy_proj[mask], dir_surprisals_dir[mask],
-                   units='xy', scale=1.33, width = 0.10, headwidth=2, linewidth = 0.5, headaxislength=2, headlength=2, zorder=2, cmap='hsv', norm=norm)
+            pl.quiver(xy[:,0][mask], xy[:,1][mask],
+                    dx_sign[direction]*surprisals_xy_proj[mask],
+                    dy_sign[direction]*surprisals_xy_proj[mask],
+                    dir_surprisals_dir[mask], units='xy', scale=1.33,
+                    width = 0.10, headwidth=2, linewidth = 0.5,
+                    headaxislength=2, headlength=2, zorder=2, cmap='cubehelix_r',
+                    norm=norm)
             #scale=1, width=0.25, headwidth=2, headlength=2,
             # now we overlay only the part of the 'arrow' that goes up to 0.5
             # by passing it through a thresholding function
