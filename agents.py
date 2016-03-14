@@ -11,7 +11,7 @@ import mazex as mx
 from mazex.exceptions import *
 from mazex.utils import (angle_between_nodes, assert_is_node,
 assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
-get_angles_dictionary, manhattan_distance, scale_dict_values)
+manhattan_distance, scale_dict_values)
 
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
@@ -674,6 +674,57 @@ class HeuristicAgent(Agent):
         else:
             values = dist_val
  
+        return values
+
+class ManhattanAgent(Agent):
+    def __init__(self, beta=1, xi=3, loc=None, penalty_criterium='node',
+            penalty_type='exponential', heading=None):
+        """Creates an agent that follows a Manhattan distance heuristic.
+
+        Parameters:
+        -----------
+        """
+        super(ManhattanAgent, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium, penalty_type=penalty_type,
+                heading=heading)
+
+    def evaluate(self, nodeslist, goal, penalties=True):
+        """Returns a vector with the edge values of each edge given as
+        input.
+        
+        Parameters:
+        -----------
+        nodeslist : list of np.array, dim=1
+            Nodes for which the transition to is to be evaluated.
+
+        goal : node
+            Location of goal.
+        """
+
+        # this little trick makes the method work even if not a list
+        # but a single node is passed
+        try:
+            assert_is_node(nodeslist)
+            nodeslist = [nodeslist]
+        except InvalidNode:
+            pass
+        
+        current_manhattan_distance = manhattan_distance(self.loc, goal)
+
+        values = []
+        for n in nodeslist:
+            if manhattan_distance(n, goal) < current_manhattan_distance:
+                values.append(1)
+            else:
+                values.append(-1)
+
+        values = np.array(values)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
         return values
 
 class CentralityAgent(Agent):
