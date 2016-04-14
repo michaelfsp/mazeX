@@ -266,7 +266,7 @@ class SquareMaze(nx.classes.graph.Graph):
 class RandomSquareMaze(SquareMaze):
     """Generator of SuqareMaze with random connections.
     """
-    def __new__(self, size, connectedness):
+    def __new__(self, size, n_connections):
         """Generates a SquareMaze with random connectivity of
         given connectedness.
 
@@ -275,13 +275,12 @@ class RandomSquareMaze(SquareMaze):
         size : int
             Maze size. Number of nodes will be size*size.
 
-        connectedness : float [0,1]
-            Fraction of all possible connections that actually exist.
+        n_connections : int
+            Number of edges desired in the maze.
         """
         maze = SquareMaze(size)
 
-        edges_to_add = random.sample(maze.possible_edges, round(
-            maze.n_possible_edges*connectedness)) 
+        edges_to_add = random.sample(maze.possible_edges, n_connections) 
 
         maze.add_edges_from(edges_to_add)
 
