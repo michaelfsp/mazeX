@@ -331,7 +331,23 @@ def number_connected_non_isomorphic_mazes(size, n_edges, n_samples=10000,
     '''This function tries to estimate the number of existing connected mazes
     of a given size that are non-isomorphic, i.e., excluding mazes which are
     equivalent by some internal symmetry through a Monte Carlo sampling
-    approach.'''
+    approach.
+    
+    The algorithm is the following:
+        Sample n_edges from the list of possible square mazes of size = size
+        Append that to mazes list
+        Check if it is a repetition
+            if: break
+            else: check the following:
+                if it is disconnected
+                if it is isomorphic to any maze on mazes list
+        Back to step one
+        
+        Count number of disconnected and isomorphisms and accepted mazes (what
+        is left after those checks)
+        
+        Calculate the fraction of accepted mazes and multiply that by the total
+        number of possible mazes.'''
     n_possible_mazes = number_possible_mazes(size, n_edges)
     # we initiate the counters that will allow us to estimate the fractions
     # we only need one of these but will keep both for a sanity check
@@ -343,18 +359,17 @@ def number_connected_non_isomorphic_mazes(size, n_edges, n_samples=10000,
     mazes = []
     # Generate first maze
     maze = mx.RandomSquareMaze(size, n_edges)
-    while not nx.is_connected(maze):
-        # If it is not connected we need to generate another one
-        n_excluded_not_connected += 1
-        maze = mx.RandomSquareMaze(size, n_edges)
-
     mazes.append(maze)
-    n_accepted += 1
+    # now we check to which category we count the first maze
+    # first we check if it is disconnected:
+    if not nx.is_connected(maze):
+        n_excluded_not_connected += 1
+    else:
+        n_accepted += 1
     
-    sample_n = 1 + n_excluded_not_connected
+    sample_n = 1
     while sample_n < n_samples:
         maze = mx.RandomSquareMaze(size, n_edges)
-        is_same = False
 
         # we check if this is not a repetition
         maze_edges = maze.edges()
@@ -366,11 +381,8 @@ def number_connected_non_isomorphic_mazes(size, n_edges, n_samples=10000,
             if m_edges == maze_edges:
                 # it is a repetition, we count it and go on to the next maze
                 n_excluded_is_same += 1
-                is_same = True
                 break #breaks search for same maze
         else:
-            if is_same == True:
-                print('shouldnt happen')
             # this is a novel maze
             # NOTE: this else belongs to for!!
             # this block of code is only executed if the above for is exausted
@@ -407,7 +419,6 @@ def number_connected_non_isomorphic_mazes(size, n_edges, n_samples=10000,
     print('\nDifferent mazes searched: %i' % len(mazes))            
     print('\nOrder of magnitude of mazes: %f' % np.log10(fraction_accepted *
         n_possible_mazes))
-
 
     return fraction_accepted * n_possible_mazes
 
