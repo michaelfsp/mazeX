@@ -326,8 +326,7 @@ def number_possible_mazes(size, n_edges):
     return int(math.factorial(n_possible_edge_locations)/(math.factorial(
         n_possible_edge_locations-n_edges)*math.factorial(n_edges)))
 
-def number_connected_non_isomorphic_mazes(size, n_edges, n_samples=10000,
-        verbose=True):
+def number_connected_non_isomorphic_mazes(size, n_edges, n_samples=10000):
     '''This function tries to estimate the number of existing connected mazes
     of a given size that are non-isomorphic, i.e., excluding mazes which are
     equivalent by some internal symmetry through a Monte Carlo sampling
@@ -421,6 +420,100 @@ def number_connected_non_isomorphic_mazes(size, n_edges, n_samples=10000,
         n_possible_mazes))
 
     return fraction_accepted * n_possible_mazes
+
+def number_connected_non_isomorphic_mazes_with_rep(size, n_edges,
+        n_samples=10000):
+    '''This function tries to estimate the number of existing connected mazes
+    of a given size that are non-isomorphic, i.e., excluding mazes which are
+    equivalent by some internal symmetry through a Monte Carlo sampling
+    approach.
+    
+    The algorithm is the following:
+        Sample n_edges from the list of possible square mazes of size = size
+        Append that to mazes list
+        Check if it is a repetition
+            if: break
+            else: check the following:
+                if it is disconnected
+                if it is isomorphic to any maze on mazes list
+        Back to step one
+        
+        Count number of disconnected and isomorphisms and accepted mazes (what
+        is left after those checks)
+        
+        Calculate the fraction of accepted mazes and multiply that by the total
+        number of possible mazes.'''
+    n_possible_mazes = number_possible_mazes(size, n_edges)
+    # we initiate the counters that will allow us to estimate the fractions
+    # we only need one of these but will keep both for a sanity check
+    n_excluded_not_connected = 0
+    n_excluded_isomorphic = 0
+    n_excluded_is_same = 0
+    n_accepted = 0
+    
+    mazes = []
+    # Generate first maze
+    maze = mx.RandomSquareMaze(size, n_edges)
+    mazes.append(maze)
+    # now we check to which category we count the first maze
+    # first we check if it is disconnected:
+    if not nx.is_connected(maze):
+        n_excluded_not_connected += 1
+    else:
+        n_accepted += 1
+    
+    sample_n = 1
+    while sample_n < n_samples:
+        maze = mx.RandomSquareMaze(size, n_edges)
+
+        if not nx.is_connected(maze):
+            n_excluded_not_connected += 1
+            sample_n += 1
+            mazes.append(maze)
+            continue # go on with the next maze
+
+        for m in mazes:
+            if nx.is_isomorphic(m, maze):
+                # we check that the isomorphic maze is not itself
+                maze_edges = maze.edges()
+                maze_edges.sort()
+                    
+                m_edges = m.edges()
+                m_edges.sort()
+
+                if m_edges == maze_edges:
+                    # it is a repetition, we count it and try to see if there
+                    #  are nevertheless isomorphisms with other mazes already
+                    #  in the list
+                    n_excluded_is_same += 1
+                    continue # carries on finding isomorphisms
+
+                else:
+                    # it is a true isomorphism
+                    n_excluded_isomorphic += 1
+                    sample_n += 1
+                    mazes.append(maze)
+                    break
+        else:
+            # this maze is a survivor!
+            # neither disconnected, nor isomorphic but it might be a repetition
+            n_accepted += 1
+            sample_n += 1
+            mazes.append(maze)
+
+    fraction_accepted = n_accepted / (n_accepted + n_excluded_not_connected +
+            n_excluded_isomorphic)
+
+    print('N_accepted: %i \nN_same: %i \nN_not_connected: %i \nN_isomorphic: %i'
+            % (n_accepted, n_excluded_is_same, n_excluded_not_connected,
+                n_excluded_isomorphic))
+
+    print('\nDifferent mazes searched: %i' % len(mazes))            
+    print('\nOrder of magnitude of mazes: %f' % np.log10(fraction_accepted *
+        n_possible_mazes))
+
+    return fraction_accepted * n_possible_mazes
+
 
 """
 def list_angles_in_dictionary(dic):
