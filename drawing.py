@@ -73,11 +73,11 @@ def draw_maze(M, centrality=None, ax=None, hold=None, **kwds):
 
     else:
         import matplotlib as mpl
-        import seaborn.apionly as sns
+        import seaborn.apionly as sns_api
         from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-        nodes_cm = sns.cubehelix_palette(40, as_cmap=True)
-        edges_cm = sns.cubehelix_palette(40, start=.5, rot=-.75, as_cmap=True)
+        nodes_cm = sns_api.cubehelix_palette(40, as_cmap=True)
+        nodes_cm = sns_api.cubehelix_palette(40, start=.5, rot=-.75, as_cmap=True)
 
         if centrality == 'betweenness':
             centralities = nx.centrality.betweenness_centrality(M)
