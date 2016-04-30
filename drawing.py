@@ -14,10 +14,11 @@ def get_cubehelix_RGB(x, nsteps=10, vmin=0, vmax=1, scheme='green',
         hexadecimal=False):
     """Maps a scalar to an RGB tuple from the seaborn version of cubehelix.
     """
+    import sns.apionly as sns_api
     if scheme == 'green':
-        colors = sns.cubehelix_palette(nsteps, start=.5, rot=-.75)
+        colors = sns_api.cubehelix_palette(nsteps, start=.5, rot=-.75)
     elif scheme == 'pink':
-        colors = sns.cubehelix_palette(nsteps)
+        colors = sns_api.cubehelix_palette(nsteps)
 
     # Normalize x to the range [0,1]
     x = (x - vmin) / (vmax - vmin)
