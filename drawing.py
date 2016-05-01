@@ -51,9 +51,30 @@ def make_legend_arrow(legend, orig_handle, xdescent, ydescent, width, height,
             head_width=0.75*height )
     return p
 
-def draw_maze(M, centrality=None, ax=None, hold=None, **kwds):
+def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
+        vmin=None, vmax=None, colorbars=False, ax=None, hold=None, **kwds):
     """Draw a maze configuration.
+
+    Optional parameters:
+    --------------------
+    edge_centrality : boolean
+        plotting edge centrality is now off by default
+
+    simple_nodes : boolean
+        if True, a single circle instead of the classic two concentric circles
+            is used to represent a node
+
+    vmin : float 
+        value for centrality colormap normalization
+
+    vmax : float 
+        value for centrality colormap normalization
+
+    colorbars : boolean
+        if True, the colorbars indicating the scale of values of centrality is
+            plotted next to the maze depiction.
     """
+    #TODO: group all options desireable for a colormap in one function argument
     if not isinstance(M, SquareMaze):
         raise DrawException
     if not ax:
@@ -85,68 +106,87 @@ def draw_maze(M, centrality=None, ax=None, hold=None, **kwds):
         elif centrality == 'closeness':
             centralities = nx.centrality.closeness_centrality(M)
     
-        vmin_nodes = min(list(centralities.values()))
-        vmax_nodes = max(list(centralities.values()))
+        if vmin:
+            vmin_nodes = vmin
+        else:
+            vmin_nodes = min(list(centralities.values()))
+        
+        if vmax:
+            vmax_nodes = vmax
+        else:
+            vmax_nodes = max(list(centralities.values()))
+
         n_colors = []
         for n in M.nodes():
             n_colors.append(centralities[n])
 
-        #nodes_cmap = cubehelix.cmap(reverse=True, start=0.5, rot=-0.75,
-        #vmin=vmin_nodes, vmax=vmax_nodes)
-
         if isinstance(M, SquareMaze):
-            edge_centralities = nx.centrality.edge_betweenness_centrality(M)
-            vmin_edges = min(list(edge_centralities.values()))
-            vmax_edges = max(list(edge_centralities.values()))
-            #edges_cmap = cubehelix.cmap(reverse=True, start=0, rot=0.4,
-            #vmin=vmin_edges, vmax=vmax_edges)
-            e_colors = []
-            for e in M.edges():
-                e_colors.append(edge_centralities[e])
-
             nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=True,
                     node_color=n_colors,
                     cmap=nodes_cm, vmin=vmin_nodes,
                     vmax=vmax_nodes,linewidths=0, node_size=800, width=6,
                     **kwds)
-            nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='white', linewidths=0,
-                    node_size=350)
-            nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color=n_colors,
-                    cmap=nodes_cm, vmin=vmin_nodes, vmax=vmax_nodes, linewidths=0,
-                    node_size=100)
+            if not simple_nodes:
+                nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='white', linewidths=0,
+                        node_size=350)
+                nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color=n_colors,
+                        cmap=nodes_cm, vmin=vmin_nodes, vmax=vmax_nodes, linewidths=0,
+                        node_size=100)
             
-            nx.draw_networkx_edges(M, pos=M.pos, ax=ax, hold=hold,
-                    edge_color=e_colors, edge_cmap=edges_cm, vmin=vmin_edges,
-                    vmax=vmax_edges, width=6.0)
+            if edge_centrality:
+                edges_cm = sns_api.cubehelix_palette(40, start=.5, rot=-.75, as_cmap=True)
+                edge_centralities = nx.centrality.edge_betweenness_centrality(M)
+                vmin_edges = min(list(edge_centralities.values()))
+                vmax_edges = max(list(edge_centralities.values()))
+                e_colors = []
+                for e in M.edges():
+                    e_colors.append(edge_centralities[e])
+
+                nx.draw_networkx_edges(M, pos=M.pos, ax=ax, hold=hold,
+                        edge_color=e_colors, edge_cmap=edges_cm, vmin=vmin_edges,
+                        vmax=vmax_edges, width=6.0)
+
+            else:
+                nx.draw_networkx_edges(M, pos=M.pos, ax=ax, hold=hold,
+                        width=6.0)#, edge_color='#797b8c')
 
             # Create the colorbar for the nodes' centrality
             # 1st: create the axes to be used for the colorbars
             ax = pl.gca()
-            print(ax.get_xlim())
             ax.set_xlim((-0.5, M.size-0.5))
             ax.set_ylim((-0.5, M.size-0.5))
             ax.set_xticks([])
             ax.set_yticks([])
             ax.spines.clear()
-            divider = make_axes_locatable(ax)
-            n_cbar_ax = divider.append_axes('right', size='5%', pad=0.05)
-            e_cbar_ax = divider.append_axes('bottom', size='5%', pad=0.05)
+            if colorbars:
+                divider = make_axes_locatable(ax)
+                n_cbar_ax = divider.append_axes('right', size='5%', pad=0.05)
+                
+                # Create the colorbar for the nodes' centrality
+                n_norm = mpl.colors.Normalize(vmin=vmin_nodes, vmax=vmax_nodes)
+                n_ticks = [round(vmin_nodes, 3), round(vmax_nodes, 3)]
+                n_cbar = mpl.colorbar.ColorbarBase(n_cbar_ax, cmap=nodes_cm,
+                        norm=n_norm, ticks=n_ticks)
+                n_cbar.set_label('Node %s centrality' % (centrality))
 
-            # Create the colorbar for the nodes' centrality
-            n_norm = mpl.colors.Normalize(vmin=vmin_nodes, vmax=vmax_nodes)
-            n_ticks = [round(vmin_nodes, 3), round(vmax_nodes, 3)]
-            n_cbar = mpl.colorbar.ColorbarBase(n_cbar_ax, cmap=nodes_cm,
-                    norm=n_norm, ticks=n_ticks)
-            n_cbar.set_label('Node %s centrality' % (centrality))
+                if edge_centrality:
+                    # 1st: create the axes to be used for the colorbars
+                    e_cbar_ax = divider.append_axes('bottom', size='5%',
+                            pad=0.05)
 
-            # Create the colorbar for the edges' centrality
-            e_norm = mpl.colors.Normalize(vmin=vmin_edges, vmax=vmax_edges)
-            e_ticks = [round(vmin_edges, 3), round(vmax_edges, 3)]
-            e_cbar = mpl.colorbar.ColorbarBase(e_cbar_ax, cmap=edges_cm,
-                    norm=e_norm, ticks=e_ticks, orientation='horizontal')
-            e_cbar.set_label('Edge betweenness centrality')
+                    # Create the colorbar for the edges' centrality
+                    e_norm = mpl.colors.Normalize(vmin=vmin_edges,
+                            vmax=vmax_edges)
+                    e_ticks = [round(vmin_edges, 3), round(vmax_edges, 3)]
+                    e_cbar = mpl.colorbar.ColorbarBase(e_cbar_ax,
+                            cmap=edges_cm, norm=e_norm, ticks=e_ticks,
+                            orientation='horizontal')
+                    e_cbar.set_label('Edge betweenness centrality')
 
             pl.tight_layout()
+
+        else:
+            raise DrawException
 
 def draw_step(S, goal_only=False, ax=None, hold=None, **kwds):
     """Represent a maze configuration.
