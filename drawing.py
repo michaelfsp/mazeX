@@ -105,7 +105,19 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
 
         elif centrality == 'closeness':
             centralities = nx.centrality.closeness_centrality(M)
-    
+
+        elif centrality == 'degree':
+            centralities = nx.centrality.degree_centrality(M)
+
+        elif centrality == 'communicability_betweenness':
+            centralities = nx.centrality.communicability_betweenness_centrality(M)
+
+        elif centrality == 'current_flow_betweenness':
+            #NOTE: HACK - we have to create a Graph from maze or else networkx
+            # complains about not getting argument 'size'
+            centralities = nx.centrality.current_flow_betweenness_centrality(
+                    nx.Graph(M))
+
         if vmin:
             vmin_nodes = vmin
         else:
@@ -126,6 +138,7 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
                     cmap=nodes_cm, vmin=vmin_nodes,
                     vmax=vmax_nodes,linewidths=0, node_size=800, width=6,
                     **kwds)
+
             if not simple_nodes:
                 nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='white', linewidths=0,
                         node_size=350)
