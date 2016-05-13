@@ -6,6 +6,7 @@ import math
 import networkx as nx
 from mazex.exceptions import *
 
+import copy
 import mazex as mx
 
 # These imports are only used by the generate_von_Mises_dictionary function
@@ -13,6 +14,7 @@ import mazex as mx
 #  the imports
 import shelve
 from scipy.stats import vonmises
+from scipy.spatial.distance import euclidean
 
 # this import was problematic when left here so I moved it to inside the
 # function where it was actually used
@@ -577,6 +579,175 @@ def max_distances(maze, goals=None):
     max_distances_all = np.array(max_distances_all)
     return max_distances_all.max(0)
 
+def find_pareto_front(point_cloud):
+    ''' Find pareto front by sorting point_cloud in decending x coordinate,
+    adding the first point to the front, then going down the points and adding
+    to the front each point whose y coordinate is larger than that of the 
+    last point on the front.
+    
+    Written by Thomas Akam
+    '''
+    sorted_point_cloud = point_cloud[(-point_cloud[:,0]).argsort()]
+    pareto_front = [sorted_point_cloud[0]]
+    for point in sorted_point_cloud[1:,:]:
+        if point[1] > pareto_front[-1][1]:
+            pareto_front.append(point)
+    return np.array(pareto_front)
+
+def find_pareto_fronts(point_cloud, n_fronts):
+    ''' Find a set of fronts 
+
+    Written by Thomas Akam
+    '''
+    sorted_point_cloud = point_cloud[(-point_cloud[:,0]).argsort()]
+    pareto_fronts = [[(None,-np.inf)] for _ in range(n_fronts)]
+    for point in sorted_point_cloud:
+        for front in pareto_fronts:
+            if point[1] > front[-1][1]:
+                front.append(point)
+                break
+    pareto_fronts = [np.array(front[1:]) for front in pareto_fronts]
+    return pareto_fronts
+
+def find_pareto_front_by_thirds(cost_values, n=15):
+    """Return the indices of elements on the Pareto front, split by thirds.
+
+    Array should be 2xN
+    """
+    # center the values
+    centered_cost_values = cost_values - np.transpose([cost_values.mean(
+        axis=1)])
+    # normalize the values to max
+    maxima = np.max(centered_cost_values, axis=1)
+    centered_cost_values /= np.transpose([maxima])
+
+    #NOTE: notice this renaming
+    cost_values = centered_cost_values
+
+    # we get the indices of elements on the positive quadrant
+    positive_indices = np.nonzero(np.all(centered_cost_values>0, axis=0))[0]
+
+    # here we haven't yet constrained it to the positive values!
+    upper_third_i = np.nonzero(cost_values[1,:]>(np.sin(
+        2*np.pi/6)/np.cos(2*np.pi/6))*cost_values[0,:])
+    lower_third_i = np.nonzero(cost_values[1,:]<(np.sin(
+        1*np.pi/6)/np.cos(1*np.pi/6))*cost_values[0,:])
+    middle_third_i = np.nonzero((cost_values[1,:]>(np.sin(
+        1*np.pi/6)/np.cos(1*np.pi/6))*cost_values[0,:])&(
+            cost_values[1,:]<(np.sin(2*np.pi/6)/np.cos(
+                2*np.pi/6))*cost_values[0,:]))
+
+    # now we get indices that are on each third of the positive quadrant
+    pos_upper_third_i = np.intersect1d(positive_indices, upper_third_i)
+    pos_lower_third_i = np.intersect1d(positive_indices, lower_third_i)
+    pos_middle_third_i = np.intersect1d(positive_indices, middle_third_i)
+
+    # we get the array of sorting indices in reverse order so we can then
+    # iterate over them
+    sorting_i = np.flipud(np.argsort(np.sum(centered_cost_values**2, axis=0)))
+
+    pareto_front_upper_i = []
+    pareto_front_lower_i = []
+    pareto_front_middle_i = []
+    
+    #TODO: fix bug that causes the length of the different outputs to be
+    # different
+    j = 0
+    while (len(pareto_front_lower_i)<n or len(pareto_front_middle_i)<n or
+            len(pareto_front_upper_i)<n):
+        if sorting_i[j] in pos_upper_third_i:
+            pareto_front_upper_i.append(sorting_i[j])
+        elif sorting_i[j] in pos_lower_third_i:
+            pareto_front_lower_i.append(sorting_i[j])
+        elif sorting_i[j] in pos_middle_third_i:
+            pareto_front_middle_i.append(sorting_i[j])
+        j += 1
+
+    return pareto_front_upper_i, pareto_front_lower_i, pareto_front_middle_i
+
+
+def rmse(predictions, targets):
+    """Calculates Root Mean Squared Error.
+    """
+    #the following might be faster than the current implementation
+    #n = len(predictions)
+    #rmse = np.linalg.norm(predictions - targets) / np.sqrt(n)
+    #return rmse
+    if type(predictions) is list:
+        predictions = np.array(predictions)
+
+    if type(targets) is list:
+        targets = np.array(targets)
+ 
+    return np.sqrt(((predictions - targets) ** 2).mean())
+
+def distance_along_line(array):
+    """Given a set of points, return a tuple with sections along the line.
+
+    Assumes that array is sorted.
+
+    Returns indices only
+    """
+    array = copy.deepcopy(array)
+    # First we need to normalize the array
+    # find the largest dimension axis
+    long_axis = np.argmax(array.shape)
+    min_vals = np.min(array, axis=long_axis)
+    array -= min_vals
+    max_vals = np.max(array, axis=long_axis)
+    array /= max_vals
+
+    distance_along_line = np.zeros(max(array.shape))
+    for i, point in enumerate(array[:-1]):
+        # Calculate distance to previous point
+        d_to_next = euclidean(array[i], array[i+1])
+
+        # sum that distance to the cumulative distance (running integral)
+        total_d = d_to_next + distance_along_line[i]
+        distance_along_line[i+1] = total_d
+
+    return distance_along_line
+
+def sectioned_pareto_front(array, n_sections):
+    """Given a set of points, return a tuple with sections along the line.
+
+    Assumes that array is sorted.
+
+    Returns indices only
+    """
+    array = copy.deepcopy(array)
+    # First we need to normalize the array
+    # find the largest dimension axis
+    long_axis = np.argmax(array.shape)
+    min_vals = np.min(array, axis=long_axis)
+    array -= min_vals
+    max_vals = np.max(array, axis=long_axis)
+    array /= max_vals
+
+    distance_along_line = np.zeros(max(array.shape))
+    for i, point in enumerate(array[:-1]):
+        # Calculate distance to previous point
+        d_to_next = euclidean(array[i], array[i+1])
+
+        # sum that distance to the cumulative distance (running integral)
+        total_d = d_to_next + distance_along_line[i]
+        distance_along_line[i+1] = total_d
+
+    line_length = distance_along_line[-1]
+
+    section_length = line_length / n_sections
+
+    section_limits = [i*section_length for i in range(n_sections+1)]
+
+    section_indices = np.array(np.zeros(max(array.shape)))
+    current_index = 0 
+    for i, d in enumerate(distance_along_line):
+        if  d > section_limits[current_index+1]:
+            current_index += 1
+        section_indices[i] = current_index
+    
+    return section_indices
+ 
 def scale_dict_values(dic, high=1.0, low=0.0):
     """Scale the values in a dictionary to a [low, high] range while
     preserving the key->value pairing.
