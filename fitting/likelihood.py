@@ -108,7 +108,7 @@ class Likelihood(object):
 
 
 class MixtureLikelihood(Likelihood):
-    def __init__(self, session, nsteps=2, centrality='node_betweenness'):
+    def __init__(self, session, nsteps=2, centrality='edge_betweenness'):
         #TODO: turn nsteps into a property and make it such that changing it
         # triggers recalculation of (only) the nsteps likelihood components
         super(MixtureLikelihood, self).__init__(session)
