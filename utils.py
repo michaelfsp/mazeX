@@ -552,7 +552,7 @@ def max_distances(maze, goals=None):
     # first axis
     if not goals:
         max_maze_distance = nx.algorithms.distance_measures.diameter(maze)
-        max_manhattan_distance = 2 * (maze.size-1)
+        max_manhattan_distance = 2 * (maze.maze_size-1)
         return (max_maze_distance, max_manhattan_distance)
 
     # In case only one goal was passed as argument
@@ -569,9 +569,9 @@ def max_distances(maze, goals=None):
         max_maze_distance = nx.algorithms.distance_measures.eccentricity(maze,
                 goal)
         # find largest x distance to this goal
-        max_x_dist = max((goal[0], maze.size-1 - goal[0]))
+        max_x_dist = max((goal[0], maze.maze_size-1 - goal[0]))
         # same for y
-        max_y_dist = max((goal[1], maze.size-1 - goal[1]))
+        max_y_dist = max((goal[1], maze.maze_size-1 - goal[1]))
         max_manhattan_distance = max_x_dist + max_y_dist
 
         max_distances_all.append([max_maze_distance, max_manhattan_distance])

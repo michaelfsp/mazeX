@@ -24,16 +24,16 @@ def cached_closeness_centrality(maze):
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
     """
-    def __init__(self, size):
-        """Generates a square maze of given size and no connections.
-        Total number of nodes will size**2.
+    def __init__(self, maze_size):
+        """Generates a square maze of given maze_size and no connections.
+        Total number of nodes will maze_size**2.
         """
         super(SquareMaze, self).__init__()
 
-        for i in np.ndindex((size, size)):
+        for i in np.ndindex((maze_size, maze_size)):
             super(SquareMaze, self).add_node(i, attr_dict={'pos':i})
 
-        self.size = size
+        self.maze_size = maze_size
 
         # We will calculate the distances matrix once and then only
         # recalculate if either the nodes or eges of the maze have changed
@@ -143,7 +143,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
     @property
     def n_possible_edges(self):
-        return 2*((self.size**2)-self.size)
+        return 2*((self.maze_size**2)-self.maze_size)
 
     def adjacent_neighbors(self, n):
         """Returns a list of nodes located in the immediate physical
@@ -171,7 +171,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
     def randomgoals(self, n):
         """Retrieve a generator of a node sequence where nodes have been
-        randomly sampled ensuring no repetition in every cycle of size**2
+        randomly sampled ensuring no repetition in every cycle of maze_size**2
         elements or between any two subsequent elements (relevant for the
         transition between cycles.
 
@@ -185,7 +185,7 @@ class SquareMaze(nx.classes.graph.Graph):
         last_retrieved = None
 
         while n_retrieved < n:
-            if n_retrieved == 0 or n_retrieved % self.size**2 == 0:
+            if n_retrieved == 0 or n_retrieved % self.maze_size**2 == 0:
                 goals = self.nodes()
                 random.shuffle(goals)
 
@@ -266,19 +266,19 @@ class SquareMaze(nx.classes.graph.Graph):
 class RandomSquareMaze(SquareMaze):
     """Generator of SuqareMaze with random connections.
     """
-    def __new__(self, size, n_connections):
+    def __new__(self, maze_size, n_connections):
         """Generates a SquareMaze with random connectivity of
         given connectedness.
 
         Parameters:
         -----------
-        size : int
-            Maze size. Number of nodes will be size*size.
+        maze_size : int
+            Maze size. Number of nodes will be maze_size*maze_size.
 
         n_connections : int
             Number of edges desired in the maze.
         """
-        maze = SquareMaze(size)
+        maze = SquareMaze(maze_size)
 
         edges_to_add = random.sample(maze.possible_edges, n_connections) 
 
@@ -291,13 +291,13 @@ class RandomButConnectedSquareMaze(SquareMaze):
 
     Parameters:
     -----------
-    size : int
-        Maze size. Number of nodes will be size*size.
+    maze_size : int
+        Maze size. Number of nodes will be maze_size*maze_size.
 
     connectedness : float [0,1]
         Fraction of all possible connections that actually exist.
     """
-    def __new__(self, size, n_connections):
+    def __new__(self, maze_size, n_connections):
         """Generates a SquareMaze with random connectivity of
         given connectedness.
         
@@ -306,17 +306,17 @@ class RandomButConnectedSquareMaze(SquareMaze):
 
         Parameters:
         -----------
-        size : int
-            Maze size. Number of nodes will be size*size.
+        maze_size : int
+            Maze size. Number of nodes will be maze_size*maze_size.
 
-        n_connections : int [(size**2)-1, 2*((size**2)-size)]
+        n_connections : int [(maze_size**2)-1, 2*((maze_size**2)-maze_size)]
             Number of connections
         """
-        if n_connections < (size**2)-1 or n_connections > 2*(
-                (size**2)-size):
+        if n_connections < (maze_size**2)-1 or n_connections > 2*(
+                (maze_size**2)-maze_size):
             raise NumberEdgesException
 
-        maze = SquareMaze(size)
+        maze = SquareMaze(maze_size)
 
         maze.add_edges_from(maze.possible_edges)
         

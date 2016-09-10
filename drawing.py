@@ -166,8 +166,8 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
             # Create the colorbar for the nodes' centrality
             # 1st: create the axes to be used for the colorbars
             ax = pl.gca()
-            ax.set_xlim((-0.5, M.size-0.5))
-            ax.set_ylim((-0.5, M.size-0.5))
+            ax.set_xlim((-0.5, M.maze_size-0.5))
+            ax.set_ylim((-0.5, M.maze_size-0.5))
             ax.set_xticks([])
             ax.set_yticks([])
             ax.spines.clear()
