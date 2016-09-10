@@ -51,8 +51,9 @@ def make_legend_arrow(legend, orig_handle, xdescent, ydescent, width, height,
             head_width=0.75*height )
     return p
 
-def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
-        vmin=None, vmax=None, colorbars=False, ax=None, hold=None, **kwds):
+def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
+        nvmin=None, nvmax=None, evmin=None, evmax=None, colorbars=False,
+        ax=None, hold=None, **kwds):
     """Draw a maze configuration.
 
     Optional parameters:
@@ -64,11 +65,17 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
         if True, a single circle instead of the classic two concentric circles
             is used to represent a node
 
-    vmin : float 
-        value for centrality colormap normalization
+    nvmin : float 
+        value for node centrality colormap normalization
 
-    vmax : float 
-        value for centrality colormap normalization
+    nvmax : float 
+        value for node centrality colormap normalization
+
+    evmin : float 
+        value for edge centrality colormap normalization
+
+    evmax : float 
+        value for edge centrality colormap normalization
 
     colorbars : boolean
         if True, the colorbars indicating the scale of values of centrality is
@@ -97,9 +104,12 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
         import seaborn.apionly as sns_api
         from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-        nodes_cm = sns_api.cubehelix_palette(40, as_cmap=True)
-        nodes_cm = sns_api.cubehelix_palette(40, start=.5, rot=-.75, as_cmap=True)
-
+        #nodes_cm = sns_api.cubehelix_palette(40, as_cmap=True)
+        #TODO: fix cubehelix palette parameters!!
+        #nodes_cm = sns_api.cubehelix_palette(40, start=.5, rot=-.75,
+        #        as_cmap=True)
+        nodes_cm = sns_api.cubehelix_palette(60, start=0.5, rot=-0.75,
+                gamma=1, hue=1, reverse=False, light=0.85, dark=0.15, as_cmap=True)
         if centrality == 'betweenness':
             centralities = nx.centrality.betweenness_centrality(M)
 
@@ -118,15 +128,11 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
             centralities = nx.centrality.current_flow_betweenness_centrality(
                     nx.Graph(M))
 
-        if vmin:
-            vmin_nodes = vmin
-        else:
-            vmin_nodes = min(list(centralities.values()))
+        if not nvmin:
+            nvmin = min(list(centralities.values()))
         
-        if vmax:
-            vmax_nodes = vmax
-        else:
-            vmax_nodes = max(list(centralities.values()))
+        if not nvmax:
+            nvmax = max(list(centralities.values()))
 
         n_colors = []
         for n in M.nodes():
@@ -134,30 +140,39 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
 
         if isinstance(M, SquareMaze):
             nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=True,
-                    node_color=n_colors,
-                    cmap=nodes_cm, vmin=vmin_nodes,
-                    vmax=vmax_nodes,linewidths=0, node_size=800, width=6,
+                    node_color=n_colors, cmap=nodes_cm, vmin=nvmin,
+                    vmax=nvmax, linewidths=0, node_size=800, width=6,
                     **kwds)
 
             if not simple_nodes:
                 nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='white', linewidths=0,
                         node_size=350)
                 nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color=n_colors,
-                        cmap=nodes_cm, vmin=vmin_nodes, vmax=vmax_nodes, linewidths=0,
+                        cmap=nodes_cm, vmin=nvmin, vmax=nvmax, linewidths=0,
                         node_size=100)
             
             if edge_centrality:
-                edges_cm = sns_api.cubehelix_palette(40, start=.5, rot=-.75, as_cmap=True)
                 edge_centralities = nx.centrality.edge_betweenness_centrality(M)
-                vmin_edges = min(list(edge_centralities.values()))
-                vmax_edges = max(list(edge_centralities.values()))
+
+                if not evmin:
+                    evmin = min(list(edge_centralities.values()))
+                
+                if not evmax:
+                    evmax = max(list(edge_centralities.values()))
+
+                edges_cm = sns_api.cubehelix_palette(60, start=0.5, rot=-0.75,
+                        gamma=1, hue=1, reverse=False, light=0.85, dark=0.15, as_cmap=True)
+                #edges_cm = sns_api.cubehelix_palette(40, start=.5, rot=-.75, as_cmap=True)
+                #edges_cm = sns_api.cubehelix_palette(60, start=.5, rot=-.75,
+                #        as_cmap=True)
+
                 e_colors = []
                 for e in M.edges():
                     e_colors.append(edge_centralities[e])
 
                 nx.draw_networkx_edges(M, pos=M.pos, ax=ax, hold=hold,
-                        edge_color=e_colors, edge_cmap=edges_cm, vmin=vmin_edges,
-                        vmax=vmax_edges, width=6.0)
+                        edge_color=e_colors, edge_cmap=edges_cm, edge_vmin=evmin,
+                        edge_vmax=evmax, width=6.0)
 
             else:
                 nx.draw_networkx_edges(M, pos=M.pos, ax=ax, hold=hold,
@@ -176,8 +191,8 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
                 n_cbar_ax = divider.append_axes('right', size='5%', pad=0.05)
                 
                 # Create the colorbar for the nodes' centrality
-                n_norm = mpl.colors.Normalize(vmin=vmin_nodes, vmax=vmax_nodes)
-                n_ticks = [round(vmin_nodes, 3), round(vmax_nodes, 3)]
+                n_norm = mpl.colors.Normalize(vmin=nvmin, vmax=nvmax)
+                n_ticks = [round(nvmin, 3), round(nvmax, 3)]
                 n_cbar = mpl.colorbar.ColorbarBase(n_cbar_ax, cmap=nodes_cm,
                         norm=n_norm, ticks=n_ticks)
                 n_cbar.set_label('Node %s centrality' % (centrality))
@@ -188,9 +203,9 @@ def draw_maze(M, centrality=None, edge_centrality=False, simple_nodes=True,
                             pad=0.05)
 
                     # Create the colorbar for the edges' centrality
-                    e_norm = mpl.colors.Normalize(vmin=vmin_edges,
-                            vmax=vmax_edges)
-                    e_ticks = [round(vmin_edges, 3), round(vmax_edges, 3)]
+                    e_norm = mpl.colors.Normalize(vmin=evmin,
+                            vmax=evmax)
+                    e_ticks = [round(evmin, 3), round(evmax, 3)]
                     e_cbar = mpl.colorbar.ColorbarBase(e_cbar_ax,
                             cmap=edges_cm, norm=e_norm, ticks=e_ticks,
                             orientation='horizontal')
