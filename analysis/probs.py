@@ -170,21 +170,25 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
         else:
             forward_nodes = s.available_nodes
 
-        if len(forward_nodes) > 1:
+        #TODO: Exclude the trials when the animal actually decided to go
+        # backward!
+        if len(forward_nodes) > 1:# and s.subsequent.loc in forward_nodes:
             # we change from physical coordinates of the forward nodes to
             #  changes in the geodesical and physical distance
             directions = np.array([unit_vectors[to_dist_direction(
                 a, s.loc, s.trial.maze, s.trial.goal)] for a in forward_nodes])
 
             # We check if there were options along the Geodesical axis
-            import ipdb; ipdb.set_trace() # BREAKPOINT
+            #import ipdb; ipdb.set_trace() # BREAKPOINT
             if np.any(directions[:,0] == -1) and np.any(directions[:,0] == 1):
                 available_G += 1 # a simple counter
                 d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc, 
                         s.trial.maze, s.trial.goal)]
                 
+#                i_dir_available_nodes = [to_dist_direction(n, s.loc,
+#                    s.trial.maze, s.trial.goal) for n in s.available_nodes]
                 i_dir_available_nodes = [to_dist_direction(n, s.loc,
-                    s.trial.maze, s.trial.goal) for n in s.available_nodes]
+                    s.trial.maze, s.trial.goal) for n in forward_nodes]
                 d_GM_available_nodes = unit_vectors[i_dir_available_nodes]
                 # expected value of d_G
                 E_d_G = np.mean(d_GM_available_nodes[:,0])
@@ -197,8 +201,11 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
                 d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc, 
                         s.trial.maze, s.trial.goal)]
                 
+#                i_dir_available_nodes = [to_dist_direction(n, s.loc,
+#                    s.trial.maze, s.trial.goal) for n in s.available_nodes]
                 i_dir_available_nodes = [to_dist_direction(n, s.loc,
-                    s.trial.maze, s.trial.goal) for n in s.available_nodes]
+                    s.trial.maze, s.trial.goal) for n in forward_nodes]
+
                 d_GM_available_nodes = unit_vectors[i_dir_available_nodes]
                 # expected value of d_G
                 E_d_M = np.mean(d_GM_available_nodes[:,1])
