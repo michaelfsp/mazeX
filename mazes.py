@@ -60,16 +60,15 @@ class SquareMaze(nx.classes.graph.Graph):
 
     @property
     def distances_matrix(self):
-        # If the graph has not changed since last calculation of the matrix:
-        if not self._has_changed_since_matrix:
-            return self._distances_matrix
-        else:
+        # If the graph has changed since last calculation of the matrix:
+        if self._has_changed_since_matrix:
             # for some reason the NetworkX algorithm produces a numpy matrix
             # instead of an array, so we np.array it
-            self._distances_matrix = np.array(
-                    nx.algorithms.floyd_warshall_numpy(self).astype(int))
+            self._distances_matrix = np.asarray(
+                    nx.algorithms.floyd_warshall_numpy(self))
             self._has_changed_since_matrix = False
-            return self._distances_matrix
+
+        return self._distances_matrix
 
     @property
     def distances_dictionary(self):
