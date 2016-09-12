@@ -913,10 +913,10 @@ class MixtureAgent(Agent):
 
         self.maze = maze
 
-        self.gamma = gamma
-        self.delta = delta
-        self.epsilon = epsilon
-        self.zeta = zeta
+        self.gamma = gamma #    Heuristic
+        self.delta = delta #    Planning
+        self.epsilon = epsilon #N Steps
+        self.zeta = zeta #      Centrality
 
         self.nsteps = nsteps
         self.centrality = centrality
