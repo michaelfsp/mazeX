@@ -119,6 +119,7 @@ class Trial:
 
     @property
     def excess_steps(self):
+        # we discount 1 because both start and goal are included in self.steps
         return int(len(self.steps) - 1 - self.shortest_path_length)
 
     @property
@@ -211,14 +212,12 @@ class Session:
     def count_total_steps(self):
         """Count total number of steps in session.
 
-        Note: it will discount the step where the agent is at the goal.
         """
         total_steps = 0
         for t in self.trials:
-            if t.goal_reached:
-                total_steps += len(t.steps) - 1
-            else:
-                total_steps += len(t.steps)
+        # we discount 1 because both start and goal are included in self.steps
+
+            total_steps += len(t.steps) - 1
 
         return total_steps
 
@@ -227,8 +226,7 @@ class Session:
         """
         excess_steps = 0
         for t in self.trials:
-            if t.goal_reached:
-                excess_steps += t.excess_steps()
+            excess_steps += t.excess_steps()
 
         return excess_steps
 
