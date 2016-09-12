@@ -5,7 +5,12 @@ from mazex.datamodel import *
 import random
 import numpy as np
 
+from numba import jit
+
+@jit(nopython=True, nogil=True)
 def choose(probs):
+    #if np.any(probs>1) or np.any(probs<0):
+    #    print(probs)
     """Choose one option based on given decision probabilities.
 
     Output:
@@ -14,6 +19,12 @@ def choose(probs):
         Index of the picked choice
     """
     # This function is 5X faster than numpy.random.choice!!
+    #
+    # Alternatives
+    # return np.random.multinomial(1, probs).argmax() #Faster alternative
+    #
+    # return np.random.choice(len(probs), p=probs) #Slower alternative
+
     cum_prob = np.cumsum(probs)
 
     random_number = random.uniform(0, cum_prob[-1])
