@@ -13,7 +13,7 @@ def value_mean(a, b, c, d):
     tot = 0
     for w in (a, b, c, d):
         if not math.isnan(w):
-            tot += w 
+            tot += w
             counts += 1
     return tot/counts
 
@@ -28,7 +28,7 @@ def matrix_column_mean(matrix, output):
          for j in range(row.shape[0]):
              w = row[j]
              if not math.isnan(w):
-                 tot += w 
+                 tot += w
                  counts += 1
          output[i] = tot/counts
 
@@ -39,21 +39,22 @@ def softmax_denominator(a, b, c, d):
     tot = 0
     for w in (a, b, c, d):
         if not math.isnan(w):
-            tot += np.exp(w) 
+            tot += np.exp(w)
     return tot
 
 # Not being used
-@numba.guvectorize('void(float64[:,:], float64[:])', '(m,n)->(m)', nopython=True)
+@numba.guvectorize('void(float64[:,:], float64[:])', '(m,n)->(m)',
+                   nopython=True)
 def softmax_denominator_vec(val_arr, denom):
     """Calculate the denominator of the softmax function."""
     for i in range(val_arr.shape[0]):
         vals = val_arr[i]
         for v in vals:
             if not math.isnan(v):
-                denom[i] += np.exp(v) 
+                denom[i] += np.exp(v)
 
 @numba.guvectorize('void(float64[:], float64[:,:], float64[:])',
-'(n),(n,m)->(n)', nopython=True) 
+'(n),(n,m)->(n)', nopython=True)
 def log_likelihoods(chosen_values, choice_values, likelihoods):
     """Calculate the log likelihood for an array of chosen_values. The output
     is saved to the array likelihoods, which has to have the same shape as
@@ -63,13 +64,14 @@ def log_likelihoods(chosen_values, choice_values, likelihoods):
         denominator = 0
         for v in choice_vals:
             if not math.isnan(v):
-                denominator += np.exp(v) 
+                denominator += np.exp(v)
         likelihood = np.exp(chosen_values[i]) / denominator
         # the line below implements a protected log
         likelihoods[i] = np.log(((1e-200)/2)+(1-(1e-200))*likelihood)
-        
+
 def protected_log(x):
-    'Return log of x protected against giving -inf for very small values of x.'
+    """Return log of x protected against giving -inf for very small values of
+    x."""
     return np.log(((1e-200)/2)+(1-(1e-200))*x)
 
 class Likelihood(object):
@@ -115,9 +117,10 @@ class MixtureLikelihood(Likelihood):
         self.agent = MixtureAgent(maze = self.session.maze, beta = 1, xi = 1,
                 gamma = 1, delta = 1, epsilon = 1, zeta = 1,
                 nsteps=nsteps, centrality = centrality, loc = None)
+
         (self.heuristic_chosen_values, self.heuristic_values) = (
                 self.agent.heuristic_agent.evaluate_session(session))
-        
+
         (self.omniscient_chosen_values, self.omniscient_values) = (
                 self.agent.omniscient_agent.evaluate_session(session))
 
@@ -152,21 +155,21 @@ class MixtureLikelihood(Likelihood):
         gamma, delta, epsilon, zeta, xi = params_array
         return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
                 zeta=zeta, xi=xi, subtract_mean=subtract_mean)
-         
+
     def gex_nll(self, params_array, subtract_mean=True):
         gamma, epsilon, xi = params_array
         delta = 0
         zeta = 0
         return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
                 zeta=zeta, xi=xi, subtract_mean=subtract_mean)
-  
+
     def gdx_nll(self, params_array, subtract_mean=True):
         gamma, delta, xi = params_array
         epsilon = 0
         zeta = 0
         return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
                 zeta=zeta, xi=xi, subtract_mean=subtract_mean)
-  
+
     def gx_nll(self, params_array, subtract_mean=True):
         gamma, xi = params_array
         delta = 0
@@ -174,7 +177,7 @@ class MixtureLikelihood(Likelihood):
         zeta = 0
         return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
                 zeta=zeta, xi=xi, subtract_mean=subtract_mean)
-   
+
     def dx_nll(self, params_array, subtract_mean=True):
         delta, xi = params_array
         gamma = 0
@@ -182,7 +185,7 @@ class MixtureLikelihood(Likelihood):
         zeta = 0
         return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
                 zeta=zeta, xi=xi, subtract_mean=subtract_mean)
- 
+
     def x_nll(self, xi, subtract_mean=True):
         gamma = 0
         delta = 0
@@ -190,8 +193,9 @@ class MixtureLikelihood(Likelihood):
         zeta = 0
         return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
                 zeta=zeta, xi=xi, subtract_mean=subtract_mean)
- 
-    def vect_nll(self, gamma, delta, epsilon, zeta, xi, subtract_mean=True, numexpr=True):
+
+    def vect_nll(self, gamma, delta, epsilon, zeta, xi, subtract_mean=True,
+                 numexpr=True):
         # this is essentially a vectorized softmax with beta = 1
         if numexpr:
             shcv = self.heuristic_chosen_values
@@ -229,7 +233,7 @@ class MixtureLikelihood(Likelihood):
                     + epsilon * self.nsteps_values
                     + zeta * self.centrality_values
                     - xi * self.penalty_values)
-        
+
         if subtract_mean:
             #self.mean_values = np.nanmean(self.comb_values, axis=1)
             self.mean_values = matrix_column_mean(self.comb_values)
@@ -244,7 +248,7 @@ class MixtureLikelihood(Likelihood):
         # for the denominator we have to use np.nansum instead of a normal sum
         # because for some steps there aren't 4 options and therefore the
         # 'missing' elements are nan on the values array
-        
+        #
         # Below is an alternative, cleaner but slower form of the same
         # calculation
         #self.choice_probs = np.exp(self.comb_chosen_values)/np.nansum(
@@ -259,7 +263,7 @@ class MixtureLikelihood(Likelihood):
         log_likelihoods(self.comb_chosen_values, self.comb_values, log_likes)
 
         return -np.sum(log_likes)
-        
+
 
 class HeuristicLikelihood(Likelihood):
 

@@ -9,31 +9,65 @@ from mazex.utils import copydoc
 import mazex.analysis
 
 #TODO: save centrality measures as attributes of edges and nodes
+
+def add_reverse_direction_edge_names(edge_centrality_dic):
+    """Since different edge centrality calculation algorithms name edges
+    differently and only in one way, we add the symmetrical label definition.
+    """
+    new_dic = copy.deepcopy(edge_centrality_dic)
+    for n1, n2 in edge_centrality_dic.keys():
+        new_dic[(n2, n1)] = edge_centrality_dic[((n1, n2))]
+    return new_dic
+
 @lru_cache(maxsize=10)
 def cached_betweenness_centrality(maze):
     return nx.algorithms.betweenness_centrality(maze)
 
 @lru_cache(maxsize=10)
 def cached_edge_betweenness_centrality(maze):
-    return nx.algorithms.edge_betweenness_centrality(maze)
+    ec = nx.algorithms.edge_betweenness_centrality(maze)
+    edge_centralities_dic_complete = add_reverse_direction_edge_names(ec)
+    return edge_centralities_dic_complete
 
 @lru_cache(maxsize=10)
 def cached_closeness_centrality(maze):
     return nx.algorithms.closeness_centrality(maze)
 
+@lru_cache(maxsize=10)
+def communicability_betweenness_centrality(maze):
+    return nx.algorithms.communicability_betweenness_centrality(maze)
+
+@lru_cache(maxsize=10)
+def cached_current_flow_betweenness_centrality(maze):
+    #NOTE: HACK - we have to create a Graph from maze or else networkx
+    # complains about not getting argument 'size'
+    return nx.centrality.current_flow_betweenness_centrality(nx.Graph(maze))
+
+@lru_cache(maxsize=10)
+def cached_edge_current_flow_betweenness_centrality(maze):
+    #NOTE: HACK - we have to create a Graph from maze or else networkx
+    # complains about not getting argument 'size'
+    ec = nx.centrality.edge_current_flow_betweenness_centrality(nx.Graph(
+    maze))
+    edge_centralities_dic_complete = add_reverse_direction_edge_names(ec)
+    return edge_centralities_dic_complete
+
+@lru_cache(maxsize=10)
+def cached_degree_centrality(maze):
+    return nx.algorithms.degree_centrality(maze)
+
+
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
     """
-    def __init__(self, maze_size):
+    def __init__(self, maze_size=None):
         """Generates a square maze of given maze_size and no connections.
         Total number of nodes will maze_size**2.
         """
         super(SquareMaze, self).__init__()
 
-        for i in np.ndindex((maze_size, maze_size)):
-            super(SquareMaze, self).add_node(i, attr_dict={'pos':i})
-
-        self.maze_size = maze_size
+        if maze_size:
+            self.maze_size = maze_size
 
         # We will calculate the distances matrix once and then only
         # recalculate if either the nodes or eges of the maze have changed
@@ -49,7 +83,7 @@ class SquareMaze(nx.classes.graph.Graph):
     @property
     def betweenness_centrality(self):
         return cached_betweenness_centrality(self)
-    
+
     @property
     def edge_betweenness_centrality(self):
         return cached_edge_betweenness_centrality(self)
@@ -57,6 +91,22 @@ class SquareMaze(nx.classes.graph.Graph):
     @property
     def closeness_centrality(self):
         return cached_closeness_centrality(self)
+
+    @property
+    def communicability_betweenness_centrality(self):
+        return communicability_betweenness_centrality(self)
+
+    @property
+    def current_flow_betweenness_centrality(self):
+        return cached_current_flow_betweenness_centrality(self)
+
+    @property
+    def edge_current_flow_betweenness_centrality(self):
+        return cached_edge_current_flow_betweenness_centrality(self)
+
+    @property
+    def degree_centrality(self):
+        return cached_degree_centrality(self)
 
     @property
     def distances_matrix(self):
@@ -105,7 +155,20 @@ class SquareMaze(nx.classes.graph.Graph):
             self._distances_to_coord_map = mapping_dict
             self._has_changed_since_to_coord_map = False
             return self._distances_to_coord_map
-    
+
+    @property
+    def maze_size(self):
+        return self._maze_size
+
+    @maze_size.setter
+    def maze_size(self, maze_size):
+        super(SquareMaze, self).__init__()
+
+        for i in np.ndindex((maze_size, maze_size)):
+            super(SquareMaze, self).add_node(i, attr_dict={'pos':i})
+
+        self._maze_size = maze_size
+
     @property
     def pos(self):
         return nx.get_node_attributes(self, 'pos')
@@ -187,6 +250,45 @@ class SquareMaze(nx.classes.graph.Graph):
             if n_retrieved == 0 or n_retrieved % self.maze_size**2 == 0:
                 goals = self.nodes()
                 random.shuffle(goals)
+
+            n_retrieved += 1
+            goal = goals.pop()
+
+            if goal != last_retrieved:
+                last_retrieved = goal
+                yield goal
+
+            else:
+                goals.append(goal)
+                goal = goals.pop(0)
+                last_retrieved = goal
+                yield goal
+
+    def randomgoals_alltrials(self, n):
+        """Retrieve a generator of a node sequence where nodes have been
+        randomly sampled ensuring no repetition of trial types (start, goal)
+        in every cycle of (maze_size**2)*(maze_size**2 - 1) elements.
+
+        Parameters:
+        -----------
+        n   : int
+            Length of sequence to be generated.
+        """
+        # very first iteration
+        n_retrieved = 0
+        last_retrieved = None
+
+        while n_retrieved < n:
+            if n_retrieved == 0 or n_retrieved % (self.maze_size**2)*((
+                self.maze_size**2)-1) == 0:
+                goals = self.nodes()
+                random.shuffle(goals)
+
+                trial_types = {}
+                for n in self.nodes():
+                    other_nodes = self.nodes()
+                    other_nodes.remove(n)
+                    trial_types[n] = other_nodes
 
             n_retrieved += 1
             goal = goals.pop()

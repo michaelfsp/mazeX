@@ -111,22 +111,19 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
         nodes_cm = sns_api.cubehelix_palette(60, start=0.5, rot=-0.75,
                 gamma=1, hue=1, reverse=False, light=0.85, dark=0.15, as_cmap=True)
         if centrality == 'betweenness':
-            centralities = nx.centrality.betweenness_centrality(M)
+            centralities = M.betweenness_centrality
 
         elif centrality == 'closeness':
-            centralities = nx.centrality.closeness_centrality(M)
+            centralities = M.closeness_centrality
 
         elif centrality == 'degree':
-            centralities = nx.centrality.degree_centrality(M)
+            centralities = M.degree_centrality
 
         elif centrality == 'communicability_betweenness':
-            centralities = nx.centrality.communicability_betweenness_centrality(M)
+            centralities = M.communicability_betweenness_centrality
 
-        elif centrality == 'current_flow_betweenness':
-            #NOTE: HACK - we have to create a Graph from maze or else networkx
-            # complains about not getting argument 'size'
-            centralities = nx.centrality.current_flow_betweenness_centrality(
-                    nx.Graph(M))
+        elif centrality == 'current_flow':
+            centralities = M.current_flow_betweenness_centrality
 
         if not nvmin:
             nvmin = min(list(centralities.values()))
@@ -152,7 +149,11 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                         node_size=100)
             
             if edge_centrality:
-                edge_centralities = nx.centrality.edge_betweenness_centrality(M)
+                if centrality == 'betweenness':
+                    edge_centralities = M.edge_betweenness_centrality
+
+                elif centrality == 'current_flow':
+                    edge_centralities = M.edge_current_flow_betweenness_centrality
 
                 if not evmin:
                     evmin = min(list(edge_centralities.values()))
