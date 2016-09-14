@@ -196,13 +196,29 @@ def softmax(beta, avalues):
     exp_elements = np.exp(beta*mavalues)
 
     #this is the calculation of the denominator of the equation
-    denominator = np.sum(exp_elements)  
+    denominator = np.sum(exp_elements)
 
     #and hnndore we compute the action probabilities
-    probs = exp_elements/denominator    
+    probs = exp_elements/denominator
 
     return probs
 
+#import numexpr as ne
+#def softmax_ne(beta, avalues):
+#    #avalues_arr = np.array(avalues)
+#    nvals = len(avalues)
+#    sumvalues = ne.evaluate("sum(avalues)")
+#    mavalues = sumvalues / nvals
+#
+#    #mavalues = avalues - np.mean(avalues)
+#
+#    exp_elements = ne.evaluate("exp(beta*(mavalues))")
+#    denominator = ne.evaluate("sum(exp_elements)")
+#    #denominator = np.sum(exp_elements)
+#
+#    #probs = np.evaluate("exp_elements/denominator")
+#    probs = exp_elements/denominator
+#    return probs
 
 class Agent:
     def __init__(self, beta=1, loc=None, xi=0, penalty_criterium='node',
