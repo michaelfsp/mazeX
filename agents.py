@@ -20,7 +20,7 @@ from numba import jit
 
 #TODO: Have Agent.evaluate() which takes care of handling penalties, etc..
 #  which would then invoke {HeuristicAgent, OmniscientAgent, ...}.eval_fun()
-#  which would contain the evaluation bits which are truly different from 
+#  which would contain the evaluation bits which are truly different from
 #  agent to agent
 #TODO: Equip main Agent class with reset method that resets visit_caches,
 #  planned step caches, etc...
@@ -54,7 +54,7 @@ def _set_loc(self, node):
             self.edge_visit_cache.pop(directed_edge);
 
         self.edge_visit_cache[directed_edge] = self.step_count
-        
+
         # set heading and update loc
         if assert_nodes_adjacent(self.loc, node):
             if node[1] > self.loc[1]:
@@ -95,7 +95,7 @@ def nodes_reachable_n_steps(G, node, n):
     endpoints : list
         Points reached in exactly n steps
     midpoints : dictionary
-        Points traveled through and their respective distances from node. 
+        Points traveled through and their respective distances from node.
         Note: Includes node.
     """
     # in practice this is obtained by getting the n, n-2, n-4, ...
@@ -105,7 +105,6 @@ def nodes_reachable_n_steps(G, node, n):
 
     endpoints = [node for node, length in path_lengths.items() if length in
             valid_lengths]
-    
     # now we prepare a dictionary with the midpoints crossed and their
     #  respective distances from starting point. for that we just need to
     #  remove the entries in path_lengths that correspond to the endpoints
@@ -118,7 +117,7 @@ def nodes_reachable_n_steps(G, node, n):
     midpoints = path_lengths
 
     return endpoints, midpoints
-    
+
 #def softmax(beta, values):
 #    """A Softmax function.
 #
@@ -149,7 +148,7 @@ def nodes_reachable_n_steps(G, node, n):
 #
 #    elif beta == float('-inf'):
 #        probs = np.ones(len(values)) * 1/(len(values))
-#    
+#
 #    else:
 #        #since the softmax is insensitive to subtraction of a value from
 #        #all values, we subtract the mean of the values in order to avoid
@@ -161,10 +160,10 @@ def nodes_reachable_n_steps(G, node, n):
 #        exp_elements = np.exp(beta*values)
 #
 #        #this is the calculation of the denominator of the equation
-#        denominator = np.sum(exp_elements)  
+#        denominator = np.sum(exp_elements)
 #
 #        #and hnndore we compute the action probabilities
-#        probs = exp_elements/denominator    
+#        probs = exp_elements/denominator
 #
 #    return probs
 
@@ -230,7 +229,7 @@ class Agent:
             very high value causes greedy action, whereas a low value very
             stochastic action selection (more exploration).
 
-        penalty_criterium : 'node' or 'edge_unidir', 'edge_bidir' 
+        penalty_criterium : 'node' or 'edge_unidir', 'edge_bidir'
             If 'node', the agent will penalize options that lead to nodes it has
             already visited. If 'edge', the agent will only penalize edges it
             has already visited.
@@ -247,7 +246,7 @@ class Agent:
         # last=False)
         self.edge_visit_cache = OrderedDict()
         self.node_visit_cache = OrderedDict()
-        self.step_count = 0           
+        self.step_count = 0
 
         self._step_cache = [] #for an agent that plans multiple steps
         # at once
@@ -262,19 +261,19 @@ class Agent:
         # we will use the property decorator to turn self.loc into
         # a smart property that agents with position memory will make
         # use of
-      
+        #
         # It's a bit klugey but necessary to first set to None or else the
         #  function call of _set_loc() will fail
         self._loc = None
 
-        # we use _set_loc() rather than setting self._loc directly because 
+        # we use _set_loc() rather than setting self._loc directly because
         #  this way we make sure that even the loc on which the Agent is
         #  initialized is recorded in the node and edge visit caches
         if loc is None:
             _set_loc(self, loc)
 
         elif assert_is_node(loc):
-            _set_loc(self, loc) 
+            _set_loc(self, loc)
 
     loc = property(_get_loc, _set_loc)
 
@@ -282,7 +281,7 @@ class Agent:
         """Since setting the agent's location for proximity checks for
         adjacency and complains if the nodes are not adjacent, this
         method can be called to force reset location to a specific one.
-        
+
         Use with caution! Recommended usage is now first agent.loc = None,
         then agent.loc = new_node. The user should manage the node and edge
         visit caches himself when using these transitions.
@@ -295,11 +294,11 @@ class Agent:
         """
         if assert_is_node(loc):
             self._loc = loc
-            
+
     def angle_to_goal(self, node, goal):
         """A common function that determines the angle between a given edge and
         the goal.
-        
+
         Parameters:
         -----------
         node : node or tuple
@@ -307,13 +306,13 @@ class Agent:
 
         goal : node or turple
             The node of the ,y coordinates of the goal location.
-    
+
         Output:
         -------
         angle : float
             In radians
         """
-        
+
         return angle_between_nodes(self.loc, node, goal)
 
     def angle_to_heading(self, node):
@@ -331,13 +330,13 @@ class Agent:
         -------
         angle : float
             In radians
-        """ 
+        """
         #TODO: verify that this is the way coordinates are specified
-        
+
         """We will create a virtual heading_node which corresponds to
         the node the agent is facing in order to facilitate
         calculation by reusing the method anglet_between_nodes().
-        However do note that heading_note might have coordinates that 
+        However do note that heading_note might have coordinates that
         are outside of the maze. This should still be OK.
         """
         if not self.heading:
@@ -373,7 +372,7 @@ class Agent:
                 values = np.array([values])
             if np.count_nonzero(values == max(values)) > 1:
                 if self.beta == float('inf'):
-                   probs = np.zeros(len(values)) 
+                   probs = np.zeros(len(values))
                    probs[values.index(max(values))] == 1
 
         else:
@@ -404,7 +403,7 @@ class Agent:
         choice_prob = self.choice_probs(values, debug=debug)
 
         cum_prob = np.cumsum(choice_prob)
-        
+
         random_number = random.uniform(0, cum_prob[-1])
 
         return np.argmax(cum_prob >= random_number)
@@ -427,7 +426,7 @@ class Agent:
             elif self.penalty_criterium == 'node':
                 if n in self.node_visit_cache:
                     penalties[i] = self.xi
-                    
+
         return penalties
 
     def _exponential_penalty_factor(self, nodeslist):
@@ -443,7 +442,7 @@ class Agent:
         if self.penalty_criterium == 'edge_unidir':
             i_visited = []
             edgeslist = [(self.loc, n) for n in nodeslist]
-            
+
             step_count_last_visit = []
 
             for i, e in enumerate(edgeslist):
@@ -461,7 +460,7 @@ class Agent:
                     step_count_last_visit.append(
                             self.node_visit_cache[n])
                     i_visited.append(i)
-        
+
         #by sorting on -step_count_last_visit we get the reverse order, i.e.,
         # the indices for sorting by decreasing value
         #TODO: instead of using this matrix voodoo this algorithm could use
@@ -477,7 +476,7 @@ class Agent:
 
         for i,x in enumerate(i_visited_sorted):
             penalties[x] = self.xi * 2**-i
-        
+
         return penalties
 
     def evaluate_penalties_session(self, session):
@@ -633,15 +632,15 @@ class HeuristicAgent(Agent):
         self.kappa = kappa
         if self.kappa:
             self.vm_dist = get_von_mises_array(maze_size, kappa)
-            self.max_vm = vonmises.pdf(0, kappa=kappa) 
-        
+            self.max_vm = vonmises.pdf(0, kappa=kappa)
+
         #self.angles_dic = get_angles_dictionary(maze_size)
         #self.angles_dic = angle_between_nodes
-   
+
     def evaluate(self, nodeslist, goal, distribution='cos', penalties=True):
         """Returns a vector with the edge values of each edge given as
         input.
-        
+
         Parameters:
         -----------
         nodeslist : list of np.array, dim=1
@@ -663,9 +662,9 @@ class HeuristicAgent(Agent):
             nodeslist = [nodeslist]
         except InvalidNode:
             pass
-        
+
         angles = [angle_between_nodes(self.loc, n, goal) for n in nodeslist]
-        
+
         if distribution == 'vonmises':
             # since what is stored in self.vm_dist is a 2D array with angles
             # and values, we first determine the index of the closes angle entry
@@ -689,7 +688,7 @@ class HeuristicAgent(Agent):
 
         else:
             values = dist_val
- 
+
         return values
 
 class ManhattanAgent(Agent):
@@ -707,7 +706,7 @@ class ManhattanAgent(Agent):
     def evaluate(self, nodeslist, goal, penalties=True):
         """Returns a vector with the edge values of each edge given as
         input.
-        
+
         Parameters:
         -----------
         nodeslist : list of np.array, dim=1
@@ -724,7 +723,7 @@ class ManhattanAgent(Agent):
             nodeslist = [nodeslist]
         except InvalidNode:
             pass
-        
+
         current_manhattan_distance = manhattan_distance(self.loc, goal)
 
         values = []
@@ -761,13 +760,28 @@ class CentralityAgent(Agent):
                 penalty_type=penalty_type, heading=heading)
 
         self.maze = maze
-        self.centrality = centrality
+        self._centrality = centrality
 
-        c_dict = eval('self.maze.'+centrality+'_centrality')
-        # we scale the values such that they span the range [-1, 1]
-        #  as all other agents produce values in this range
-        scaled_c_dict = scale_dict_values(c_dict, high=1, low=-1)
-        self.scaled_centrality = scaled_c_dict
+        self._scaled_centrality = None
+
+    @property
+    def centrality(self):
+        return self._centrality
+
+    @centrality.setter
+    def centrality(self, centrality_string):
+        self._centrality = centrality_string
+        self._scaled_centrality = None
+
+    @property
+    def scaled_centrality(self):
+        if not self._scaled_centrality:
+            c_dict = eval('self.maze.'+self.centrality+'_centrality')
+            # we scale the values such that they span the range [-1, 1]
+            #  as all other agents produce values in this range
+            self._scaled_centrality = scale_dict_values(c_dict, high=1, low=-1)
+            #self.scaled_centrality = scaled_c_dict
+        return self._scaled_centrality
 
     def evaluate(self, nodeslist, goal, penalties=True):
 
@@ -794,17 +808,17 @@ class CentralityAgent(Agent):
         return values
 
 class NStepsAgent(Agent):
-    def __init__(self, maze, nsteps, loc=None, beta = float('inf'), xi=3,
+    def __init__(self, maze, nsteps, loc=None, beta=1, xi=3,
             penalty_criterium='node', penalty_type='exponential',
             heading=None):
         #TODO: Allow manhattan as well as euclidian distance
         """Creates an agent that has full knowledge of the maze and
         uses Graph Theory algorithms to determine the shortest path
         to goal"""
-        
+
         super(NStepsAgent, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium,
-                penalty_type=penalty_type, heading=heading) 
+                penalty_type=penalty_type, heading=heading)
 
         self.maze = maze
         self.nsteps = nsteps
@@ -815,7 +829,7 @@ class NStepsAgent(Agent):
 
         for i, c in enumerate(nodeslist):
             endpoints, midpoints = nodes_reachable_n_steps(self.maze, c,
-                    self.nsteps -1) 
+                    self.nsteps -1)
 
             endpoint_distances = [
                     manhattan_distance(e, goal) for e in endpoints]
@@ -835,16 +849,16 @@ class NStepsAgent(Agent):
         return values
 
 class OmniscientAgent(Agent):
-    def __init__(self, maze, loc=None, beta = float('inf'), xi=0,
+    def __init__(self, maze, loc=None, beta=1, xi=0,
             penalty_criterium='node', penalty_type='exponential',
             heading=None):
         """Creates an agent that has full knowledge of the maze and
         uses Graph Theory algorithms to determine the shortest path
         to goal"""
-        
+
         super(OmniscientAgent, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium,
-                penalty_type=penalty_type, heading=heading) 
+                penalty_type=penalty_type, heading=heading)
 
         self.maze = maze
 
@@ -884,7 +898,7 @@ class OmniscientAgent(Agent):
         self._step_cache = path[1:]
 
         return path
-        
+
 class MixtureAgent(Agent):
     #def __new__(cls, maze, loc=None, beta=1, xi=0, gamma=0, delta=0, epsilon=0,
     #        zeta=0, nsteps=0, centrality='edge_betweenness'):
@@ -909,7 +923,7 @@ class MixtureAgent(Agent):
     #    if delta:
     #        obj.omniscient_agent = OmniscientAgent(maze, loc=loc)
     #    if epsilon:
-    #        obj.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc) 
+    #        obj.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc)
     #    if zeta:
     #        obj.centrality_agent = CentralityAgent(maze, centrality=centrality,
     #                loc=loc)
@@ -918,29 +932,130 @@ class MixtureAgent(Agent):
     #    return obj
 
 
-    def __init__(self, maze, loc=None, beta=1, xi=0, gamma=0, delta=0, epsilon=0,
-            zeta=0, nsteps=0, centrality='edge_betweenness'):
+    def __init__(self, maze, loc=None, beta=1, xi=0, gamma=0, delta=0,
+                 epsilon=0, zeta=0, nsteps=2, centrality='edge_betweenness'):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi)
 
         self.maze = maze
 
-        self.gamma = gamma #    Heuristic
-        self.delta = delta #    Planning
-        self.epsilon = epsilon #N Steps
-        self.zeta = zeta #      Centrality
+        self._gamma = gamma #    Heuristic
+        self._delta = delta #    Planning
+        self._epsilon = epsilon #N Steps
+        self._zeta = zeta #      Centrality
 
-        self.nsteps = nsteps
-        self.centrality = centrality
+        self._nsteps = nsteps
+        self._centrality = centrality #HACK: this is not being used directly
+                                      # until centrality.setter
 
-        if self.gamma:
-            self.heuristic_agent = HeuristicAgent(beta, loc=loc)
-        if self.delta:
+        if gamma:
+            self.heuristic_agent = HeuristicAgent(loc=loc)
+        else:
+            self.heuristic_agent = None
+
+        if delta:
             self.omniscient_agent = OmniscientAgent(maze, loc=loc)
-        if self.epsilon:
-            self.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc) 
-        if self.zeta:
-            self.centrality_agent = CentralityAgent(maze, centrality=centrality,
-                    loc=loc)
+        else:
+            self.omniscient_agent = None
+
+        if epsilon:
+            self.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc)
+        else:
+            self.nsteps_agent = None
+
+        if zeta:
+            self.centrality_agent = CentralityAgent(maze,
+                                                    centrality=centrality,
+                                                    loc=loc)
+        else:
+            self.centrality_agent = None
+
+    @property
+    def gamma(self):
+        return self._gamma
+
+    @gamma.setter
+    def gamma(self, new_gamma):
+        if not self.heuristic_agent:
+            self.heuristic_agent = HeuristicAgent(loc=self.loc)
+        self._gamma = new_gamma
+
+    @property
+    def delta(self):
+        return self._delta
+
+    @delta.setter
+    def delta(self, new_delta):
+        if not self.maze and new_delta != 0:
+            Exception('MixtureAgent.maze must be set first')
+
+        elif not self.omniscient_agent:
+            self.omniscient_agent = OmniscientAgent(self.maze, loc=self.loc)
+        self._delta = new_delta
+
+    @property
+    def epsilon(self):
+        return self._epsilon
+
+    @epsilon.setter
+    def epsilon(self, new_epsilon):
+        if not self._nsteps and new_epsilon != 0:
+            raise Exception('MixtureAgent.nsteps must be set first')
+        if not self.maze and new_epsilon != 0:
+            Exception('MixtureAgent.maze must be set first')
+
+        elif not self.nsteps_agent:
+            self.nsteps_agent = NStepsAgent(self.maze, self.nsteps,
+                                            loc=self.loc)
+        self._epsilon = new_epsilon
+
+    @property
+    def zeta(self):
+        return self._zeta
+
+    @zeta.setter
+    def zeta(self, new_zeta):
+        if not self._centrality and new_zeta != 0:
+            raise Exception('MixtureAgent.centrality must be set first')
+
+        elif not self.centrality_agent:
+            self.centrality_agent = CentralityAgent(self.maze,
+                                                centrality=self._centrality,
+                                                loc=self.loc)
+        self._zeta = new_zeta
+
+    @property
+    def centrality(self):
+        if self.centrality_agent:
+            return self.centrality_agent.centrality
+        else:
+            return None
+
+    @centrality.setter
+    def centrality(self, new_centrality):
+        if not self.maze:
+            raise Exception('MixtureAgent.maze must be set first')
+
+        self.centrality_agent = CentralityAgent(self.maze,
+                                                centrality=new_centrality,
+                                                loc=self.loc)
+        self._centrality = new_centrality
+
+
+    @property
+    def nsteps(self):
+        if self.nsteps_agent:
+            return self._nsteps
+        else:
+            return None
+
+    @nsteps.setter
+    def nsteps(self, new_nsteps):
+        if not self.maze:
+            raise Exception('MixtureAgent.maze must be set first')
+
+        self.nsteps_agent = NStepsAgent(self.maze, nsteps=new_nsteps,
+                                        loc=self.loc)
+        self._nsteps = new_nsteps
 
     def evaluate(self, nodeslist, goal):
         if self.gamma:
@@ -984,13 +1099,13 @@ class MixtureAgent(Agent):
         # if evaluate functions depend on information generated by _set_loc,
         # other than for penalty factor which is defined at the superclass
         # Agent level
-        if self.gamma:
+        if self._gamma:
             self.heuristic_agent._loc = node
-        if self.delta:
+        if self._delta:
             self.omniscient_agent._loc = node
-        if self.epsilon:
+        if self._epsilon:
             self.nsteps_agent._loc = node
-        if self.zeta:
+        if self._zeta:
             self.centrality_agent._loc = node
 
     loc = property(_get_loc, set_loc)
@@ -1006,7 +1121,7 @@ class SwitchAgent(HeuristicAgent):
         self.maze = maze
         self.switch_distance = switch_distance
         #self.switched = False
-    
+
     def evaluate(self, nodeslist, goal, penalty_criterium='node'):
 
         if self.maze.distances_dictionary[self.loc][goal] <= self.switch_distance:
@@ -1027,11 +1142,10 @@ class BrownianAgent(Agent):
             penalty_type='exponential', heading=None):
         """Creates an agent that follows semi-Brownian motion or truly
         Brownian for xi=0.
-        
         """
         super(BrownianAgent, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium,
-                penalty_type=penalty_type, heading=heading) 
+                penalty_type=penalty_type, heading=heading)
 
     def evaluate(self, nodeslist, goal, penalties=True):
         values = np.zeros(len(nodeslist))
