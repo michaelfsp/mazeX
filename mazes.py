@@ -187,7 +187,7 @@ class SquareMaze(nx.classes.graph.Graph):
         possible_edges.sort()
 
         return possible_edges
-    
+
     @property
     def absent_edges(self):
         """List edges that could exist but do not in the maze's
@@ -265,6 +265,7 @@ class SquareMaze(nx.classes.graph.Graph):
                 yield goal
 
     def randomgoals_alltrials(self, n):
+        #FIXME: Doesn't work!
         """Retrieve a generator of a node sequence where nodes have been
         randomly sampled ensuring no repetition of trial types (start, goal)
         in every cycle of (maze_size**2)*(maze_size**2 - 1) elements.
@@ -278,30 +279,45 @@ class SquareMaze(nx.classes.graph.Graph):
         n_retrieved = 0
         last_retrieved = None
 
+        cycle_length = (self.maze_size**2)*((self.maze_size**2)-1)
+
+        trial_types = {}
+        for node in self.nodes():
+            other_nodes = self.nodes()
+            other_nodes.remove(node)
+            trial_types[node] = other_nodes
+
         while n_retrieved < n:
-            if n_retrieved == 0 or n_retrieved % (self.maze_size**2)*((
-                self.maze_size**2)-1) == 0:
-                goals = self.nodes()
-                random.shuffle(goals)
+            if n_retrieved % cycle_length == 0:
+                # beginning of a new cycle
+                trial_type_buffer = copy.deepcopy(trial_types)
 
-                trial_types = {}
-                for n in self.nodes():
-                    other_nodes = self.nodes()
-                    other_nodes.remove(n)
-                    trial_types[n] = other_nodes
+                available_first_in_cycle_goals = self.nodes()
+                if last_retrieved:
+                    available_first_in_cycle_goals.remove(last_retrieved)
 
-            n_retrieved += 1
-            goal = goals.pop()
-
-            if goal != last_retrieved:
+                goal = random.choice(available_first_in_cycle_goals)
                 last_retrieved = goal
-                yield goal
+
+            elif not (n_retrieved+1) % cycle_length == 0:
+                # number of goals left for last retrieved
+                n_left_last = len(trial_type_buffer[last_retrieved])
+
+                goal = trial_type_buffer[last_retrieved].pop(random.randint(
+                    0, n_left_last -1))
+
+                if len(trial_type_buffer[goal]) == 0:
+                    # it's a 'dead end' and should be saved for the very end
+                    trial_type_buffer[last_retrieved].append(goal)
+                    continue
 
             else:
-                goals.append(goal)
-                goal = goals.pop(0)
-                last_retrieved = goal
-                yield goal
+                # it's the last goal in the cycle
+                goal = trial_type_buffer[last_retrieved].pop(0)
+
+            last_retrieved = goal
+            n_retrieved += 1
+            yield goal
 
     @copydoc(nx.classes.graph.Graph)
     def add_edge(self, u, v, attr_dict=None, **attr):
