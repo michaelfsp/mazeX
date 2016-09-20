@@ -3,6 +3,7 @@ import networkx as nx
 import random
 import copy
 from functools import lru_cache
+import re
 
 from mazex.exceptions import *
 from mazex.utils import copydoc
@@ -56,6 +57,60 @@ def cached_edge_current_flow_betweenness_centrality(maze):
 def cached_degree_centrality(maze):
     return nx.algorithms.degree_centrality(maze)
 
+def maze_from_ASCII(maze_str):
+    """Generate a maze configuration from text.
+
+    Example:
+
+    maze_str = '''
+    ._. ._. . .
+    | | . ._. .
+    . . ._. . .
+    | | . | . |
+    ._._._. ._.
+    | | ._. |_.
+    '''
+
+    maze_from_ASCII(maze_str)
+    """
+    string_lines = maze_str.splitlines()
+    string_lines.reverse()
+    line_lengths = [len(line) for line in string_lines]
+    set_lengths = set(line_lengths)
+    set_lengths.remove(0) # remove empty lines
+
+    if  len(set_lengths) > 1:
+        raise InvalidMaze
+
+    maze_size = int((set_lengths.pop()+1)/2)
+
+    h_edges = []
+    v_edges = []
+    for i, line_index in enumerate(np.nonzero(line_lengths)[0]):
+        line = string_lines[line_index]
+
+        # horizontal edges
+        # this is the relationship between index in the string and maze coordinates
+        h_edges_str_i = [a.start() for a in re.finditer('_', line)]
+        h_edges_i = (np.array(h_edges_str_i)/2) - 0.5
+        h_edges_i = h_edges_i
+        for j in h_edges_i:
+            j = int(j)
+            h_edges.append(((j,i), (j+1,i)))
+
+        # vertical edges
+        v_edges_str_i = [a.start() for a in re.finditer('\|', line)]
+        v_edges_i = np.array(v_edges_str_i)/2
+        v_edges_i = v_edges_i
+        for j in v_edges_i:
+            j = int(j)
+            v_edges.append(((j,i), (j,i+1)))
+
+    maze = SquareMaze(maze_size)
+    maze.add_edges_from(h_edges)
+    maze.add_edges_from(v_edges)
+
+    return maze
 
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
