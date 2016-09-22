@@ -37,8 +37,7 @@ class SimStep(Step):
         # for the initial step this will be altered later by
         # SimTrial.__init__() a bit of a hugly hack but will do it for now
         super(SimStep, self).__init__(loc, trial, previous = previous)
-        
-        
+
 class SimTrial(Trial):
     def __init__(self, maze, goal, initial_step, agent, max_steps=0,
             goal_reached=True):
@@ -57,14 +56,13 @@ class SimTrial(Trial):
 
         self.step.values = self.agent.evaluate(
             self.step.available_nodes, self.goal)
-        
+
         self.step.probs = self.agent.choice_probs(self.step.values)
 
-        
         next_node = self.step.available_nodes[choose(self.step.probs)]
 
         self.agent.loc = next_node
-        
+
         current_step = self.step
 
         self.steps.append(SimStep(next_node, self, previous = current_step))
@@ -73,22 +71,19 @@ class SimTrial(Trial):
         while not self.termination_condition():
             self.go_to_next_step()
 
+
 class SimSession(Session):
-    def __init__(self):
+    def __init__(self, **kwargs):
+        """TODO: Specify the **kwargs.
         """
-        Parameters:
-        -----------
-        agent : Agent
-            Agent that will solve the trials of the session
-        """
-        super(SimSession, self).__init__()
+        super(SimSession, self).__init__(**kwargs)
 
     def run(self):
         """Runs the Session's trials sequentially. Note that it will solve
         it again even if it has already been solved.
         """
         self.current_trial_index = 0
-      
+
         # This statement only checks if the pointer self.current_trial is the
         # same as the index of the current trial, and not for object identity
         # (==) because it will allow for trials to be created on the fly.
@@ -98,6 +93,50 @@ class SimSession(Session):
 
         # solve the last trial
         self.trial.solve()
+
+
+class SimSessionGivenGoals(SimSession):
+    def __init__(self, agent, maze, goals, max_steps=0, loc_start=(0,0),
+                 **kwargs):
+        """
+        Parameters:
+        -----------
+        agent : Agent
+            Agent that will solve the trials of the session
+        """
+        self.agent = agent
+        #TODO: change sim_maze to maze and refactor Session.maze
+        self.sim_maze = maze
+        self.goals = goals
+        self.max_steps = max_steps
+        self.loc_start = loc_start
+
+        super(SimSessionGivenGoals, self).__init__(**kwargs)
+
+
+    def run(self, verbose=False):
+        """Runs the Session's trials sequentially. Note that it will solve
+        it again even if it has already been solved.
+        """
+        self.agent.loc = self.loc_start
+        trials = []
+        for goal in self.goals:
+            initial_step = SimStep(self.agent.loc)
+            self.agent.node_visit_cache.clear()
+            self.agent.edge_visit_cache.clear()
+            # we set loc to current loc such that loc gets added to edge and
+            #  node_visit_cache
+            self.agent.loc = self.agent.loc
+            trial = SimTrial(self.sim_maze, goal, initial_step, self.agent,
+                                       max_steps=self.max_steps)
+
+            trial.solve()
+            if verbose:
+                print('Solved trial %i' %len(trials))
+            trials.append(trial)
+
+        self.trials = trials
+
 
 class SimSessionRandomGoal(SimSession):
     def __init__(self, maze, agent, n_trials, initial_step=None):
