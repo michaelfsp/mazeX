@@ -199,6 +199,31 @@ class SquareMaze(nx.classes.graph.Graph):
     def degree_centrality(self):
         return cached_degree_centrality(self)
 
+    #TODO: change names of dead_end and real_degree to something more
+    # more senseful since they aren't actual centralities
+
+    @property
+    @lru_cache(maxsize=128)
+    def dead_end_centrality(self):
+        '''It is not a real centrality.
+        '''
+        degree_dic = self.degree()
+        items = list(degree_dic.items())
+        dead_end_centrality_dic = {}
+        for node, degree in items:
+            if degree == 1:
+                dead_end_centrality_dic[node] = -1
+            else:
+                dead_end_centrality_dic[node] = 1
+        return dead_end_centrality_dic
+
+    @property
+    @lru_cache(maxsize=128)
+    def real_degree_centrality(self):
+        '''It is not a real centrality.
+        '''
+        return self.degree()
+
     @property
     def distances_matrix(self):
         # If the graph has changed since last calculation of the matrix:
