@@ -112,6 +112,40 @@ def maze_from_ASCII(maze_str):
 
     return maze
 
+@lru_cache(maxsize=128)
+def nodes_reachable_n_steps(maze, node, n):
+    """Find all nodes reachable in exactly n steps starting from node. This
+    includes nodes reachable by backtracking.
+
+    Output:
+    -------
+    endpoints : list
+        Points reached in exactly n steps
+    midpoints : dictionary
+        Points traveled through and their respective distances from node.
+        Note: Includes node.
+    """
+    # in practice this is obtained by getting the n, n-2, n-4, ...
+    # neighborhood of the node
+    path_lengths = nx.single_source_shortest_path_length(maze, node, cutoff=n)
+    valid_lengths = range(n, -1, -2)
+
+    endpoints = [node for node, length in path_lengths.items() if length in
+            valid_lengths]
+    # now we prepare a dictionary with the midpoints crossed and their
+    #  respective distances from starting point. for that we just need to
+    #  remove the entries in path_lengths that correspond to the endpoints
+    # we have to iterate over a deepcopy of the original dictionary because
+    #  modifying the dictionary during the iteration results in problems
+    for node, distance in copy.deepcopy(path_lengths).items():
+        if distance == n:
+            path_lengths.pop(node); # semi colon suppresses output of item
+
+    midpoints = path_lengths
+
+    return endpoints, midpoints
+
+
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
     """
@@ -135,6 +169,8 @@ class SquareMaze(nx.classes.graph.Graph):
         self._distances_dictionary = None
         self._distances_to_coord_map = None
 
+        self.nodes_reachable_n_steps = partial(nodes_reachable_n_steps,
+                                               self)
     @property
     def betweenness_centrality(self):
         return cached_betweenness_centrality(self)

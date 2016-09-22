@@ -2,8 +2,6 @@ import copy
 import random
 from collections import OrderedDict
 
-from functools import lru_cache
-
 import numpy as np
 from scipy.stats import vonmises
 
@@ -84,39 +82,6 @@ def n_degree_neighborhood(G, node, n):
     """
     path_lengths = single_source_shortest_path_length(G, node)
     return [node for node, length in path_lengths.items() if length == n]
-
-@lru_cache(maxsize=36*10)
-def nodes_reachable_n_steps(G, node, n):
-    """Find all nodes reachable in exactly n steps starting from node. This
-    includes nodes reachable by backtracking.
-
-    Output:
-    -------
-    endpoints : list
-        Points reached in exactly n steps
-    midpoints : dictionary
-        Points traveled through and their respective distances from node.
-        Note: Includes node.
-    """
-    # in practice this is obtained by getting the n, n-2, n-4, ...
-    # neighborhood of the node
-    path_lengths = single_source_shortest_path_length(G, node, cutoff=n)
-    valid_lengths = range(n, -1, -2)
-
-    endpoints = [node for node, length in path_lengths.items() if length in
-            valid_lengths]
-    # now we prepare a dictionary with the midpoints crossed and their
-    #  respective distances from starting point. for that we just need to
-    #  remove the entries in path_lengths that correspond to the endpoints
-    # we have to iterate over a deepcopy of the original dictionary because
-    #  modifying the dictionary during the iteration results in problems
-    for node, distance in copy.deepcopy(path_lengths).items():
-        if distance == n:
-            path_lengths.pop(node); # semi colon suppresses output of item
-
-    midpoints = path_lengths
-
-    return endpoints, midpoints
 
 #def softmax(beta, values):
 #    """A Softmax function.
@@ -753,8 +718,11 @@ class CentralityAgent(Agent):
         -----------
         centrality: 'edge_betweenness', 'betweenness', 'closeness',
             'communicability_betweenness', 'current_flow_betweenness',
-            'edge_current_flow_betweenness', 'degree'
+            'edge_current_flow_betweenness', 'degree', 'dead_end',
+            'real_degree'
         """
+        #TODO: change names of dead_end and real_degree to something more
+        # more senseful since they aren't actual centralities
         super(CentralityAgent, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium,
                 penalty_type=penalty_type, heading=heading)
@@ -828,7 +796,7 @@ class NStepsAgent(Agent):
         values = np.zeros(len(nodeslist))
 
         for i, c in enumerate(nodeslist):
-            endpoints, midpoints = nodes_reachable_n_steps(self.maze, c,
+            endpoints, midpoints = self.maze.nodes_reachable_n_steps(c,
                     self.nsteps -1)
 
             endpoint_distances = [
