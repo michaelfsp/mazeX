@@ -24,7 +24,7 @@ import os
 from functools import lru_cache
 
 
-@lru_cache(maxsize=5040)
+@lru_cache(maxsize=65536)
 def angle_between_nodes(loc, node1, node2):
     """A common function that determines the angle between a given edge and
     the goal.
@@ -46,7 +46,7 @@ def angle_between_nodes(loc, node1, node2):
     return np.arccos(np.dot(node1_vec, node2_vec) / (np.linalg.norm(
         node1_vec)*np.linalg.norm(node2_vec)))
 
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=128)
 def angles_dictionary(size):
     from mazex.mazes import SquareMaze
     maze = SquareMaze(size)

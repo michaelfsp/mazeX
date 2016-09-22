@@ -2,7 +2,7 @@ import numpy as np
 import networkx as nx
 import random
 import copy
-from functools import lru_cache
+from functools import lru_cache, partial
 import re
 
 from mazex.exceptions import *
@@ -20,31 +20,31 @@ def add_reverse_direction_edge_names(edge_centrality_dic):
         new_dic[(n2, n1)] = edge_centrality_dic[((n1, n2))]
     return new_dic
 
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=128)
 def cached_betweenness_centrality(maze):
     return nx.algorithms.betweenness_centrality(maze)
 
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=128)
 def cached_edge_betweenness_centrality(maze):
     ec = nx.algorithms.edge_betweenness_centrality(maze)
     edge_centralities_dic_complete = add_reverse_direction_edge_names(ec)
     return edge_centralities_dic_complete
 
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=128)
 def cached_closeness_centrality(maze):
     return nx.algorithms.closeness_centrality(maze)
 
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=128)
 def communicability_betweenness_centrality(maze):
     return nx.algorithms.communicability_betweenness_centrality(maze)
 
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=128)
 def cached_current_flow_betweenness_centrality(maze):
     #NOTE: HACK - we have to create a Graph from maze or else networkx
     # complains about not getting argument 'size'
     return nx.centrality.current_flow_betweenness_centrality(nx.Graph(maze))
 
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=128)
 def cached_edge_current_flow_betweenness_centrality(maze):
     #NOTE: HACK - we have to create a Graph from maze or else networkx
     # complains about not getting argument 'size'
@@ -53,7 +53,7 @@ def cached_edge_current_flow_betweenness_centrality(maze):
     edge_centralities_dic_complete = add_reverse_direction_edge_names(ec)
     return edge_centralities_dic_complete
 
-@lru_cache(maxsize=10)
+@lru_cache(maxsize=128)
 def cached_degree_centrality(maze):
     return nx.algorithms.degree_centrality(maze)
 
@@ -197,7 +197,7 @@ class SquareMaze(nx.classes.graph.Graph):
                     dist_coord = mazex.utils.to_dist_coord(n, self, goal)
 
                     try:
-                        mapping_dict[dist_coord][goal].append(n) 
+                        mapping_dict[dist_coord][goal].append(n)
 
                     except KeyError:
                         try:

@@ -21,7 +21,8 @@ def strict_topology_optimization(maze, distance='euclidian', min_avail_nodes=3,
 
                 hagent.loc = None
                 hagent.loc = p
-                h_vals = hagent.evaluate(step.available_nodes, g, penalties=False)
+                h_vals = hagent.evaluate(step.available_nodes, g,
+                                         penalties=False)
                 h_chosen_indices = np.nonzero(h_vals==h_vals.max())[0]
                 h_chosen = []
                 for i in h_chosen_indices:
@@ -29,15 +30,13 @@ def strict_topology_optimization(maze, distance='euclidian', min_avail_nodes=3,
 
                 magent.loc = None
                 magent.loc = p
-                m_vals = magent.evaluate(step.available_nodes, g, penalties=False)
+                m_vals = magent.evaluate(step.available_nodes, g,
+                                         penalties=False)
                 m_chosen_indices = np.nonzero(m_vals==m_vals.max())[0]
                 m_chosen = []
                 for i in m_chosen_indices:
                     m_chosen.append(step.available_nodes[i])
 
-    #            if h_chosen != m_chosen:
-    #                import ipdb; ipdb.set_trace()
-    #
                 set_h_chosen = set(h_chosen)
                 set_m_chosen = set(m_chosen)
                 if len(set_h_chosen.intersection(set_m_chosen)) == 0:
@@ -46,7 +45,7 @@ def strict_topology_optimization(maze, distance='euclidian', min_avail_nodes=3,
     if as_fraction:
         total_trials = len(maze.nodes()) * len(maze.nodes())-1
         n_discordant_points /= total_trials
-            
+
     return n_discordant_points
 
 

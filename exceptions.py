@@ -1,4 +1,4 @@
-from networkx.exception import NetworkXException 
+from networkx.exception import NetworkXException
 
 class MazeXException(NetworkXException):
     """Base class for exceptions in Maze."""
