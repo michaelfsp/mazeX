@@ -5,16 +5,16 @@ from mazex.utils import check_elements_equal
 class Step:
     def __init__(self, loc, trial, previous=None, time=None):
         """Initializes the Step.
-        
+
         Parameters:
-        -----------     
+        -----------
         loc : node
             node indicating the current location
 
         trial : Trial instance
             a Trial instance to which this Step will be linked. It
             provides information about goal, maze, etc...
-        
+
         heading : string
             this is the direction the agent is heading toward. It
             should be derived from the last agent's position by some
@@ -74,7 +74,7 @@ class Step:
                     direction = '>'
                 elif self.subsequent.loc[0] < self.loc[0]:
                     direction = '<'
-     
+
             else:
                 direction = None #it should only happen if it is an isolated step
 
@@ -112,7 +112,7 @@ class Trial:
         self.shortened = shortened
 
         self.steps = []
-    
+
     @property
     def duration(self):
         return self.t_stop - self.t_start
@@ -151,7 +151,7 @@ class Trial:
     @property
     def t_stop(self):
         return self.steps[-1].time
-     
+
     def termination_condition(self):
         """This is a helper function for the simulation methods.
 
@@ -203,7 +203,7 @@ class Session:
             List of trials to be presented to the Agent
         """
         self.trials = []
-        self._current_trial_index = None     
+        self._current_trial_index = None
         self._current_trial_index_manually_set = False
 
         self.date = date
@@ -253,7 +253,7 @@ class Session:
     @property
     def maze(self):
         """If all steps have the same maze, return that maze, else return a
-        list of mazes. This might not be after some refactoring to be done in 
+        list of mazes. This might not be after some refactoring to be done in
         a future incarnation.
         """
         mazes = [s.maze for s in self.trials]
