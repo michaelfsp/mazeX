@@ -29,7 +29,7 @@ def prob(step, null='random'):
         raise NotSupported
 
 
-def arrows_plot(sessions, maze, controls='deterministic', colors='dark'):
+def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
 #TODO: let user input control msession and hsession as function inputs
 
     sns.set(context='notebook', font_scale=1.3,
@@ -48,8 +48,6 @@ def arrows_plot(sessions, maze, controls='deterministic', colors='dark'):
         planning_color = '#3CCF97'
         heuristic_color = '#F97F42'
 
-
-
 # Analyze and plot data
     pl.figure()
     indices = []
@@ -66,7 +64,7 @@ def arrows_plot(sessions, maze, controls='deterministic', colors='dark'):
     dx_err, dy_err = np.std(indices, axis=0)
 
 # Generate controls
-    if controls == 'deterministic':
+    if controls == 'greedy':
         goals = list(maze.randomgoals(10000))
 
         hagent = HeuristicAgent(beta=100, xi=3, penalty_type='exponential',
@@ -82,17 +80,98 @@ def arrows_plot(sessions, maze, controls='deterministic', colors='dark'):
         msession.run()
 
 # Analyze controls
-    prob_m_vs_prob_g(
-                first_edge_crossing(msession),
-                geometric_distance='euclidian', plot=True, hold=True,
-                label='Planning agent', facecolor=planning_color,
-                width=arrow_width, head_width=9*arrow_width)
+        prob_m_vs_prob_g(
+                    first_edge_crossing(msession),
+                    geometric_distance='euclidian', plot=True, hold=True,
+                    label='Planning agent', facecolor=planning_color,
+                    width=arrow_width, head_width=9*arrow_width)
 
-    prob_m_vs_prob_g(
-                first_edge_crossing(hsession),
-                geometric_distance='euclidian', plot=True, hold=True,
-                label='Heuristic agent', facecolor=heuristic_color,
-                width=arrow_width, head_width=9*arrow_width)
+        prob_m_vs_prob_g(
+                    first_edge_crossing(hsession),
+                    geometric_distance='euclidian', plot=True, hold=True,
+                    label='Heuristic agent', facecolor=heuristic_color,
+                    width=arrow_width, head_width=9*arrow_width)
+
+    elif controls == 'stochastic':
+        betas = np.logspace(-2, 2, 10, base=np.e)
+
+        n_goals_sessions = []
+        #goals_base = []
+        for session in sessions:
+            n_goals_sessions.append(len(session.trials))
+            #sessions_goals = []
+            #for trial in session.trials:
+            #    session_goals.append trial.goal
+            #goals_base.append(session_goals)
+
+        n_goals = int(np.average(n_goals_sessions))
+        print(n_goals)
+        #n_goals = 1000
+        ctrl_size = 50
+
+        goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
+        for beta in betas:
+            n_sims = 0
+            hsims = []
+            msims = []
+
+            hcoords = []
+            mcoords = []
+
+            for goals in goalz:
+                print(beta)
+                #TODO: adapt xi per beta
+                hagent = HeuristicAgent(beta=beta, xi=3, penalty_type='exponential',
+                                   heading = '^', loc=(0,0))
+                hsession = mx.SimSessionGivenGoals(hagent, maze, goals)
+                hsession.run()
+                hsims.append(hsession)
+                hcoords.append(prob_m_vs_prob_g(
+                    first_edge_crossing(hsession),
+                    geometric_distance='euclidian', plot=False)[0].tolist())
+
+                magent = OmniscientAgent(maze, beta=beta, xi=3, heading = '^',
+                                            loc=(0,0))
+
+                msession = mx.SimSessionGivenGoals(magent, maze, goals)
+                msession.run()
+                msims.append(msession)
+                mcoords.append(prob_m_vs_prob_g(
+                    first_edge_crossing(msession),
+                    geometric_distance='euclidian', plot=False)[0].tolist())
+
+            hcoords = np.array(hcoords)
+            #h_indices = np.argsort(hcoords[:,0])
+            mcoords = np.array(mcoords)
+
+            pl.plot(hcoords[:,0], hcoords[:,1], linewidth=0, marker='o',
+                    color=heuristic_color)
+            pl.plot(mcoords[:,0], mcoords[:,1], linewidth=0, marker='o',
+                    color=planning_color)
+
+            hcov = np.cov(hcoords[:,0], hcoords[:,1])
+            hlambdas, hv = np.linalg.eig(hcov)
+            hlambdas = np.sqrt(hlambdas)
+
+            mcov = np.cov(mcoords[:,0], mcoords[:,1])
+            mlambdas, mv = np.linalg.eig(mcov)
+            mlambdas = np.sqrt(mlambdas)
+
+            from matplotlib.patches import Ellipse
+            for j in range(1, 4):
+                hell = Ellipse(xy=(np.mean(hcoords[:,0]), np.mean(hcoords[:,1])),
+                              width=hlambdas[0]*j*2, height=hlambdas[1]*j*2,
+                              angle=np.rad2deg(np.arccos(hv[0, 0])))
+                hell.set_facecolor('none')
+                ax = pl.gca()
+                ax.add_artist(hell)
+
+                mell = Ellipse(xy=(np.mean(mcoords[:,0]), np.mean(mcoords[:,1])),
+                              width=mlambdas[0]*j*2, height=mlambdas[1]*j*2,
+                              angle=np.rad2deg(np.arccos(mv[0, 0])))
+                mell.set_facecolor('none')
+                ax = pl.gca()
+                ax.add_artist(mell)
 
 # Generate objects so legend can be autogenerated
     p1 = pl.Rectangle((0, 0), 1, 1, fc=planning_color)
@@ -105,6 +184,7 @@ def arrows_plot(sessions, maze, controls='deterministic', colors='dark'):
     pl.xlabel('Planning index', weight='bold')
     pl.ylabel('Spatial heuristic index', weight='bold')
     pl.title('Planning vs spatial heuristic choice index')
+    pl.gca().set_aspect('equal')
     pl.xlim(0, 1.02)
     pl.ylim(0, 1.02)
 
@@ -235,10 +315,14 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
     """Calculate the average change in Geodesic and Manhattan distance on the
     trials when the agent had both the option to reduce or increase either
     distance."""
+    # [delta_Geodesic_distance, delta_Manhattan_distance]
     unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
+
+#_M = Manhattan / Euclidian distance
     S_d_M = 0
     S_best_forward_M = 0
     available_M = 0
+#_G = Geodesic = Maze = Shortest path distance
     S_d_G = 0
     S_best_forward_G = 0
     available_G = 0
@@ -250,7 +334,7 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
         to_dist_direction = utils.to_dist_direction
 
     for s in steps:
-        if s.previous: 
+        if s.previous:
             # we start by removing the node the agent just came from, from the
             #  list of available_nodes. we call that forward_nodes
             forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
@@ -269,9 +353,9 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
             #import ipdb; ipdb.set_trace() # BREAKPOINT
             if np.any(directions[:,0] == -1) and np.any(directions[:,0] == 1):
                 available_G += 1 # a simple counter
-                d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc, 
+                d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc,
                         s.trial.maze, s.trial.goal)]
-                
+
 #                i_dir_available_nodes = [to_dist_direction(n, s.loc,
 #                    s.trial.maze, s.trial.goal) for n in s.available_nodes]
                 i_dir_available_nodes = [to_dist_direction(n, s.loc,
@@ -285,9 +369,9 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
 
             if np.any(directions[:,1] == -1) and np.any(directions[:,1] == 1):
                 available_M += 1 # a simple counter
-                d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc, 
+                d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc,
                         s.trial.maze, s.trial.goal)]
-                
+
 #                i_dir_available_nodes = [to_dist_direction(n, s.loc,
 #                    s.trial.maze, s.trial.goal) for n in s.available_nodes]
                 i_dir_available_nodes = [to_dist_direction(n, s.loc,
