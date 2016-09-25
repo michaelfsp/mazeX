@@ -51,9 +51,15 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
 # Analyze and plot data
     pl.figure()
     indices = []
+
+    if controls == 'greedy':
+        plot_data = True
+    elif controls == 'stochastic':
+        plot_data = False
+
     for session in sessions:
         dx_dy, nums = prob_m_vs_prob_g(first_edge_crossing(session),
-                geometric_distance='euclidian', plot=True, hold=True,
+                geometric_distance='euclidian', plot=plot_data, hold=True,
                 facecolor=data_color, width=arrow_width,
                 head_width=9*arrow_width)
 
@@ -93,7 +99,7 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
                     width=arrow_width, head_width=9*arrow_width)
 
     elif controls == 'stochastic':
-        betas = np.logspace(-2, 2, 10, base=np.e)
+        betas = np.logspace(-3, 2, 30, base=np.e)
 
         n_goals_sessions = []
         #goals_base = []
@@ -110,6 +116,18 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
         ctrl_size = 50
 
         goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
+
+# for the confidence region
+        hcenters = []
+        mcenters = []
+
+        hlambdas = []
+        mlambdas = []
+        hvecs = []
+        mvecs = []
+
+        hellipses = []
+        mellipses = []
         for beta in betas:
             n_sims = 0
             hsims = []
@@ -144,34 +162,100 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
             #h_indices = np.argsort(hcoords[:,0])
             mcoords = np.array(mcoords)
 
-            pl.plot(hcoords[:,0], hcoords[:,1], linewidth=0, marker='o',
-                    color=heuristic_color)
-            pl.plot(mcoords[:,0], mcoords[:,1], linewidth=0, marker='o',
-                    color=planning_color)
+            #pl.plot(hcoords[:,0], hcoords[:,1], linewidth=0, marker='o',
+            #        color=heuristic_color)
+            #pl.plot(mcoords[:,0], mcoords[:,1], linewidth=0, marker='o',
+            #        color=planning_color)
 
             hcov = np.cov(hcoords[:,0], hcoords[:,1])
-            hlambdas, hv = np.linalg.eig(hcov)
-            hlambdas = np.sqrt(hlambdas)
+            hlambda, hv = np.linalg.eig(hcov)
+            hlambda = np.sqrt(hlambda)
+            hlambdas.append(hlambda)
+            hvecs.append(hv)
+            hcenters.append(np.mean(hcoords, axis=0))
 
             mcov = np.cov(mcoords[:,0], mcoords[:,1])
-            mlambdas, mv = np.linalg.eig(mcov)
-            mlambdas = np.sqrt(mlambdas)
+            mlambda, mv = np.linalg.eig(mcov)
+            mlambda = np.sqrt(mlambda)
+            mlambdas.append(mlambda)
+            mvecs.append(mv)
+            mcenters.append(np.mean(mcoords, axis=0))
 
             from matplotlib.patches import Ellipse
-            for j in range(1, 4):
-                hell = Ellipse(xy=(np.mean(hcoords[:,0]), np.mean(hcoords[:,1])),
-                              width=hlambdas[0]*j*2, height=hlambdas[1]*j*2,
-                              angle=np.rad2deg(np.arccos(hv[0, 0])))
-                hell.set_facecolor('none')
-                ax = pl.gca()
-                ax.add_artist(hell)
+            j = 2
+            hell = Ellipse(xy=(np.mean(hcoords[:,0]), np.mean(hcoords[:,1])),
+                          width=hlambda[0]*j*2, height=hlambda[1]*j*2,
+                          angle=np.rad2deg(np.arccos(hv[0, 0])), alpha=0.5,
+                          facecolor=heuristic_color, edgecolor='none',
+                          zorder=1)
+            hellipses.append(hell)
+            ax = pl.gca()
+            ax.add_artist(hell)
 
-                mell = Ellipse(xy=(np.mean(mcoords[:,0]), np.mean(mcoords[:,1])),
-                              width=mlambdas[0]*j*2, height=mlambdas[1]*j*2,
-                              angle=np.rad2deg(np.arccos(mv[0, 0])))
-                mell.set_facecolor('none')
-                ax = pl.gca()
-                ax.add_artist(mell)
+            mell = Ellipse(xy=(np.mean(mcoords[:,0]), np.mean(mcoords[:,1])),
+                          width=mlambda[0]*j*2, height=mlambda[1]*j*2,
+                          angle=np.rad2deg(np.arccos(mv[0, 0])), alpha=0.5,
+                          facecolor=planning_color, edgecolor='none',
+                          zorder=1)
+            mellipses.append(mell)
+            ax = pl.gca()
+            ax.add_artist(mell)
+
+            for x,y in indices:
+                pl.plot(x, y, linewidth=0, marker='o')
+
+        '''
+        #hsegments_vectors = []
+        #for i in np.arange(len(hcenters))[1:-1]:
+        #    hsegments_vectors.append(hcenters[i+1] - hcenters[i])
+        #hsegments_vectors.insert(0, hsegments_vectors[0])
+        #hsegments_vectors.insert(-1, hsegments_vectors[-1])
+        origin= np.array([0,0])
+        hline = hcenters[-1] - origin
+
+        hvecs_selected_i = []
+        for i, vec in enumerate(hvecs):
+            angles = []
+# The eigenvectors are the columns of the matrix. If we transpose then
+# we can simply iterate like this
+            vec = vec.transpose()
+            for v in vec:
+                angles.append(
+                    np.arccos(np.dot(v, hline) / (
+                        np.linalg.norm(v)*np.linalg.norm(
+                            hline))))
+            hvecs_selected_i.append(np.argmax(angles))
+            import ipdb; ipdb.set_trace()
+
+        sigma = 3
+        h_boundaries_plus = [hcenters[i]+sigma*hlambdas[i][hvecs_selected_i[i]]*hvecs[i][
+            hvecs_selected_i[i]] for i in range(len(hcenters))]
+
+        h_boundaries_minus =[hcenters[i]-sigma*hlambdas[i][hvecs_selected_i[i]]*hvecs[i][
+            hvecs_selected_i[i]] for i in range(len(hcenters))]
+
+        #pl.plot(h_boundaries_plus[:,0], h_boundaries_plus[:,1], 'b')
+        #pl.plot(h_boundaries_minus[:,0], h_boundaries_plus[:,1], 'k')
+        for x, y in h_boundaries_plus:
+            pl.plot(x,y, 'b', linewidth=0, marker='o')
+
+        for x, y in h_boundaries_minus:
+            pl.plot(x,y, 'k', linewidth=0, marker='o')
+
+        pl.show()
+        import ipdb; ipdb.set_trace()
+
+        #from shapely.geometry import Polygon
+        #from shapely.ops import cascaded_union
+        #heshapely = [Polygon(ellipse.get_path().vertices) for ellipse in hellipses]
+
+        #union = cascaded_union(heshapely)
+
+        #from descartes import PolygonPatch
+        #union_patch = PolygonPatch(union, fc='b', ec='b', alpha=0.5)
+        #ax = pl.gca()
+        #ax.add_patch(union_patch)
+        '''
 
 # Generate objects so legend can be autogenerated
     p1 = pl.Rectangle((0, 0), 1, 1, fc=planning_color)
