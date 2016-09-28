@@ -13,6 +13,20 @@ import scipy.optimize
 
 import seaborn as sns
 
+import shapely.geometry as sg
+import shapely.affinity as sa
+import shapely.ops as so
+import descartes
+from tqdm import tqdm
+import matplotlib as mpl
+
+def shapely_ellipse(center, major_axis, minor_axis, rotation=0.):
+    el = sg.Point(0., 0.).buffer(1.)               # a unit circle
+    el = sa.scale(el, major_axis/2, minor_axis/2)  # make it elliptic
+    el = sa.rotate(el, rotation)
+    el = sa.translate(el, *center)
+    return el
+
 def prob(step, null='random'):
     if null == 'random':
         # now we need to count how many edges correspond to the chosen
@@ -99,19 +113,23 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
                     width=arrow_width, head_width=9*arrow_width)
 
     elif controls == 'stochastic':
-        betas = np.logspace(-3, 2, 30, base=np.e)
+        betas = np.logspace(-3, 2, 120, base=np.e)
 
         n_goals_sessions = []
+        n_steps_sessions = []
         #goals_base = []
         for session in sessions:
             n_goals_sessions.append(len(session.trials))
+            n_steps_sessions.append(session.count_total_steps())
             #sessions_goals = []
             #for trial in session.trials:
             #    session_goals.append trial.goal
             #goals_base.append(session_goals)
 
-        n_goals = int(np.average(n_goals_sessions))
+        n_goals = 5* int(np.average(n_goals_sessions))
         print(n_goals)
+        max_total_steps = np.average(n_steps_sessions)
+        print(' ', max_total_steps)
         #n_goals = 1000
         ctrl_size = 50
 
@@ -128,7 +146,8 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
 
         hellipses = []
         mellipses = []
-        for beta in betas:
+        for beta in tqdm(betas, desc='betas'):
+            #print(beta)
             n_sims = 0
             hsims = []
             msims = []
@@ -136,12 +155,12 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
             hcoords = []
             mcoords = []
 
-            for goals in goalz:
-                print(beta)
+            for goals in tqdm(goalz, desc='goals'):
+                #print(beta)
                 #TODO: adapt xi per beta
                 hagent = HeuristicAgent(beta=beta, xi=3, penalty_type='exponential',
                                    heading = '^', loc=(0,0))
-                hsession = mx.SimSessionGivenGoals(hagent, maze, goals)
+                hsession = mx.SimSessionGivenGoals(hagent, maze, goals, max_total_steps=max_total_steps)
                 hsession.run()
                 hsims.append(hsession)
                 hcoords.append(prob_m_vs_prob_g(
@@ -151,7 +170,7 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
                 magent = OmniscientAgent(maze, beta=beta, xi=3, heading = '^',
                                             loc=(0,0))
 
-                msession = mx.SimSessionGivenGoals(magent, maze, goals)
+                msession = mx.SimSessionGivenGoals(magent, maze, goals, max_total_steps=max_total_steps)
                 msession.run()
                 msims.append(msession)
                 mcoords.append(prob_m_vs_prob_g(
@@ -181,28 +200,53 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
             mvecs.append(mv)
             mcenters.append(np.mean(mcoords, axis=0))
 
-            from matplotlib.patches import Ellipse
+            # borrowing code from http://stackoverflow.com/questions/34702067/how-can-i-get-the-outline-of-the-overlapping-patches-in-matplotlib-without-maths
+            # useful codes:
+            # https://gist.github.com/urschrei/6436526
+            # http://stackoverflow.com/questions/28732845/combine-two-pyplot-patches-for-legend
             j = 2
-            hell = Ellipse(xy=(np.mean(hcoords[:,0]), np.mean(hcoords[:,1])),
-                          width=hlambda[0]*j*2, height=hlambda[1]*j*2,
-                          angle=np.rad2deg(np.arccos(hv[0, 0])), alpha=0.5,
-                          facecolor=heuristic_color, edgecolor='none',
-                          zorder=1)
-            hellipses.append(hell)
+            hell_shapely = shapely_ellipse(np.mean(hcoords, axis=0), hlambda[0]*j*2, hlambda[1]*j*2, np.rad2deg(np.arccos(hv[0, 0])))
+            hellipses.append(hell_shapely)
+
+            mell_shapely = shapely_ellipse(np.mean(mcoords, axis=0), (mlambda[0]*j*2)+1e-10, (mlambda[1]*j*2)+1e-10, np.rad2deg(np.arccos(mv[0, 0])))
+            mellipses.append(mell_shapely)
+
+        sns.set_palette('Dark2', 8)
+        xs = np.array([indices[:,0]])
+        ys = np.array([indices[:,1]])
+
+        pmarkers = pl.plot(xs, ys, linewidth=0, marker='o', label='Data')
+        p3 = pmarkers[-1]
+
+        all_hellipses = so.cascaded_union(hellipses)
+        if type(all_hellipses) is sg.multipolygon.MultiPolygon:
+            hcollection = [descartes.PolygonPatch(h, ec='none', fc=heuristic_color, alpha=0.5, zorder=0) for h in all_hellipses]
+            ax = pl.gca()
+            ax.add_collection(mpl.collections.PatchCollection(hcollection, match_original=True))
+        else:
+            hell = descartes.PolygonPatch(all_hellipses, ec='none', fc=heuristic_color, alpha=0.5, zorder=0)
             ax = pl.gca()
             ax.add_artist(hell)
 
-            mell = Ellipse(xy=(np.mean(mcoords[:,0]), np.mean(mcoords[:,1])),
-                          width=mlambda[0]*j*2, height=mlambda[1]*j*2,
-                          angle=np.rad2deg(np.arccos(mv[0, 0])), alpha=0.5,
-                          facecolor=planning_color, edgecolor='none',
-                          zorder=1)
-            mellipses.append(mell)
+        hcenters = [c.tolist() for c in hcenters]
+        hcenters.insert(0, (0,0))
+        hcenters = np.array(hcenters)
+        p2_, = pl.plot(hcenters[:,0], hcenters[:,1], color=heuristic_color, linestyle='--', zorder=1)
+
+        all_mellipses = so.cascaded_union(mellipses)
+        if type(all_mellipses) is sg.multipolygon.MultiPolygon:
+            mcollection = [descartes.PolygonPatch(m, ec='none', fc=planning_color, alpha=0.5, zorder=0) for m in all_mellipses]
+            ax = pl.gca()
+            ax.add_collection(mpl.collections.PatchCollection(mcollection, match_original=True))
+        else:
+            mell = descartes.PolygonPatch(all_mellipses, ec='none', fc=planning_color, alpha=0.5, zorder=0)
             ax = pl.gca()
             ax.add_artist(mell)
 
-            for x,y in indices:
-                pl.plot(x, y, linewidth=0, marker='o')
+        mcenters = [c.tolist() for c in mcenters]
+        mcenters.insert(0, (0,0))
+        mcenters = np.array(mcenters)
+        p1_, = pl.plot(mcenters[:,0], mcenters[:,1], color=planning_color, linestyle='--', zorder=1)
 
         '''
         #hsegments_vectors = []
@@ -260,20 +304,24 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
 # Generate objects so legend can be autogenerated
     p1 = pl.Rectangle((0, 0), 1, 1, fc=planning_color)
     p2 = pl.Rectangle((0, 0), 1, 1, fc=heuristic_color)
-    p3 = pl.Rectangle((0, 0), 1, 1, fc=data_color)
+    if controls == 'greedy':
+        p3 = pl.Rectangle((0, 0), 1, 1, fc=data_color)
 
 # Legend and axis labels
-    pl.legend([p1, p2, p3], ['Planning agent simul.', 'Heuristic agent simul.',
-                             'Data'], loc=2)
+    if controls == 'greedy':
+        pl.legend([p1, p2, p3], ['Planning (simulation)', 'Heuristic (simulation)',
+                                 'Data'], loc=2)
+    if controls == 'stochastic':
+        pl.legend([p1, p2, p3], ['Planning (95% CR)', 'Heuristic (95% CR)',
+                                 'Data'], loc=2)
+
+
     pl.xlabel('Planning index', weight='bold')
     pl.ylabel('Spatial heuristic index', weight='bold')
     pl.title('Planning vs spatial heuristic choice index')
     pl.gca().set_aspect('equal')
     pl.xlim(0, 1.02)
     pl.ylim(0, 1.02)
-
-    pl.legend()
-
 
 def avg_vector_difference(session, geometric_distance='euclidian',
         exclusion_criterium='node', plot=False, **kwargs):

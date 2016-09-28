@@ -96,7 +96,8 @@ class SimSession(Session):
 
 
 class SimSessionGivenGoals(SimSession):
-    def __init__(self, agent, maze, goals, max_steps=0, loc_start=(0,0),
+    def __init__(self, agent, maze, goals, max_steps=0, max_total_steps=0,
+                 loc_start=(0,0),
                  **kwargs):
         """
         Parameters:
@@ -109,6 +110,8 @@ class SimSessionGivenGoals(SimSession):
         self.sim_maze = maze
         self.goals = goals
         self.max_steps = max_steps
+        self.max_total_steps = max_total_steps
+        self.total_steps = 0
         self.loc_start = loc_start
 
         super(SimSessionGivenGoals, self).__init__(**kwargs)
@@ -120,20 +123,29 @@ class SimSessionGivenGoals(SimSession):
         """
         self.agent.loc = self.loc_start
         trials = []
-        for goal in self.goals:
-            initial_step = SimStep(self.agent.loc)
-            self.agent.node_visit_cache.clear()
-            self.agent.edge_visit_cache.clear()
-            # we set loc to current loc such that loc gets added to edge and
-            #  node_visit_cache
-            self.agent.loc = self.agent.loc
-            trial = SimTrial(self.sim_maze, goal, initial_step, self.agent,
-                                       max_steps=self.max_steps)
+        if self.max_total_steps > 0:
+            termination_condition = lambda self: self.total_steps >= self.max_total_steps
+        else:
+            termination_condition = lambda self: False
 
-            trial.solve()
-            if verbose:
-                print('Solved trial %i' %len(trials))
-            trials.append(trial)
+        for goal in self.goals:
+            if not termination_condition(self):
+                initial_step = SimStep(self.agent.loc)
+                self.agent.node_visit_cache.clear()
+                self.agent.edge_visit_cache.clear()
+                # we set loc to current loc such that loc gets added to edge and
+                #  node_visit_cache
+                self.agent.loc = self.agent.loc
+                trial = SimTrial(self.sim_maze, goal, initial_step, self.agent,
+                                           max_steps=self.max_steps)
+
+                trial.solve()
+                if verbose:
+                    print('Solved trial %i' %len(trials))
+                self.total_steps += len(trial.steps) - 1
+                trials.append(trial)
+            else:
+                pass
 
         self.trials = trials
 
