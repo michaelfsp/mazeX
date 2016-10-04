@@ -113,7 +113,9 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
                     width=arrow_width, head_width=9*arrow_width)
 
     elif controls == 'stochastic':
-        betas = np.logspace(-3, 2, 120, base=np.e)
+        betas = np.logspace(-3, 4, 20, base=np.e)
+        #betas = np.logspace(-3, 2, 120, base=np.e)
+
 
         n_goals_sessions = []
         n_steps_sessions = []
@@ -131,6 +133,7 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
         max_total_steps = np.average(n_steps_sessions)
         print(' ', max_total_steps)
         #n_goals = 1000
+        #ctrl_size = 20
         ctrl_size = 50
 
         goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
@@ -158,7 +161,7 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
             for goals in tqdm(goalz, desc='goals'):
                 #print(beta)
                 #TODO: adapt xi per beta
-                hagent = HeuristicAgent(beta=beta, xi=3, penalty_type='exponential',
+                hagent = HeuristicAgent(beta=beta, xi=5, penalty_type='exponential',
                                    heading = '^', loc=(0,0))
                 hsession = mx.SimSessionGivenGoals(hagent, maze, goals, max_total_steps=max_total_steps)
                 hsession.run()
@@ -167,7 +170,7 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
                     first_edge_crossing(hsession),
                     geometric_distance='euclidian', plot=False)[0].tolist())
 
-                magent = OmniscientAgent(maze, beta=beta, xi=3, heading = '^',
+                magent = OmniscientAgent(maze, beta=beta, xi=5, heading = '^',
                                             loc=(0,0))
 
                 msession = mx.SimSessionGivenGoals(magent, maze, goals, max_total_steps=max_total_steps)
