@@ -170,6 +170,13 @@ class MixtureLikelihood(Likelihood):
         return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
                 zeta=zeta, xi=xi, subtract_mean=subtract_mean)
 
+    def gzx_nll(self, params_array, subtract_mean=True):
+        gamma, zeta, xi = params_array
+        delta = 0
+        epsilon = 0
+        return self.vect_nll(gamma=gamma, delta=delta, epsilon=epsilon,
+                zeta=zeta, xi=xi, subtract_mean=subtract_mean)
+
     def gx_nll(self, params_array, subtract_mean=True):
         gamma, xi = params_array
         delta = 0
