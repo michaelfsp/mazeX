@@ -6,12 +6,6 @@ import xml.etree.ElementTree as ET
 import shapely.geometry 
 import re
 
-try:
-    import prettyplotlib as ppl
-except ImportError:
-    print("Prettyplotlib not available. Falling back onto Matplotlib.")
-
-
 class BonsaiFile:
     def __init__(self, filename, picture_filename=None):
         self.filename = filename
@@ -22,7 +16,7 @@ class BonsaiFile:
             self.picture_filename = picture_filename
 
     def plot(self, picture=True):
-       ppl.plot(self.array[:,0], self.array[:,1]) 
+       pl.plot(self.array[:,0], self.array[:,1])
        pl.imshow(pl.imread(self.picture_filename))
 
     def to_poke_ports(self, mapping):

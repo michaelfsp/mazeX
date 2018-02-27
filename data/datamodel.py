@@ -2,7 +2,6 @@ import os.path
 
 import numpy as np
 import pylab as pl
-import prettyplotlib as ppl
 
 from mazex.data.arduino import ArduinoDataFile
 

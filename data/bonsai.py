@@ -14,13 +14,6 @@ import datetime
 from mazex.exceptions import InvalidMaze
 from mazex.data.regionmapping import PortRegion, RegionMapping
 
-try:
-    import prettyplotlib as ppl
-except ImportError:
-    print("Prettyplotlib not available. Falling back onto Matplotlib.")
-    import pylab as ppl
-
-
 class BonsaiData:
     def __init__(self, centroid_file, metadata_file, fps=30,
             background_file=None, background_PNG=None, maze=None):
@@ -184,12 +177,12 @@ class BonsaiData:
             pl.imshow(img, cmap='gray', vmin=0, vmax=255)
 
         if t_start is None and t_stop is None: 
-            ppl.plot(self.xy[:,0], self.xy[:,1], linewidth=0, marker='o') 
+            pl.plot(self.xy[:,0], self.xy[:,1], linewidth=0, marker='o') 
 
         else:
             xy_slice = self.get_time_slice(t_start, t_stop)[:,1:3]
             if not color_map:
-                ppl.plot(xy_slice[:,0], xy_slice[:,1], linewidth=0, marker='o')
+                pl.plot(xy_slice[:,0], xy_slice[:,1], linewidth=0, marker='o')
             else:
                 npoints = len(xy_slice)
                 #color_map='winter'
