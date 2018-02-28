@@ -2,7 +2,7 @@
 Analysis methods that don't rely on fitting should come here
 """
 from mazex.exceptions import *
-from mazex.analysis.iterators import first_exit, first_edge_crossing
+from mazex.analysis.iterators import first_exit, first_edge_crossing, orthogonal_planning_vectornav
 from mazex.agents import HeuristicAgent, OmniscientAgent
 import mazex.utils as utils
 import mazex as mx
@@ -325,6 +325,50 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
     pl.gca().set_aspect('equal')
     pl.xlim(0, 1.02)
     pl.ylim(0, 1.02)
+
+
+def orthogonal_arrows_plot(sessions, maze, colors='dark'):
+#TODO: let user input control msession and hsession as function inputs
+
+    sns.set(context='notebook', font_scale=1.3,
+            rc={'axes.titleweight': 'bold'})
+
+# Params
+    if colors == 'dark':
+        data_color = sns.color_palette('Dark2')[3]
+        planning_color = sns.color_palette('Dark2')[0]
+        heuristic_color = sns.color_palette('Dark2')[1]
+
+    elif colors == 'light':
+        data_color = '#E78CC4'
+        planning_color = '#3CCF97'
+        heuristic_color = '#F97F42'
+
+# Analyze and plot data
+    indices = []
+
+    for session in sessions:
+        steps_generator = orthogonal_planning_vectornav(
+            first_edge_crossing(session), maze)
+
+        dx_dy, nums = frac_m(steps_generator,
+                geometric_distance='euclidian', plot=False)
+
+        indices.append(dx_dy)
+
+    indices = np.array(indices)
+    dx, dy = np.mean(indices, axis=0)
+    dx_err, dy_err = np.std(indices, axis=0)
+
+    pl.xlabel('Planning index', weight='bold')
+    pl.ylabel('Vector navigation index', weight='bold')
+    pl.title('Planning vs vector navigation choice index')
+    pl.gca().set_aspect('equal')
+    pl.xlim(0, 1.02)
+    pl.ylim(0, 1.02)
+
+    return indices
+
 
 def avg_vector_difference(session, geometric_distance='euclidian',
         exclusion_criterium='node', plot=False, **kwargs):
