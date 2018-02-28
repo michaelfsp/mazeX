@@ -125,9 +125,24 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
         elif centrality == 'current_flow':
             centralities = M.current_flow_betweenness_centrality
 
+        elif centrality == 'fiedler_vector':
+            centralities = M.fiedler_vector_centrality
+
+        elif centrality == 'fiedler_vector_partition':
+            centralities = M.fiedler_vector_partition
+
+        elif centrality == 'normalized_fiedler_vector':
+            centralities = M.normalized_fiedler_vector_centrality
+
+        elif centrality == 'normalized_fiedler_vector_partition':
+            centralities = M.normalized_fiedler_vector_partition
+
+        elif centrality == 'spectral_ordering':
+            centralities = M.spectral_ordering_centrality
+
         if not nvmin:
             nvmin = min(list(centralities.values()))
-        
+
         if not nvmax:
             nvmax = max(list(centralities.values()))
 
@@ -147,7 +162,7 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                 nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color=n_colors,
                         cmap=nodes_cm, vmin=nvmin, vmax=nvmax, linewidths=0,
                         node_size=100)
-            
+
             if edge_centrality:
                 if centrality == 'betweenness':
                     edge_centralities = M.edge_betweenness_centrality
@@ -157,7 +172,7 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
 
                 if not evmin:
                     evmin = min(list(edge_centralities.values()))
-                
+
                 if not evmax:
                     evmax = max(list(edge_centralities.values()))
 

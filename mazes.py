@@ -171,6 +171,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
         self.nodes_reachable_n_steps = partial(nodes_reachable_n_steps,
                                                self)
+
     @property
     def betweenness_centrality(self):
         return cached_betweenness_centrality(self)
@@ -199,7 +200,7 @@ class SquareMaze(nx.classes.graph.Graph):
     def degree_centrality(self):
         return cached_degree_centrality(self)
 
-    #TODO: change names of dead_end and real_degree to something more
+    # TODO: change names of dead_end and real_degree to something more
     # more senseful since they aren't actual centralities
 
     @property
@@ -218,11 +219,172 @@ class SquareMaze(nx.classes.graph.Graph):
         return dead_end_centrality_dic
 
     @property
+    def d_minus_half(self):
+        return np.sqrt(np.linalg.inv(self.degree_matrix))
+
+    @property
+    def d_half(self):
+        return np.sqrt(self.degree_matrix)
+
+    @property
+    @lru_cache(maxsize=128)
+    def fiedler_vector_centrality(self):
+        '''It is not a real centrality either. It simply is the value of the
+        eigenvector corresponding to the second smallest eigenvalue of the
+        normalized Graph Laplacian.
+        '''
+        """
+        # this return a matrix. need to conver it to array
+        normed_laplacian = nx.normalized_laplacian_matrix(self)
+        normed_laplacian_array = normed_laplacian.toarray()
+
+        # The Laplacian matrix is symmetric so we can use eigh which is for
+        # Hermitian/Symmetric matrices
+        eigvals, eigvecs = np.linalg.eigh(normed_laplacian_array)
+
+        # The eigenvalues returned by eigh are already sorted so we can
+        # confidently take the eigenvector of index 1 which would be the
+        # second smallest eigenvector which is the Fiedler vector
+        fiedler_vector = eigvecs[1]
+        fiedler_vector = nx.fiedler_vector(self)
+
+        scaled_fiedler_vector = np.dot(self.d_minus_half, fiedler_vector)
+
+        scaled_fiedler_vector = np.where(fiedler_vector<0, 0, 1)
+
+        fiedler_vector_centrality_dic = {}
+
+        # I believe the order of the nodes on the adjacency matrix and
+        # therefore that of the entries on the fiedler vector are the same as
+        # in maze.nodes()
+        for n, v in zip(self.nodes(), scaled_fiedler_vector):
+            fiedler_vector_centrality_dic[n] = v
+        """
+
+        # this bit is copied from nx.spectral_ordering because only in this
+        # way can we be certain of the order of nodes in the fiedler vector
+        G = nx.algebraicconnectivity._preprocess_graph(self, weight=None)
+
+        find_fiedler = nx.algebraicconnectivity._get_fiedler_func('tracemin')
+
+        fiedler_vector_centrality_dic = {}
+
+        for component in nx.connected_components(G):
+            size = len(component)
+            if size > 2:
+                L = nx.laplacian_matrix(G, component)
+                fiedler = find_fiedler(L, None, False, 1e-8)[1]
+                for x, c, u in sorted(zip(fiedler, range(size), component)):
+                    fiedler_vector_centrality_dic[u] = x
+
+        return fiedler_vector_centrality_dic
+
+    @property
+    @lru_cache(maxsize=128)
+    def fiedler_vector_partition(self):
+        partition = {}
+        for k, v in self.fiedler_vector_centrality.items():
+            if v < 0.0:
+                partition[k] = 0
+            else:
+                partition[k] = 1
+
+        return partition
+
+    @property
+    @lru_cache(maxsize=128)
+    def normalized_fiedler_vector_centrality(self):
+        '''It is not a real centrality either. It simply is the value of the
+        eigenvector corresponding to the second smallest eigenvalue of the
+        normalized Graph Laplacian.
+        '''
+        """
+        # this return a matrix. need to conver it to array
+        normed_laplacian = nx.normalized_laplacian_matrix(self)
+        normed_laplacian_array = normed_laplacian.toarray()
+
+        # The Laplacian matrix is symmetric so we can use eigh which is for
+        # Hermitian/Symmetric matrices
+        eigvals, eigvecs = np.linalg.eigh(normed_laplacian_array)
+
+        # The eigenvalues returned by eigh are already sorted so we can
+        # confidently take the eigenvector of index 1 which would be the
+        # second smallest eigenvector which is the Fiedler vector
+        fiedler_vector = eigvecs[1]
+        fiedler_vector = nx.fiedler_vector(self)
+
+        scaled_fiedler_vector = np.dot(self.d_minus_half, fiedler_vector)
+
+        scaled_fiedler_vector = np.where(fiedler_vector<0, 0, 1)
+
+        fiedler_vector_centrality_dic = {}
+
+        # I believe the order of the nodes on the adjacency matrix and
+        # therefore that of the entries on the fiedler vector are the same as
+        # in maze.nodes()
+        for n, v in zip(self.nodes(), scaled_fiedler_vector):
+            fiedler_vector_centrality_dic[n] = v
+        """
+
+        # this bit is copied from nx.spectral_ordering because only in this
+        # way can we be certain of the order of nodes in the fiedler vector
+        G = nx.algebraicconnectivity._preprocess_graph(self, weight=None)
+
+        find_fiedler = nx.algebraicconnectivity._get_fiedler_func('tracemin')
+
+        fiedler_vector_centrality_dic = {}
+        degree_dic = self.degree()
+
+        for component in nx.connected_components(G):
+            size = len(component)
+            if size > 2:
+                L = nx.laplacian_matrix(G, component)
+                fiedler = find_fiedler(L, None, True, 1e-8)[1]
+                for x, c, u in sorted(zip(fiedler, range(size), component)):
+                    fiedler_vector_centrality_dic[u] = x/(np.sqrt(
+                        degree_dic[u]))
+
+        return fiedler_vector_centrality_dic
+
+    @property
+    @lru_cache(maxsize=128)
+    def normalized_fiedler_vector_partition(self):
+        partition = {}
+        for k, v in self.normalized_fiedler_vector_centrality.items():
+            if v < 0:
+                partition[k] = 0
+            else:
+                partition[k] = 1
+
+        return partition
+
+    @property
+    @lru_cache(maxsize=128)
+    def spectral_ordering_centrality(self):
+        specord = nx.spectral_ordering(self)
+
+        spectral_ordering_centrality_dic = {}
+        for n in self.nodes():
+            spectral_ordering_centrality_dic[n] = specord.index(n)
+
+        return spectral_ordering_centrality_dic
+
+    @property
     @lru_cache(maxsize=128)
     def real_degree_centrality(self):
         '''It is not a real centrality.
         '''
         return self.degree()
+
+    #TODO: move this to networkx
+    @property
+    def degree_matrix(self):
+        degree_matrix = np.zeros((self.maze_size**2, self.maze_size**2))
+
+        for i, (nd) in enumerate(self.degree_iter()):
+            degree_matrix[i,i] = nd[1]
+
+        return degree_matrix
 
     @property
     def distances_matrix(self):
