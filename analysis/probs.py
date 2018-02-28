@@ -312,16 +312,16 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
 
 # Legend and axis labels
     if controls == 'greedy':
-        pl.legend([p1, p2, p3], ['Planning (simulation)', 'Heuristic (simulation)',
+        pl.legend([p1, p2, p3], ['Planning (simulation)', 'Vector nav. (simulation)',
                                  'Data'], loc=2)
     if controls == 'stochastic':
-        pl.legend([p1, p2, p3], ['Planning (95% CR)', 'Heuristic (95% CR)',
+        pl.legend([p1, p2, p3], ['Planning (95% CR)', 'Vector nav. (95% CR)',
                                  'Data'], loc=2)
 
 
     pl.xlabel('Planning index', weight='bold')
-    pl.ylabel('Spatial heuristic index', weight='bold')
-    pl.title('Planning vs spatial heuristic choice index')
+    pl.ylabel('Vector navigation index', weight='bold')
+    pl.title('Planning vs vector navigation choice index')
     pl.gca().set_aspect('equal')
     pl.xlim(0, 1.02)
     pl.ylim(0, 1.02)
