@@ -2,7 +2,7 @@
 Analysis methods that don't rely on fitting should come here
 """
 from mazex.exceptions import *
-from mazex.analysis.iterators import first_exit, first_edge_crossing
+from mazex.analysis.iterators import first_exit, first_edge_crossing, orthogonal_planning_vectornav
 from mazex.agents import HeuristicAgent, OmniscientAgent
 import mazex.utils as utils
 import mazex as mx
@@ -326,6 +326,50 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
     pl.xlim(0, 1.02)
     pl.ylim(0, 1.02)
 
+
+def orthogonal_arrows_plot(sessions, maze, colors='dark'):
+#TODO: let user input control msession and hsession as function inputs
+
+    sns.set(context='notebook', font_scale=1.3,
+            rc={'axes.titleweight': 'bold'})
+
+# Params
+    if colors == 'dark':
+        data_color = sns.color_palette('Dark2')[3]
+        planning_color = sns.color_palette('Dark2')[0]
+        heuristic_color = sns.color_palette('Dark2')[1]
+
+    elif colors == 'light':
+        data_color = '#E78CC4'
+        planning_color = '#3CCF97'
+        heuristic_color = '#F97F42'
+
+# Analyze and plot data
+    indices = []
+
+    for session in sessions:
+        steps_generator = orthogonal_planning_vectornav(
+            first_edge_crossing(session), maze)
+
+        dx_dy, nums = frac_m(steps_generator,
+                geometric_distance='euclidian', plot=False)
+
+        indices.append(dx_dy)
+
+    indices = np.array(indices)
+    dx, dy = np.mean(indices, axis=0)
+    dx_err, dy_err = np.std(indices, axis=0)
+
+    pl.xlabel('Planning index', weight='bold')
+    pl.ylabel('Vector navigation index', weight='bold')
+    pl.title('Planning vs vector navigation choice index')
+    pl.gca().set_aspect('equal')
+    pl.xlim(0, 1.02)
+    pl.ylim(0, 1.02)
+
+    return indices
+
+
 def avg_vector_difference(session, geometric_distance='euclidian',
         exclusion_criterium='node', plot=False, **kwargs):
     chosen_vectors = []
@@ -444,6 +488,116 @@ def fraction_dir_vector(session, exclusion_criterium='node'):
     angle = np.arctan(tan_vector)
 
     return fraction_vector, angle
+
+
+def frac_m(steps, geometric_distance='euclidian', plot=True,
+        hold=None, **kwargs):
+    """Calculate the average change in Geodesic and Manhattan distance on the
+    trials when the agent had both the option to reduce or increase either
+    distance."""
+    # [delta_Geodesic_distance, delta_Manhattan_distance]
+    unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
+
+#_M = Manhattan / Euclidian distance
+    S_d_M = 0
+    S_best_forward_M = 0
+    available_M = 0
+
+    count_vector = 0
+#_G = Geodesic = Maze = Shortest path distance
+    S_d_G = 0
+    S_best_forward_G = 0
+    available_G = 0
+
+    count_planning = 0
+
+    if geometric_distance == 'euclidian':
+        to_dist_direction = utils.to_dist_direction_euclidian
+
+    elif geometric_distance == 'manhattan':
+        to_dist_direction = utils.to_dist_direction
+
+    for s in steps:
+        if s.previous:
+            # we start by removing the node the agent just came from, from the
+            #  list of available_nodes. we call that forward_nodes
+            forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
+        else:
+            forward_nodes = s.available_nodes
+
+        #TODO: Exclude the trials when the animal actually decided to go
+        # backward!
+        if len(forward_nodes) > 1:# and s.subsequent.loc in forward_nodes:
+            # we change from physical coordinates of the forward nodes to
+            #  changes in the geodesical and physical distance
+            directions = np.array([unit_vectors[to_dist_direction(
+                a, s.loc, s.trial.maze, s.trial.goal)] for a in forward_nodes])
+
+            # We check if there were options along the Geodesical axis
+            #import ipdb; ipdb.set_trace() # BREAKPOINT
+#            if np.any(directions[:,0] == -1) and np.any(directions[:,0] == 1):
+#                available_G += 1 # a simple counter
+#                d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc,
+#                        s.trial.maze, s.trial.goal)]
+#
+#                #import ipdb; ipdb.set_trace()
+#                if d_M == -1:
+#                    count_vector += 1
+#
+#                if d_G == -1:
+#                    count_planning += 1
+#
+#            if np.any(directions[:,1] == -1) and np.any(directions[:,1] == 1):
+#                available_M += 1 # a simple counter
+#                d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc,
+#                        s.trial.maze, s.trial.goal)]
+#
+#                if d_M == -1:
+#                    count_vector += 1
+#
+#                if d_G == -1:
+#                    count_planning += 1
+
+            if np.any(directions[:,0] == -1) and np.any(directions[:,0] == 1):
+                available_G += 1 # a simple counter
+                            #import ipdb; ipdb.set_trace()
+
+            if np.any(directions[:,1] == -1) and np.any(directions[:,1] == 1):
+                available_M += 1 # a simple counter
+
+            d_G, d_M = unit_vectors[to_dist_direction(s.subsequent.loc, s.loc,
+                    s.trial.maze, s.trial.goal)]
+
+            if d_M == -1:
+                count_vector += 1
+
+            if d_G == -1:
+                count_planning += 1
+    if plot:
+        # we need to save the matplotlib artist for the arrow object for legend
+        #  building purposes
+        arrow_artist = pl.arrow(0, 0, S_d_G/S_best_forward_G,
+                S_d_M/S_best_forward_M, hold=hold,
+                edgecolor='none', length_includes_head=True, **kwargs)
+
+        if kwargs:
+            if 'label' in kwargs:
+                # now we create the legend in this complex way because arrow
+                #  does not support automatic legend building
+                from mazex.drawing import make_legend_arrow
+                import matplotlib.patches as mpatches
+                from matplotlib.legend_handler import HandlerPatch
+                pl.legend([arrow_artist], [kwargs['label']], handler_map={
+                    mpatches.FancyArrow : HandlerPatch(patch_func=
+                        make_legend_arrow)})
+                pl.gca().set_aspect('equal')
+                pl.xlim(0, 1.1)
+                pl.ylim(0, 1.1)
+                pl.tight_layout()
+
+    return np.array([count_planning, count_vector]), (
+        available_G, available_M)
+
 
 def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
         hold=None, **kwargs):
