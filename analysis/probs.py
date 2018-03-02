@@ -327,6 +327,195 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
     pl.ylim(0, 1.02)
 
 
+def arrows_plot2(sessions, maze, spatial_distance='euclidian', colors='dark'):
+#TODO: let user input control msession and hsession as function inputs
+
+    sns.set(context='notebook', font_scale=1.3,
+            rc={'axes.titleweight': 'bold'})
+
+# Params
+    if colors == 'dark':
+        data_color = sns.color_palette('Dark2')[3]
+        planning_color = sns.color_palette('Dark2')[0]
+        heuristic_color = sns.color_palette('Dark2')[1]
+
+    elif colors == 'light':
+        data_color = '#E78CC4'
+        planning_color = '#3CCF97'
+        heuristic_color = '#F97F42'
+
+# Analyze and plot data
+    pl.figure()
+    indices = []
+
+    for session in sessions:
+        dx_dy = prob_plan_prob_vec(first_exit(session),
+                spatial_distance=spatial_distance)
+
+        indices.append(dx_dy)
+
+    indices = np.array(indices)
+    dx, dy = np.mean(indices, axis=0)
+    dx_err, dy_err = np.std(indices, axis=0)
+
+# Generate controls
+    betas = np.logspace(-2, 4, 60, base=np.e)
+    #betas = np.logspace(-3, 4, 20, base=np.e)
+    #betas = np.logspace(-3, 2, 120, base=np.e)
+
+
+    n_goals_sessions = []
+    n_steps_sessions = []
+    #goals_base = []
+    for session in sessions:
+        n_goals_sessions.append(len(session.trials))
+        n_steps_sessions.append(session.count_total_steps())
+        #sessions_goals = []
+        #for trial in session.trials:
+        #    session_goals.append trial.goal
+        #goals_base.append(session_goals)
+
+    n_goals = 5* int(np.average(n_goals_sessions))
+    print(n_goals)
+    max_total_steps = np.average(n_steps_sessions)
+    print(' ', max_total_steps)
+    #n_goals = 1000
+    #ctrl_size = 20
+    ctrl_size = 100
+
+    goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
+
+# for the confidence region
+    hcenters = []
+    mcenters = []
+
+    hlambdas = []
+    mlambdas = []
+    hvecs = []
+    mvecs = []
+
+    hellipses = []
+    mellipses = []
+    for beta in tqdm(betas, desc='betas'):
+        #print(beta)
+        n_sims = 0
+        hsims = []
+        msims = []
+
+        hcoords = []
+        mcoords = []
+
+        for goals in tqdm(goalz, desc='goals'):
+            #print(beta)
+            #TODO: adapt xi per beta
+            hagent = HeuristicAgent(beta=beta, xi=5, penalty_type='exponential',
+                               heading = '^', loc=(0,0))
+            hsession = mx.SimSessionGivenGoals(hagent, maze, goals, max_total_steps=max_total_steps)
+            hsession.run()
+            hsims.append(hsession)
+            hcoords.append(prob_plan_prob_vec(
+                first_exit(hsession),
+                spatial_distance=spatial_distance))
+
+            magent = OmniscientAgent(maze, beta=beta, xi=5, heading = '^',
+                                        loc=(0,0))
+
+            msession = mx.SimSessionGivenGoals(magent, maze, goals, max_total_steps=max_total_steps)
+            msession.run()
+            msims.append(msession)
+            mcoords.append(prob_plan_prob_vec(
+                first_exit(msession),
+                spatial_distance=spatial_distance))
+
+        hcoords = np.array(hcoords)
+        #h_indices = np.argsort(hcoords[:,0])
+        mcoords = np.array(mcoords)
+
+        #pl.plot(hcoords[:,0], hcoords[:,1], linewidth=0, marker='o',
+        #        color=heuristic_color)
+        #pl.plot(mcoords[:,0], mcoords[:,1], linewidth=0, marker='o',
+        #        color=planning_color)
+
+        hcov = np.cov(hcoords[:,0], hcoords[:,1])
+        hlambda, hv = np.linalg.eig(hcov)
+        hlambda = np.sqrt(hlambda)
+        hlambdas.append(hlambda)
+        hvecs.append(hv)
+        hcenters.append(np.mean(hcoords, axis=0))
+
+        mcov = np.cov(mcoords[:,0], mcoords[:,1])
+        mlambda, mv = np.linalg.eig(mcov)
+        mlambda = np.sqrt(mlambda)
+        mlambdas.append(mlambda)
+        mvecs.append(mv)
+        mcenters.append(np.mean(mcoords, axis=0))
+
+        # borrowing code from http://stackoverflow.com/questions/34702067/how-can-i-get-the-outline-of-the-overlapping-patches-in-matplotlib-without-maths
+        # useful codes:
+        # https://gist.github.com/urschrei/6436526
+        # http://stackoverflow.com/questions/28732845/combine-two-pyplot-patches-for-legend
+        j = 2
+        hell_shapely = shapely_ellipse(np.mean(hcoords, axis=0), hlambda[0]*j*2, hlambda[1]*j*2, np.rad2deg(np.arccos(hv[0, 0])))
+        hellipses.append(hell_shapely)
+
+        mell_shapely = shapely_ellipse(np.mean(mcoords, axis=0), (mlambda[0]*j*2)+1e-10, (mlambda[1]*j*2)+1e-10, np.rad2deg(np.arccos(mv[0, 0])))
+        mellipses.append(mell_shapely)
+
+    sns.set_palette('Dark2', 8)
+    xs = np.array([indices[:,0]])
+    ys = np.array([indices[:,1]])
+
+    pmarkers = pl.plot(xs, ys, linewidth=0, marker='o', label='Data')
+    p3 = pmarkers[-1]
+
+    all_hellipses = so.cascaded_union(hellipses)
+    if type(all_hellipses) is sg.multipolygon.MultiPolygon:
+        hcollection = [descartes.PolygonPatch(h, ec='none', fc=heuristic_color, alpha=0.5, zorder=0) for h in all_hellipses]
+        ax = pl.gca()
+        ax.add_collection(mpl.collections.PatchCollection(hcollection, match_original=True))
+    else:
+        hell = descartes.PolygonPatch(all_hellipses, ec='none', fc=heuristic_color, alpha=0.5, zorder=0)
+        ax = pl.gca()
+        ax.add_artist(hell)
+
+    hcenters = [c.tolist() for c in hcenters]
+    hcenters.insert(0, (0,0))
+    hcenters = np.array(hcenters)
+    p2_, = pl.plot(hcenters[:,0], hcenters[:,1], color=heuristic_color, linestyle='--', zorder=1)
+
+    all_mellipses = so.cascaded_union(mellipses)
+    if type(all_mellipses) is sg.multipolygon.MultiPolygon:
+        mcollection = [descartes.PolygonPatch(m, ec='none', fc=planning_color, alpha=0.5, zorder=0) for m in all_mellipses]
+        ax = pl.gca()
+        ax.add_collection(mpl.collections.PatchCollection(mcollection, match_original=True))
+    else:
+        mell = descartes.PolygonPatch(all_mellipses, ec='none', fc=planning_color, alpha=0.5, zorder=0)
+        ax = pl.gca()
+        ax.add_artist(mell)
+
+    mcenters = [c.tolist() for c in mcenters]
+    mcenters.insert(0, (0,0))
+    mcenters = np.array(mcenters)
+    p1_, = pl.plot(mcenters[:,0], mcenters[:,1], color=planning_color, linestyle='--', zorder=1)
+
+
+# Generate objects so legend can be autogenerated
+    p1 = pl.Rectangle((0, 0), 1, 1, fc=planning_color)
+    p2 = pl.Rectangle((0, 0), 1, 1, fc=heuristic_color)
+
+# Legend and axis labels
+    pl.legend([p1, p2, p3], ['Planning (95% CR)', 'Vector nav. (95% CR)',
+                             'Data'], loc=2)
+
+
+    pl.xlabel('Planning index', weight='bold')
+    pl.ylabel('Vector navigation index', weight='bold')
+    pl.title('Planning vs vector navigation choice index')
+    pl.gca().set_aspect('equal')
+    pl.xlim(0, 1.02)
+    pl.ylim(0, 1.02)
+
+
 def orthogonal_arrows_plot(sessions, maze, colors='dark'):
 #TODO: let user input control msession and hsession as function inputs
 
@@ -695,8 +884,94 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
                 pl.ylim(0, 1.1)
                 pl.tight_layout()
 
+    #import ipdb; ipdb.set_trace()
     return np.array([S_d_G/S_best_forward_G, S_d_M/S_best_forward_M]), (
         available_G, available_M)
+
+
+def prob_plan_prob_vec(steps, spatial_distance='euclidian', discard_backtracked=True):
+    planning_opportunities = 0
+    planning_choices = 0
+    planning_choices_random_choice = 0
+
+    vector_opportunities = 0
+    vector_choices = 0
+    vector_choices_random_choice = 0
+
+
+    for s in mx.analysis.iterators.exclude_goal(steps):
+        if s.previous:
+            if discard_backtracked and s.previous.loc == s.subsequent.loc:
+                # by continuing to the next iteration of the for loop we skip
+                # over steps where the agent went to where it just came from
+                continue
+            else:
+                forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
+        else:
+            forward_nodes = s.available_nodes
+
+        if len(forward_nodes) > 1:
+            #we check if there are preferred and non-preferred options for planning
+            if len(set([s.trial.maze.distances_dictionary[s.trial.goal][f] for f in forward_nodes])) > 1:
+                planning_opportunities += 1
+
+                n_planning_options = 0
+                for f in forward_nodes:
+                    if s.trial.maze.distances_dictionary[s.trial.goal][f] < s.trial.maze.distances_dictionary[s.trial.goal][s.loc]:
+                        n_planning_options += 1
+                planning_choices_random_choice += n_planning_options/len(forward_nodes)
+
+                if s.trial.maze.distances_dictionary[s.trial.goal][s.subsequent.loc] < s.trial.maze.distances_dictionary[s.trial.goal][s.loc]:
+                    planning_choices += 1
+
+#             if len(set([mx.utils.euclidian_distance(s.trial.goal, f) for f in forward_nodes])) > 1:
+#                vector_opportunities += 1
+#
+#                n_vector_options = 0
+#                for f in forward_nodes:
+#                    if  mx.utils.euclidian_distance(s.trial.goal, f) < mx.utils.euclidian_distance(s.trial.goal, s.loc):
+#                        n_vector_options += 1
+#                vector_choices_random_choice += n_vector_options/len(forward_nodes)
+#
+#                if mx.utils.euclidian_distance(s.trial.goal, s.subsequent.loc) == min([mx.utils.euclidian_distance(s.trial.goal, f):
+#                    vector_choices += 1
+
+            if spatial_distance == 'manhattan':
+                forward_eucl_dists = np.array([mx.utils.euclidian_distance(s.trial.goal, f) for f in forward_nodes])
+                current_euclidian_dist = mx.utils.euclidian_distance(s.trial.goal, s.loc)
+
+                if np.any(forward_eucl_dists < current_euclidian_dist) and np.any(forward_eucl_dists > current_euclidian_dist):
+                    vector_opportunities += 1
+
+                    n_vector_options = 0
+                    for f in forward_nodes:
+                        if  mx.utils.euclidian_distance(s.trial.goal, f) < mx.utils.euclidian_distance(s.trial.goal, s.loc):
+                            n_vector_options += 1
+                    vector_choices_random_choice += n_vector_options/len(forward_nodes)
+
+                    if mx.utils.euclidian_distance(s.trial.goal, s.subsequent.loc) < mx.utils.euclidian_distance(s.trial.goal, s.loc):
+                        vector_choices += 1
+
+            if spatial_distance == 'euclidian':
+                forward_eucl_dists = np.array([mx.utils.euclidian_distance(s.trial.goal, f) for f in forward_nodes])
+                current_euclidian_dist = mx.utils.euclidian_distance(s.trial.goal, s.loc)
+
+                if np.any(forward_eucl_dists < current_euclidian_dist) and np.any(forward_eucl_dists > current_euclidian_dist):
+                    vector_opportunities += 1
+
+                    n_vector_options = 0
+                    for f in forward_nodes:
+                        if  mx.utils.euclidian_distance(s.trial.goal, f) == min(forward_eucl_dists):
+                            n_vector_options += 1
+                    vector_choices_random_choice += n_vector_options/len(forward_nodes)
+
+                    if mx.utils.euclidian_distance(s.trial.goal, s.subsequent.loc) == min(forward_eucl_dists):
+                        vector_choices += 1
+
+
+
+#    return (planning_choices, planning_opportunities, planning_choices_random_choice, vector_choices, vector_opportunities, vector_choices_random_choice)
+    return ((planning_choices - planning_choices_random_choice) / (planning_opportunities - planning_choices_random_choice), (vector_choices - vector_choices_random_choice) / (vector_opportunities - vector_choices_random_choice))
 
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
