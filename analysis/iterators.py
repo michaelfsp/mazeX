@@ -1,6 +1,15 @@
 import numpy as np
 import mazex as mx
 
+
+def exclude_goal(steps):
+    for s in steps:
+        if s.loc == s.trial.goal:
+            pass
+        else:
+            yield s
+
+
 def first_exit(session):
     """Return iterator over the steps of session such that only the first time
     they are visited is picked and subsequent visits are ignored.
@@ -12,17 +21,32 @@ def first_exit(session):
     while i_trial <= i_last_trial:
         i_step = 0
         i_last_step = len(session.trials[i_trial].steps) -1
-        
+
         while i_step < i_last_step:
             step = session.trials[i_trial].steps[i_step]
             if step.loc not in visited_nodes:
                 visited_nodes.append(step.loc)
                 yield step
             i_step += 1
-        
+
         #we get here in the last step of every trial
         i_trial += 1
         visited_nodes.clear()
+
+
+def first_exit_over_steps(steps):
+    """Return iterator over the steps of session such that only the first time
+    they are visited is picked and subsequent visits are ignored.
+
+    This iterator is the same as first_exit except that it takes as input an
+    iterable of steps, whereas first_exit expects a session as input.
+    """
+    for s in steps:
+        if s.path.count(s.loc) == 1 and s.loc != s.trial.goal:
+            yield s
+        else:
+            pass
+
 
 def first_edge_crossing(session):
     """Return iterator over the steps of session such that only the first time
@@ -36,7 +60,7 @@ def first_edge_crossing(session):
     while i_trial <= i_last_trial:
         i_step = 0
         i_last_step = len(session.trials[i_trial].steps) -1
-        
+
         while i_step < i_last_step:
             step = session.trials[i_trial].steps[i_step]
             edge = (step.loc, step.subsequent.loc)
@@ -45,7 +69,7 @@ def first_edge_crossing(session):
                 crossed_edges.append(edge)
                 yield step
             i_step += 1
-        
+
         #we get here in the last step of every trial
         i_trial += 1
         crossed_edges.clear()
