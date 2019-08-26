@@ -776,16 +776,16 @@ def to_dist_direction(n, loc, maze, goal):
     n = to_dist_coord(n, maze, goal)
 
     if n[0]>loc[0] and n[1]>loc[1]:
-        "NE transition in our convention for the axis on this diagram"
+        #FIXME: might be wrong?" NE transition in our convention for the axis on this diagram"
         return 0
     elif n[0]>loc[0] and n[1]<loc[1]:
-        "SE transition in our convention for the axis on this diagram"
+        #FIXME: might be wrong?" SE transition in our convention for the axis on this diagram"
         return 1
     elif n[0]<loc[0] and n[1]<loc[1]:
-        "SW transition in our convention for the axis on this diagram"
+        #FIXME: might be wrong?" SW transition in our convention for the axis on this diagram"
         return 2
     elif n[0]<loc[0] and n[1]>loc[1]:
-        "NW transition in our convention for the axis on this diagram"
+        #FIXME: might be wrong? "NW transition in our convention for the axis on this diagram"
         return 3
     else:
         raise WeirdDirection

@@ -74,7 +74,9 @@ def first_edge_crossing(session):
         i_trial += 1
         crossed_edges.clear()
 
-def orthogonal_planning_vectornav(steps, maze, distance='euclidian'):
+def orthogonal_planning_vectornav(steps, maze, distance='euclidian',
+                                  only_forward=True, discard_backtracked=True,
+                                  either_plan_or_nav=True):
     if distance == 'euclidian':
         hagent = mx.HeuristicAgent(beta=float('inf'), xi=0)
     elif distance == 'manhattan':
@@ -82,25 +84,46 @@ def orthogonal_planning_vectornav(steps, maze, distance='euclidian'):
     magent = mx.OmniscientAgent(maze, xi=0)
 
     for step in steps:
+        if step.previous:
+            if discard_backtracked and step.previous.loc == step.subsequent.loc:
+                # by continuing to the next iteration of the for loop we skip
+                # over steps where the agent went to where it just came from
+                continue
+            else:
+                if only_forward:
+                    available_nodes = [a for a in step.available_nodes if a != step.previous.loc]
+                else:
+                    available_nodes = [a for a in step.available_nodes]
+        else:
+            available_nodes = [a for a in step.available_nodes]
+
+
         hagent.loc = None
         hagent.loc = step.loc
-        h_vals = hagent.evaluate(step.available_nodes, step.trial.goal,
+        h_vals = hagent.evaluate(available_nodes, step.trial.goal,
                                  penalties=False)
         h_chosen_indices = np.nonzero(h_vals==h_vals.max())[0]
         h_chosen = []
         for i in h_chosen_indices:
-            h_chosen.append(step.available_nodes[i])
+            h_chosen.append(available_nodes[i])
 
         magent.loc = None
         magent.loc = step.loc
-        m_vals = magent.evaluate(step.available_nodes, step.trial.goal,
+        m_vals = magent.evaluate(available_nodes, step.trial.goal,
                                  penalties=False)
         m_chosen_indices = np.nonzero(m_vals==m_vals.max())[0]
         m_chosen = []
         for i in m_chosen_indices:
-            m_chosen.append(step.available_nodes[i])
+            m_chosen.append(available_nodes[i])
 
         set_h_chosen = set(h_chosen)
         set_m_chosen = set(m_chosen)
         if len(set_h_chosen.intersection(set_m_chosen)) == 0:
-            yield step
+            #import ipdb; ipdb.set_trace()
+            if either_plan_or_nav:
+                if step.subsequent.loc in set_h_chosen or step.subsequent.loc in set_m_chosen:
+                    yield step
+            else:
+                yield step
+        else:
+            pass

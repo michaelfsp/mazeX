@@ -6,6 +6,7 @@ import random
 import numpy as np
 
 from numba import jit
+from tqdm import tqdm
 
 @jit(nopython=True, nogil=True)
 def choose(probs):
@@ -128,7 +129,7 @@ class SimSessionGivenGoals(SimSession):
         else:
             termination_condition = lambda self: False
 
-        for goal in self.goals:
+        for goal in tqdm(self.goals):
             if not termination_condition(self):
                 initial_step = SimStep(self.agent.loc)
                 self.agent.node_visit_cache.clear()
