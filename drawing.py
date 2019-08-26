@@ -164,12 +164,14 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                         node_size=100)
 
             if edge_centrality:
-                if centrality == 'betweenness':
+                if type(edge_centrality) is dict:
+                    edge_centralities = edge_centrality
+
+                elif centrality == 'betweenness':
                     edge_centralities = M.edge_betweenness_centrality
 
                 elif centrality == 'current_flow':
                     edge_centralities = M.edge_current_flow_betweenness_centrality
-
                 if not evmin:
                     evmin = min(list(edge_centralities.values()))
 

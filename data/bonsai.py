@@ -67,7 +67,7 @@ class BonsaiData:
         candidate_indices -= candidate_indices[0] #so that when tau=0,
         #  candidate_indices[0] is also zero
 
-                
+
         if not tau_res:
             tau_res = 33.3333 #ms
         if not tau_min:

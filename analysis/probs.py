@@ -2,7 +2,7 @@
 Analysis methods that don't rely on fitting should come here
 """
 from mazex.exceptions import *
-from mazex.analysis.iterators import first_exit, first_edge_crossing, orthogonal_planning_vectornav
+from mazex.analysis.iterators import first_exit, first_exit_over_steps, first_edge_crossing, orthogonal_planning_vectornav
 from mazex.agents import HeuristicAgent, OmniscientAgent
 import mazex.utils as utils
 import mazex as mx
@@ -113,7 +113,8 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
                     width=arrow_width, head_width=9*arrow_width)
 
     elif controls == 'stochastic':
-        betas = np.logspace(-3, 4, 20, base=np.e)
+        betas = np.logspace(-5, 4, 30, base=np.e)
+        #betas = np.logspace(-3, 4, 20, base=np.e)
         #betas = np.logspace(-3, 2, 120, base=np.e)
 
 
@@ -327,7 +328,7 @@ def arrows_plot(sessions, maze, controls='greedy', colors='dark'):
     pl.ylim(0, 1.02)
 
 
-def arrows_plot2(sessions, maze, spatial_distance='euclidian', colors='dark'):
+def arrows_plot2(sessions, maze, spatial_distance='euclidian', first_exit_only=True, colors='dark'):
 #TODO: let user input control msession and hsession as function inputs
 
     sns.set(context='notebook', font_scale=1.3,
@@ -349,8 +350,13 @@ def arrows_plot2(sessions, maze, spatial_distance='euclidian', colors='dark'):
     indices = []
 
     for session in sessions:
-        dx_dy = prob_plan_prob_vec(first_exit(session),
-                spatial_distance=spatial_distance)
+        if first_exit_only:
+            dx_dy = prob_plan_prob_vec(first_exit(session),
+                    spatial_distance=spatial_distance)
+        else:
+            dx_dy = prob_plan_prob_vec(session.steps(),
+                    spatial_distance=spatial_distance, discard_backtracked=False, only_forward=False)
+
 
         indices.append(dx_dy)
 
@@ -359,7 +365,7 @@ def arrows_plot2(sessions, maze, spatial_distance='euclidian', colors='dark'):
     dx_err, dy_err = np.std(indices, axis=0)
 
 # Generate controls
-    betas = np.logspace(-2, 4, 60, base=np.e)
+    betas = np.logspace(-2, 3.5, 40, base=np.e)
     #betas = np.logspace(-3, 4, 20, base=np.e)
     #betas = np.logspace(-3, 2, 120, base=np.e)
 
@@ -413,9 +419,15 @@ def arrows_plot2(sessions, maze, spatial_distance='euclidian', colors='dark'):
             hsession = mx.SimSessionGivenGoals(hagent, maze, goals, max_total_steps=max_total_steps)
             hsession.run()
             hsims.append(hsession)
-            hcoords.append(prob_plan_prob_vec(
-                first_exit(hsession),
-                spatial_distance=spatial_distance))
+            if first_exit_only:
+                hcoords.append(prob_plan_prob_vec(
+                    first_exit(hsession),
+                    spatial_distance=spatial_distance))
+            else:
+                hcoords.append(prob_plan_prob_vec(
+                    hsession.steps(),
+                    spatial_distance=spatial_distance, discard_backtracked=False, only_forward=False))
+
 
             magent = OmniscientAgent(maze, beta=beta, xi=5, heading = '^',
                                         loc=(0,0))
@@ -423,9 +435,15 @@ def arrows_plot2(sessions, maze, spatial_distance='euclidian', colors='dark'):
             msession = mx.SimSessionGivenGoals(magent, maze, goals, max_total_steps=max_total_steps)
             msession.run()
             msims.append(msession)
-            mcoords.append(prob_plan_prob_vec(
-                first_exit(msession),
-                spatial_distance=spatial_distance))
+            if first_exit_only:
+                mcoords.append(prob_plan_prob_vec(
+                    first_exit(msession),
+                    spatial_distance=spatial_distance))
+            else:
+                mcoords.append(prob_plan_prob_vec(
+                    msession.steps(),
+                    spatial_distance=spatial_distance, discard_backtracked=False, only_forward=False))
+
 
         hcoords = np.array(hcoords)
         #h_indices = np.argsort(hcoords[:,0])
@@ -538,7 +556,7 @@ def orthogonal_arrows_plot(sessions, maze, colors='dark'):
 
     for session in sessions:
         steps_generator = orthogonal_planning_vectornav(
-            first_edge_crossing(session), maze)
+            first_exit(session), maze)
 
         dx_dy, nums = frac_m(steps_generator,
                 geometric_distance='euclidian', plot=False)
@@ -576,7 +594,7 @@ def avg_vector_difference(session, geometric_distance='euclidian',
         unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
 
     for s in step_iterator:
-        if s.previous: 
+        if s.previous:
             forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
         else:
             forward_nodes = []
@@ -585,7 +603,7 @@ def avg_vector_difference(session, geometric_distance='euclidian',
             step_count +=1
 
             if geometric_distance == 'manhattan':
-                available = np.array([np.nan]*4) 
+                available = np.array([np.nan]*4)
                 for a in forward_nodes:
                     available[utils.to_dist_direction(a, s.loc, session.maze,
                         s.trial.goal)] = np.nansum((available[utils.to_dist_direction(
@@ -688,14 +706,10 @@ def frac_m(steps, geometric_distance='euclidian', plot=True,
     unit_vectors = np.array([[1,1], [1,-1], [-1,-1], [-1,1]])
 
 #_M = Manhattan / Euclidian distance
-    S_d_M = 0
-    S_best_forward_M = 0
     available_M = 0
 
     count_vector = 0
 #_G = Geodesic = Maze = Shortest path distance
-    S_d_G = 0
-    S_best_forward_G = 0
     available_G = 0
 
     count_planning = 0
@@ -821,7 +835,7 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
 
         #TODO: Exclude the trials when the animal actually decided to go
         # backward!
-        if len(forward_nodes) > 1:# and s.subsequent.loc in forward_nodes:
+        if len(forward_nodes) > 1 and s.loc != s.trial.goal:# and s.subsequent.loc in forward_nodes:
             # we change from physical coordinates of the forward nodes to
             #  changes in the geodesical and physical distance
             directions = np.array([unit_vectors[to_dist_direction(
@@ -861,6 +875,7 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
                 S_best_forward_M += -1 - E_d_M
 
                 S_d_M += d_M - E_d_M
+        #import ipdb; ipdb.set_trace()
 
     if plot:
         # we need to save the matplotlib artist for the arrow object for legend
@@ -889,7 +904,8 @@ def prob_m_vs_prob_g(steps, geometric_distance='euclidian', plot=True,
         available_G, available_M)
 
 
-def prob_plan_prob_vec(steps, spatial_distance='euclidian', discard_backtracked=True):
+def prob_plan_prob_vec(steps, spatial_distance='euclidian', subtract_random=True, discard_backtracked=True, only_forward=True,
+                       neither_plan_nor_nav=False):
     planning_opportunities = 0
     planning_choices = 0
     planning_choices_random_choice = 0
@@ -898,80 +914,87 @@ def prob_plan_prob_vec(steps, spatial_distance='euclidian', discard_backtracked=
     vector_choices = 0
     vector_choices_random_choice = 0
 
+    if neither_plan_nor_nav:
+        neither_chosen = 0
 
     for s in mx.analysis.iterators.exclude_goal(steps):
+
         if s.previous:
             if discard_backtracked and s.previous.loc == s.subsequent.loc:
                 # by continuing to the next iteration of the for loop we skip
                 # over steps where the agent went to where it just came from
                 continue
             else:
-                forward_nodes = [a for a in s.available_nodes if a != s.previous.loc]
-        else:
-            forward_nodes = s.available_nodes
+                if only_forward:
+                    available_nodes = [a for a in s.available_nodes if a != s.previous.loc]
+                else:
+                    available_nodes = [a for a in s.available_nodes]
 
-        if len(forward_nodes) > 1:
+        else:
+            available_nodes = s.available_nodes
+
+        if len(available_nodes) > 1:
             #we check if there are preferred and non-preferred options for planning
-            if len(set([s.trial.maze.distances_dictionary[s.trial.goal][f] for f in forward_nodes])) > 1:
+            if len(set([s.trial.maze.distances_dictionary[s.trial.goal][f] for f in available_nodes])) > 1:
                 planning_opportunities += 1
 
                 n_planning_options = 0
-                for f in forward_nodes:
+                for f in available_nodes:
                     if s.trial.maze.distances_dictionary[s.trial.goal][f] < s.trial.maze.distances_dictionary[s.trial.goal][s.loc]:
                         n_planning_options += 1
-                planning_choices_random_choice += n_planning_options/len(forward_nodes)
+                planning_choices_random_choice += n_planning_options/len(available_nodes)
 
                 if s.trial.maze.distances_dictionary[s.trial.goal][s.subsequent.loc] < s.trial.maze.distances_dictionary[s.trial.goal][s.loc]:
                     planning_choices += 1
 
-#             if len(set([mx.utils.euclidian_distance(s.trial.goal, f) for f in forward_nodes])) > 1:
-#                vector_opportunities += 1
-#
-#                n_vector_options = 0
-#                for f in forward_nodes:
-#                    if  mx.utils.euclidian_distance(s.trial.goal, f) < mx.utils.euclidian_distance(s.trial.goal, s.loc):
-#                        n_vector_options += 1
-#                vector_choices_random_choice += n_vector_options/len(forward_nodes)
-#
-#                if mx.utils.euclidian_distance(s.trial.goal, s.subsequent.loc) == min([mx.utils.euclidian_distance(s.trial.goal, f):
-#                    vector_choices += 1
-
             if spatial_distance == 'manhattan':
-                forward_eucl_dists = np.array([mx.utils.euclidian_distance(s.trial.goal, f) for f in forward_nodes])
-                current_euclidian_dist = mx.utils.euclidian_distance(s.trial.goal, s.loc)
+                available_spatial_dists = np.array([mx.utils.manhattan_distance(s.trial.goal, f) for f in available_nodes])
 
-                if np.any(forward_eucl_dists < current_euclidian_dist) and np.any(forward_eucl_dists > current_euclidian_dist):
+                if len(set(available_spatial_dists)) > 1:
                     vector_opportunities += 1
 
                     n_vector_options = 0
-                    for f in forward_nodes:
-                        if  mx.utils.euclidian_distance(s.trial.goal, f) < mx.utils.euclidian_distance(s.trial.goal, s.loc):
+                    for f in available_nodes:
+                        if  mx.utils.manhattan_distance(s.trial.goal, f) == min(available_spatial_dists):
                             n_vector_options += 1
-                    vector_choices_random_choice += n_vector_options/len(forward_nodes)
+                    vector_choices_random_choice += n_vector_options/len(available_nodes)
 
-                    if mx.utils.euclidian_distance(s.trial.goal, s.subsequent.loc) < mx.utils.euclidian_distance(s.trial.goal, s.loc):
+                    if mx.utils.manhattan_distance(s.trial.goal, s.subsequent.loc) == min(available_spatial_dists):
                         vector_choices += 1
 
             if spatial_distance == 'euclidian':
-                forward_eucl_dists = np.array([mx.utils.euclidian_distance(s.trial.goal, f) for f in forward_nodes])
-                current_euclidian_dist = mx.utils.euclidian_distance(s.trial.goal, s.loc)
+                available_spatial_dists = np.array([mx.utils.euclidian_distance(s.trial.goal, f) for f in available_nodes])
 
-                if np.any(forward_eucl_dists < current_euclidian_dist) and np.any(forward_eucl_dists > current_euclidian_dist):
+                if len(set(available_spatial_dists)) > 1:
                     vector_opportunities += 1
 
                     n_vector_options = 0
-                    for f in forward_nodes:
-                        if  mx.utils.euclidian_distance(s.trial.goal, f) == min(forward_eucl_dists):
+                    for f in available_nodes:
+                        if  mx.utils.euclidian_distance(s.trial.goal, f) == min(available_spatial_dists):
                             n_vector_options += 1
-                    vector_choices_random_choice += n_vector_options/len(forward_nodes)
+                    vector_choices_random_choice += n_vector_options/len(available_nodes)
 
-                    if mx.utils.euclidian_distance(s.trial.goal, s.subsequent.loc) == min(forward_eucl_dists):
+                    if mx.utils.euclidian_distance(s.trial.goal, s.subsequent.loc) == min(available_spatial_dists):
                         vector_choices += 1
 
+            if neither_plan_nor_nav:
+                #FIXME: this option should only to be used with orthogonal_planning_vectornav iterator!
+                if len(list(mx.analysis.iterators.orthogonal_planning_vectornav([s], maze=s.trial.maze, distance=spatial_distance, either_plan_or_nav=True))) == 0:
+                    #In this case neither the planning nor the vector navigation option was chosen
+                    neither_chosen += 1
+
+    if subtract_random:
+        return ((planning_choices - planning_choices_random_choice) / (planning_opportunities - planning_choices_random_choice), (vector_choices - vector_choices_random_choice) / (vector_opportunities - vector_choices_random_choice))
+    else:
+        if neither_plan_nor_nav:
+            if planning_opportunities != vector_opportunities:
+                raise Exception('Option neither_plan_nor_nav should only be used in conjunction with iterator for orthogonal_planning_vectornav with option either_plan_or_nav=True')
+            else:
+                return (planning_choices / planning_opportunities, vector_choices / vector_opportunities, neither_chosen / planning_opportunities)
+        else:
+            return (planning_choices / planning_opportunities, vector_choices / vector_opportunities)
 
 
-#    return (planning_choices, planning_opportunities, planning_choices_random_choice, vector_choices, vector_opportunities, vector_choices_random_choice)
-    return ((planning_choices - planning_choices_random_choice) / (planning_opportunities - planning_choices_random_choice), (vector_choices - vector_choices_random_choice) / (vector_opportunities - vector_choices_random_choice))
 
 
 #TODO: take the common core of dist_dir_prob() nd avg_dist_dir_prob() into
@@ -1010,7 +1033,7 @@ def dist_dir_prob(session, point, first_exit_only=True):
         else:
             step_indices = []
             for n in nodes_on_point:
-                # This list comprehension finds all occurrences of n in list 
+                # This list comprehension finds all occurrences of n in list
                 # t.path, unlinke t.path.index() which returns only the first
                 # occurrence
                 # += 'appends' it to the list step_indices
