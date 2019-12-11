@@ -143,9 +143,13 @@ class RegionMapping:
         # here we will detect the polygons and create PortRegions from them
         list_paths = self.root.findall('{http://www.w3.org/2000/svg}path')
 
+        global_translate = (0, 0)
+
         if len(list_paths) == 0 or self.root.find('{http://www.w3.org/2000/svg}g'):
             self.g = self.root.find('{http://www.w3.org/2000/svg}g')
             list_paths = self.g.findall('{http://www.w3.org/2000/svg}path')
+            global_translate_str = self.g.get('transform')
+            global_translate = eval(global_translate_str.lstrip('translate'))
 
         for x in list_paths: #each polygon is a path in SVG
             #gets a string that contains coordinates of vertices plus stuff
@@ -163,10 +167,16 @@ class RegionMapping:
             for xy_tuple in zip(iter_coords_list, iter_coords_list):
                 list_coord_tuples.append((float(xy_tuple[0]), float(xy_tuple[1])))
 
+            list_coord_tuples_translated = []
+            for t in list_coord_tuples:
+                list_coord_tuples_translated.append((t[0]+global_translate[0], t[1]+global_translate[1]))
+
+            #import ipdb; ipdb.set_trace()
+
             poke_coord = eval(x.get(
                 '{http://www.inkscape.org/namespaces/inkscape}label'))
             poke_address = int(x.get('id'))
-            region = PortRegion(poke_coord, poke_address, list_coord_tuples)
+            region = PortRegion(poke_coord, poke_address, list_coord_tuples_translated)
 
             self.portregions.append(region)
             self.portregions_dic[poke_coord] = region
