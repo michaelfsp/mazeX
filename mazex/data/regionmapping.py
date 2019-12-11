@@ -11,6 +11,8 @@ from PIL import Image
 import scipy.optimize as optimize
 import functools
 
+import svgpath2mpl
+
 
 # TODO: move these functions into the class
 
@@ -155,23 +157,28 @@ class RegionMapping:
             #gets a string that contains coordinates of vertices plus stuff
             #  we don't need
             coords_str = x.get('d')
-            # this will extract only the coordinates and discard what we
-            #  don't need
-            coords_list = re.findall(r"[-+]?\d*\.\d+|\d+", coords_str)
-            list_coord_tuples = []
+            ## this will extract only the coordinates and discard what we
+            ##  don't need
+            #coords_list = re.findall(r"[-+]?\d*\.\d+|\d+", coords_str)
+            #list_coord_tuples = []
 
-            # because of the re processing above the x and y coordinates are
-            #  serialized. here we group them again to retrieve the
-            #  coordinates by point
-            iter_coords_list = iter(coords_list)
-            for xy_tuple in zip(iter_coords_list, iter_coords_list):
-                list_coord_tuples.append((float(xy_tuple[0]), float(xy_tuple[1])))
+            ## because of the re processing above the x and y coordinates are
+            ##  serialized. here we group them again to retrieve the
+            ##  coordinates by point
+            #iter_coords_list = iter(coords_list)
+            #for xy_tuple in zip(iter_coords_list, iter_coords_list):
+            #    list_coord_tuples.append((float(xy_tuple[0]), float(xy_tuple[1])))
 
-            list_coord_tuples_translated = []
-            for t in list_coord_tuples:
-                list_coord_tuples_translated.append((t[0]+global_translate[0], t[1]+global_translate[1]))
+            #list_coord_tuples_translated = []
+            #for t in list_coord_tuples:
+            #    list_coord_tuples_translated.append((t[0]+global_translate[0], t[1]+global_translate[1]))
 
             #import ipdb; ipdb.set_trace()
+
+            parsed_path = svgpath2mpl.parse_path(coords_str)
+            path_coords = parsed_path.to_polygons()[0]
+            path_coords += np.array([global_translate[0], global_translate[1]])
+            list_coord_tuples_translated = path_coords.tolist()
 
             poke_coord = eval(x.get(
                 '{http://www.inkscape.org/namespaces/inkscape}label'))
