@@ -17,10 +17,18 @@ class ArduinoDataFile:
 
         self._delay_period = None
 
+        self.syncon_events = self.raw[(self.raw[:, 1] == 199) & (
+            self.raw[:, 2] == 1)][:, :2]
+        self.syncon_event_times = self.syncon_events[:, 0]
+
+        self.syncoff_events = self.raw[(self.raw[:, 1] == 199) & (
+            self.raw[:, 2] == 0)][:, :2]
+        self.syncoff_event_times = self.syncon_events[:, 0]
+
     @property
     def ITIs(self):
         return np.diff(self.reward_event_times)
-    
+
     @property
     def delay_period(self):
         if not self._delay_period:
