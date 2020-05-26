@@ -9,7 +9,7 @@ import mazex as mx
 from mazex.exceptions import *
 from mazex.utils import (angle_between_nodes, assert_is_node,
 assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
-manhattan_distance, scale_dict_values)
+euclidean_distance, manhattan_distance, scale_dict_values)
 
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
@@ -808,6 +808,49 @@ class NStepsAgent(Agent):
             #  option gets added the number of remaining steps.
             if goal in midpoints:
                 values[i] += self.nsteps - midpoints[goal]
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+class AStarAgent(Agent):
+    def __init__(self, maze, nsteps, loc=None, beta=1, xi=3,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None):
+        #TODO: Allow manhattan as well as euclidian distance
+        """Creates an agent that has full knowledge of the maze and
+        uses Graph Theory algorithms to determine the shortest path
+        to goal"""
+
+        super(AStarAgent, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading)
+
+        self.maze = maze
+        self.nsteps = nsteps
+
+    def evaluate(self, nodeslist, goal, penalties=True):
+        """Gets the next node in the node cache"""
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            reachable_nodes = []
+            reachable_nodes.extend(self.maze.nodes_reachable_n_steps(c,
+                    self.nsteps -1))
+        reachable_nodes = list(set(reachable_nodes))
+
+            reachable_nodes_eval = []
+            for i, r in reachable_nodes:
+                # The evaluation of the node is the sum of the geodesic distance
+                # between current location and that node, and the euclidean/manhattan
+                # distance between that node and the goal
+                node_eval = serf.maze.distances_dictionary[self.loc][r] + euclidean_distance(self.loc, goal)
+                reachable_nodes_eval.append(node_eval)
+
+            value[i] = -min(reachable_nodes_eval)
 
         if penalties:
             penalties = self.penalty_factor(nodeslist)
