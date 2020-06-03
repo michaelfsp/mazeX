@@ -149,6 +149,7 @@ def check_list_is_empty(seq):
 #2520 is the number of possible combinations for a maze of 6x6
 # speed gains of caching this are in the order of only 5%
 #@lru_cache(maxsize=2520)
+#FIXME: refactor code to fix typo in name of this function...
 def euclidian_distance(node1, node2):
     """Returns Manhattan distance between node1 and node2."""
     return np.sqrt((node1[0] - node2[0])**2 + (node1[1] - node2[1])**2)

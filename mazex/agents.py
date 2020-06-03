@@ -9,7 +9,7 @@ import mazex as mx
 from mazex.exceptions import *
 from mazex.utils import (angle_between_nodes, assert_is_node,
 assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
-euclidean_distance, manhattan_distance, scale_dict_values)
+euclidian_distance, manhattan_distance, scale_dict_values)
 
 from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
