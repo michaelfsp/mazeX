@@ -92,7 +92,7 @@ import mazex.analysis as analysis
 import mazex.data as data
 import mazex.fitting as fitting
 import mazex.search as search
-
+import mazex.examplemazes as examplemazes
 """
 I believe we don't need these imports.
 
