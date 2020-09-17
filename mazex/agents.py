@@ -109,6 +109,44 @@ def n_degree_neighborhood(G, node, n):
 # TODO: implement `def ERL_R` which just retrieves the tensor with the Rewards
 # and use that in init_Q
 
+# TODO: d_E vector -> R_e matrix
+
+def R_e(maze, n_over_m):
+    """Creates tensor with euclidean rewards.
+
+    Parameters:
+    -----------
+    maze : maze
+        Maze for which rewards are created. It only matters to find out which
+        actions are available at any state.
+    n_over_m : float
+        Power to elevate euclidean distance to in the calculation of the
+        Euclidean rewards
+
+    Returns:
+    --------
+    out : array(nxnxn)
+        It returns an array of nxnxn where n is the number of nodes in the maze
+        with R(s, s', s_T).
+        If s and s' are not connected: R(s,s',:) = NaN
+        If s == s_T: R(s,s,s) = 0 and R(s,:,s) = NaN, regardles of connectivity
+        , i.e., the only action available at the terminal state is
+        self-transition and its reward is defined to be 0.
+    """
+    R_size = len(maze.nodes())
+    R = np.full((R_size, R_size, R_size), np.nan)
+
+    for i, s in enumerate(maze.nodes()):
+        for k, s_T in enumerate(maze.nodes()):
+            if s == s_T:
+                # here we define value of transitions to iself if at s_T
+                R[i, i, i] =  0
+            else:
+                for j, s_prime in enumerate(maze.nodes()):
+                    if maze.has_edge(s, s_prime):
+                        R[i, j, k] = euclidean_reward(s, s_prime, s_T, n_over_m)
+    return R
+
 def init_Q(maze, initval=0, n_over_m=None, Q_val_s_equal_s_prime=np.nan,
            Q_vals_s_T=None, Q_val_s_equal_s_prime_equal_s_T=0):
     """Initializes Q(s, s', s_T) tensor. It is meant to contain value of taking action s' in state s when goal is s_T.
