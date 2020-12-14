@@ -162,10 +162,12 @@ class SquareMaze(nx.classes.graph.Graph):
         # recalculate if either the nodes or eges of the maze have changed
         # We save the snapshot of both at time of calculation in these objects
         self._has_changed_since_matrix = True
+        self._has_changed_since_matrix_peano = True
         self._has_changed_since_dictionary = True
         self._has_changed_since_to_coord_map = True
 
         self._distances_matrix = None
+        self._distances_matrix_peano = None
         self._distances_dictionary = None
         self._distances_to_coord_map = None
 
@@ -397,6 +399,27 @@ class SquareMaze(nx.classes.graph.Graph):
             self._has_changed_since_matrix = False
 
         return self._distances_matrix
+
+    @property
+    def distances_matrix_peano(self):
+        # If the graph has changed since last calculation of the matrix:
+        if self._has_changed_since_matrix_peano:
+            # for some reason the NetworkX algorithm produces a numpy matrix
+            # instead of an array, so we np.array it
+            idx_nodes_peano = [mazex.utils.to_peano_coords(n) for n in self.nodes()]
+            # TODO: generalize this for mazes of different sizes
+            # this is a list of all nodes sorted along shortest path distance
+            # on a Peano maze from position (0,0)
+            nodes_peano_sorted = [None] * 36
+            for i, d in enumerate(range(36)):
+                nodes_peano_sorted[i] = self.nodes()[idx_nodes_peano.index(d)]
+
+            self._distances_matrix_peano = np.asarray(
+                    nx.algorithms.floyd_warshall_numpy(self, nodelist=nodes_peano_sorted))
+            self._has_changed_since_matrix_peano = False
+
+        return self._distances_matrix_peano
+
 
     @property
     def distances_dictionary(self):

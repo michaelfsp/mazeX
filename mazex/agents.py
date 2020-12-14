@@ -76,12 +76,134 @@ def _set_loc(self, node):
     self.node_visit_cache[node] = self.step_count
     self.step_count += 1
 
+def _set_loc_ERL(self, node):
+    # we need to use a special _set_loc to trigger Q updates when the agent moves
+    # if it is not the very first location
+    if self.loc:
+        old_loc = self.loc
+        new_loc = node
+        if old_loc != new_loc:
+            self.update_Q(old_loc, new_loc, self.goal)
+    _set_loc(self, node)
+
+def euclidean_drive(s, s_T, n_over_m):
+    """
+    s: previous node
+    s_T: goal node
+    m_over_n: ration between m and n parameters of drive function
+    """
+    return euclidian_distance(s, s_T)**n_over_m
+
+def euclidean_reward(s, s_prime, s_T, n_over_m):
+    s_euclidean_drive = euclidean_drive(s, s_T, n_over_m)
+    s_prime_euclidean_drive = euclidean_drive(s_prime, s_T, n_over_m)
+    return s_euclidean_drive - s_prime_euclidean_drive
+
 def n_degree_neighborhood(G, node, n):
     """Find the n degree neighborhood of node in graph G. Returns the list of
     nodes in graph G that are at a distance of exactly n.
     """
     path_lengths = single_source_shortest_path_length(G, node)
     return [node for node, length in path_lengths.items() if length == n]
+
+# TODO: implement `def ERL_R` which just retrieves the tensor with the Rewards
+# and use that in init_Q
+
+# TODO: d_E vector -> R_e matrix
+
+def R_e(maze, n_over_m):
+    """Creates tensor with euclidean rewards.
+
+    Parameters:
+    -----------
+    maze : maze
+        Maze for which rewards are created. It only matters to find out which
+        actions are available at any state.
+    n_over_m : float
+        Power to elevate euclidean distance to in the calculation of the
+        Euclidean rewards
+
+    Returns:
+    --------
+    out : array(nxnxn)
+        It returns an array of nxnxn where n is the number of nodes in the maze
+        with R(s, s', s_T).
+        If s and s' are not connected: R(s,s',:) = NaN
+        If s == s_T: R(s,s,s) = 0 and R(s,:,s) = NaN, regardles of connectivity
+        , i.e., the only action available at the terminal state is
+        self-transition and its reward is defined to be 0.
+    """
+    R_size = len(maze.nodes())
+    R = np.full((R_size, R_size, R_size), np.nan)
+
+    for i, s in enumerate(maze.nodes()):
+        for k, s_T in enumerate(maze.nodes()):
+            if s == s_T:
+                # here we define value of transitions to iself if at s_T
+                R[i, i, i] =  0
+            else:
+                for j, s_prime in enumerate(maze.nodes()):
+                    if maze.has_edge(s, s_prime):
+                        R[i, j, k] = euclidean_reward(s, s_prime, s_T, n_over_m)
+    return R
+
+def init_Q(maze, initval=0, n_over_m=None, Q_val_s_equal_s_prime=np.nan,
+           Q_vals_s_T=None, Q_val_s_equal_s_prime_equal_s_T=0):
+    """Initializes Q(s, s', s_T) tensor. It is meant to contain value of taking action s' in state s when goal is s_T.
+
+    Parameters
+    ----------
+    maze : maze
+        Maze to which this Q table is initialized. It is used to lookup disconnected nodes to insert the corresponding Qs as NaN
+    initval : float, "euclidean"
+        Value to insert for existing connections. If "euclidean", then the calculated euclidean reward is used, in which case n_over_m becomes mandatory parameter.
+    n_over_m : float, optonal
+        Ratio n/m  (i.e. exponent of euclidean distance), following homeostatic RL equation for homeostatic drive
+    Q_val_s_equal_s_prime : np.nan, int, float
+        Value to be given to all "transitions to self".
+    Q_vals_s_T : None, int, float
+        Value to be given to transitions out of terminal state (goal) onto adjacent nodes. If
+        None, then the initval is applied, otherwise this value is used. Can be
+        helpful to implement appropriate update rules for Q(s,s_T,s_T), i.e.,
+        the Q of the last step. By definition v(s_T) = 0 for terminal states,
+        so Q(s_T, :, s_T) should also be zero
+    Q_val_s_equal_s_prime_equal_s_T : np.nan, int or float
+        Value to be given to the transition to itself when at the terminal node
+        This is important for several things, among other things, for applying
+        the Bellman operator, potentially to get the Q backups right for the
+        terminal state, etc.
+    """
+    Q_size = len(maze.nodes())
+    Q = np.full((Q_size, Q_size, Q_size), np.nan)
+    for i, v in enumerate(maze.nodes()):
+        # here we define the value of transitions to itself
+        # regardless of destination
+        if Q_val_s_equal_s_prime is not np.nan:
+            Q[i, i, :] = Q_val_s_equal_s_prime
+
+        # here we define value of transitions to iself if at s_T
+        Q[i, i, i] = Q_val_s_equal_s_prime_equal_s_T
+
+        for j, w in enumerate(maze.nodes()):
+            if maze.has_edge(v, w):
+                for k, g in enumerate(maze.nodes()):
+                    if (v == g) and (Q_vals_s_T is not None):
+                        # here we define the value of transitions from s_T to
+                        # other locations this is important for Q updates: we want 
+                        # $ max_a{Q(s_prime, a)} = 0 $ by definition for the
+                        # terminal node
+                        Q[i, j, k] = Q_vals_s_T
+
+                    elif initval == "euclidean":
+                        Q[i, j, k] = euclidean_reward(v, w, g, n_over_m)
+
+                    elif type(initval) in (float, int):
+                        Q[i, j, k] = initval
+
+                    else:
+                        raise Exception('initval must be float, int or "euclidean", not {}'.format(type(initval)))
+    return Q
+
 
 #def softmax(beta, values):
 #    """A Softmax function.
@@ -548,6 +670,8 @@ class Agent:
         For an Agent with constant penalty factor:
         All nodes visited are penalized equally by self.xi
         """
+        #TODO: make this more efficient by only calling these functions if
+        # self.xi != 0
         if self.penalty_type == 'constant':
             return self._constant_penalty_factor(nodeslist)
 
@@ -574,6 +698,82 @@ class Agent:
         session = mx.Session()
         session.trials+=(trials)
         return session
+
+
+class ERLAgent(Agent):
+    def __init__(self, maze, gamma, n_over_m, alpha, initval='euclidean', beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None):
+
+        super(ERLAgent, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading)
+
+        self.maze = maze
+        self.gamma = gamma
+        self.n_over_m = n_over_m
+        self.alpha = alpha
+        # Reminder: order in Q is (loc, step, goal)
+        self.Q = init_Q(maze, initval, n_over_m)
+        self.goal = None
+
+    loc = property(_get_loc, _set_loc_ERL)
+
+    def get_Q_a(self, s, s_prime, s_T):
+        """Helper function to retrieve Q(s,s',s_T) by looking up and using correct indices.
+        """
+        s_i = self.maze.nodes().index(s)
+        s_prime_i = self.maze.nodes().index(s_prime)
+        s_T_i = self.maze.nodes().index(s_T)
+
+        return self.Q[s_i, s_prime_i, s_T_i]
+
+    def set_Q_a(self, s, s_prime, s_T, new_Q_a):
+        s_i = self.maze.nodes().index(s)
+        s_prime_i = self.maze.nodes().index(s_prime)
+        s_T_i = self.maze.nodes().index(s_T)
+        self.Q[s_i, s_prime_i, s_T_i] = new_Q_a
+
+    def get_all_Q_a(self, s, s_T):
+        s_i = self.maze.nodes().index(s)
+        s_T_i = self.maze.nodes().index(s_T)
+        all_Q_s_s_T = self.Q[s_i, :, s_T_i]
+        nan_i = np.isnan(all_Q_s_s_T)
+        Q_as = all_Q_s_s_T[~nan_i]
+
+        return Q_as
+
+    def update_Q(self, s, s_prime, s_T):
+        Q_s_a = self.get_Q_a(s, s_prime, s_T)
+        R = euclidean_reward(s, s_prime, s_T, self.n_over_m)
+        if s_prime == s_T:
+            # by definition the value of a terminal state is zero, i.e.,
+            # v(s_T) = 0
+            max_Q_s_prime = 0
+        else:
+            max_Q_s_prime = np.max(self.get_all_Q_a(s_prime, s_T))
+        RPE = self.alpha * (R + self.gamma * max_Q_s_prime - Q_s_a)
+        new_Q_s_a = Q_s_a + RPE
+        self.set_Q_a(s, s_prime, s_T, new_Q_s_a)
+
+    def evaluate(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            values[i] = self.get_Q_a(self.loc, c, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
 
 class HeuristicAgent(Agent):
     def __init__(self, beta=1, xi=3, loc=None, penalty_criterium='node',
@@ -847,7 +1047,7 @@ class AStarAgent(Agent):
                 # The evaluation of the node is the sum of the geodesic distance
                 # between current location and that node, and the euclidean/manhattan
                 # distance between that node and the goal
-                node_eval = self.maze.distances_dictionary[self.loc][r] + euclidean_distance(self.loc, goal)
+                node_eval = self.maze.distances_dictionary[self.loc][r] + euclidian_distance(self.loc, goal)
                 reachable_nodes_eval.append(node_eval)
 
             values[i] = -min(reachable_nodes_eval)

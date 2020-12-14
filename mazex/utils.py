@@ -836,3 +836,12 @@ def to_dist_coord_euclidian(n, maze, goal):
     """
     return (int(maze.distances_dictionary[n][goal]),
             np.sqrt((goal[0] - n[0])**2 + (goal[1] - n[1])**2))
+
+@lru_cache(maxsize=36)
+def to_peano_coords(node):
+    """Returns the coordinate of a node on a Peano space-filling curve.
+    """
+    peano_maze = mx.examplemazes.peano_maze
+    coord = peano_maze.distances_dictionary[(0,0)][node]
+    return int(coord)
+
