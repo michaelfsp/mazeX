@@ -368,7 +368,7 @@ def arrows_plot2(sessions, maze, spatial_distance='euclidian', first_exit_only=T
     dx_err, dy_err = np.std(indices, axis=0)
 
 # Generate controls
-    betas = np.logspace(-2, 3.5, 40, base=np.e)
+    betas = np.logspace(-2, 3.5, 4, base=np.e)
     #betas = np.logspace(-3, 4, 20, base=np.e)
     #betas = np.logspace(-3, 2, 120, base=np.e)
 
@@ -390,7 +390,7 @@ def arrows_plot2(sessions, maze, spatial_distance='euclidian', first_exit_only=T
     print(' ', max_total_steps)
     #n_goals = 1000
     #ctrl_size = 20
-    ctrl_size = 100
+    ctrl_size = 10
 
     goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
 
@@ -617,7 +617,7 @@ def arrows_plot_all_days(sessions, maze, spatial_distance='euclidian', first_exi
     print(' ', max_total_steps)
     #n_goals = 1000
     #ctrl_size = 20
-    ctrl_size = 10
+    ctrl_size = 100
 
     goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
 
@@ -703,11 +703,11 @@ def arrows_plot_all_days(sessions, maze, spatial_distance='euclidian', first_exi
         # https://gist.github.com/urschrei/6436526
         # http://stackoverflow.com/questions/28732845/combine-two-pyplot-patches-for-legend
         j = 2
-        hell_shapely = shapely_ellipse(np.mean(hcoords, axis=0), hlambda[0]*j*2, hlambda[1]*j*2, np.rad2deg(np.arccos(hv[0, 0])))
-        hellipses.append(hell_shapely)
-
-        mell_shapely = shapely_ellipse(np.mean(mcoords, axis=0), (mlambda[0]*j*2)+1e-10, (mlambda[1]*j*2)+1e-10, np.rad2deg(np.arccos(mv[0, 0])))
-        mellipses.append(mell_shapely)
+#        hell_shapely = shapely_ellipse(np.mean(hcoords, axis=0), hlambda[0]*j*2, hlambda[1]*j*2, np.rad2deg(np.arccos(hv[0, 0])))
+#        hellipses.append(hell_shapely)
+#
+#        mell_shapely = shapely_ellipse(np.mean(mcoords, axis=0), (mlambda[0]*j*2)+1e-10, (mlambda[1]*j*2)+1e-10, np.rad2deg(np.arccos(mv[0, 0])))
+#        mellipses.append(mell_shapely)
 
     sns.set_palette('Dark2', 8)
     xs = np.array([indices[:,0]])
@@ -719,32 +719,32 @@ def arrows_plot_all_days(sessions, maze, spatial_distance='euclidian', first_exi
 
     p3 = pmarkers[-1]
 
-    import ipdb;ipdb.set_trace()
+    #import ipdb;ipdb.set_trace()
 
-    all_hellipses = so.cascaded_union(hellipses)
-    if type(all_hellipses) is sg.multipolygon.MultiPolygon:
-        hcollection = [descartes.PolygonPatch(h, ec='none', fc=heuristic_color, alpha=0.5, zorder=0) for h in all_hellipses]
-        ax = pl.gca()
-        ax.add_collection(mpl.collections.PatchCollection(hcollection, match_original=True))
-    else:
-        hell = descartes.PolygonPatch(all_hellipses, ec='none', fc=heuristic_color, alpha=0.5, zorder=0)
-        ax = pl.gca()
-        ax.add_artist(hell)
-
+#    all_hellipses = so.cascaded_union(hellipses)
+#    if type(all_hellipses) is sg.multipolygon.MultiPolygon:
+#        hcollection = [descartes.PolygonPatch(h, ec='none', fc=heuristic_color, alpha=0.5, zorder=0) for h in all_hellipses]
+#        ax = pl.gca()
+#        ax.add_collection(mpl.collections.PatchCollection(hcollection, match_original=True))
+#    else:
+#        hell = descartes.PolygonPatch(all_hellipses, ec='none', fc=heuristic_color, alpha=0.5, zorder=0)
+#        ax = pl.gca()
+#        ax.add_artist(hell)
+#
     hcenters = [c.tolist() for c in hcenters]
     hcenters.insert(0, (0,0))
     hcenters = np.array(hcenters)
     p2_, = pl.plot(hcenters[:,0], hcenters[:,1], color=heuristic_color, linestyle='--', zorder=1)
-
-    all_mellipses = so.cascaded_union(mellipses)
-    if type(all_mellipses) is sg.multipolygon.MultiPolygon:
-        mcollection = [descartes.PolygonPatch(m, ec='none', fc=planning_color, alpha=0.5, zorder=0) for m in all_mellipses]
-        ax = pl.gca()
-        ax.add_collection(mpl.collections.PatchCollection(mcollection, match_original=True))
-    else:
-        mell = descartes.PolygonPatch(all_mellipses, ec='none', fc=planning_color, alpha=0.5, zorder=0)
-        ax = pl.gca()
-        ax.add_artist(mell)
+#
+#    all_mellipses = so.cascaded_union(mellipses)
+#    if type(all_mellipses) is sg.multipolygon.MultiPolygon:
+#        mcollection = [descartes.PolygonPatch(m, ec='none', fc=planning_color, alpha=0.5, zorder=0) for m in all_mellipses]
+#        ax = pl.gca()
+#        ax.add_collection(mpl.collections.PatchCollection(mcollection, match_original=True))
+#    else:
+#        mell = descartes.PolygonPatch(all_mellipses, ec='none', fc=planning_color, alpha=0.5, zorder=0)
+#        ax = pl.gca()
+#        ax.add_artist(mell)
 
     mcenters = [c.tolist() for c in mcenters]
     mcenters.insert(0, (0,0))
@@ -757,13 +757,13 @@ def arrows_plot_all_days(sessions, maze, spatial_distance='euclidian', first_exi
     p2 = pl.Rectangle((0, 0), 1, 1, fc=heuristic_color)
 
 # Legend and axis labels
-    pl.legend([p1, p2, p3], ['Planning (95% CR)', 'Vector nav. (95% CR)',
+    pl.legend([p1, p2, p3], ['Optimal', 'Vector nav.',
                              'Data'], loc=2)
 
 
-    pl.xlabel('Planning index', weight='bold')
+    pl.xlabel('Optimal choice index', weight='bold')
     pl.ylabel('Vector navigation index', weight='bold')
-    pl.title('Planning vs vector navigation choice index')
+    pl.title('Optimal vs vector navigation choice indices')
     pl.gca().set_aspect('equal')
     pl.xlim(0, 1.02)
     pl.ylim(0, 1.02)
