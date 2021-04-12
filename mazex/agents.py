@@ -86,6 +86,16 @@ def _set_loc_ERL(self, node):
             self.update_Q(old_loc, new_loc, self.goal)
     _set_loc(self, node)
 
+def _set_loc_ERLTD(self, node):
+    # we need to use a special _set_loc to trigger Q updates when the agent moves
+    # if it is not the very first location
+    if self.loc:
+        old_loc = self.loc
+        new_loc = node
+        if old_loc != new_loc:
+            self.update_V(old_loc, new_loc, self.goal)
+    _set_loc(self, node)
+
 def euclidean_drive(s, s_T, n_over_m):
     """
     s: previous node
@@ -134,7 +144,7 @@ def R_e(maze, n_over_m):
         self-transition and its reward is defined to be 0.
     """
     R_size = len(maze.nodes())
-    R = np.full((R_size, R_size, R_size), np.nan)
+    R = np.full((R_size, R_size, R_size), np.nan, dtype='float')
 
     for i, s in enumerate(maze.nodes()):
         for k, s_T in enumerate(maze.nodes()):
@@ -174,7 +184,7 @@ def init_Q(maze, initval=0, n_over_m=None, Q_val_s_equal_s_prime=np.nan,
         terminal state, etc.
     """
     Q_size = len(maze.nodes())
-    Q = np.full((Q_size, Q_size, Q_size), np.nan)
+    Q = np.full((Q_size, Q_size, Q_size), np.nan, dtype='float')
     for i, v in enumerate(maze.nodes()):
         # here we define the value of transitions to itself
         # regardless of destination
@@ -766,6 +776,75 @@ class ERLAgent(Agent):
 
         for i, c in enumerate(nodeslist):
             values[i] = self.get_Q_a(self.loc, c, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+
+class ERLAgentTD(Agent):
+    def __init__(self, maze, gamma, n_over_m, alpha, initval='euclidean', beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None):
+
+        super(ERLAgentTD, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading)
+
+        self.maze = maze
+        self.gamma = gamma
+        self.n_over_m = n_over_m
+        self.alpha = alpha
+        # TODO: substitute this line by some better initialization to be
+        # specified in an init_V function
+        # Reminder: order in V is (loc, goal)
+        self.V = np.zeros((36, 36))
+        self.goal = None
+
+    loc = property(_get_loc, _set_loc_ERLTD)
+
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list or type(node) is tuple:
+            return [self.maze.nodes().index(n) for n in node]
+        else:
+            return self.maze.nodes().index(node)
+
+    def get_V(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.V[s_i, s_T_i]
+
+    def update_V(self, s, s_prime, s_T):
+        s_i, s_prime_i, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        V_s_old = self.V[s_i, s_T_i]
+        V_s_prime = self.V[s_prime_i, s_T_i]
+        R = euclidean_reward(s, s_prime, s_T, self.n_over_m)
+
+        RPE = R + self.gamma * V_s_prime - V_s_old
+        V_s_new = V_s_old + self.alpha * RPE
+        self.V[s_i, s_T_i] = V_s_new
+
+    def evaluate(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            values[i] = (euclidean_reward(self.loc, c, goal, self.n_over_m)
+                         + self.gamma * self.get_V(c, goal))
 
         if penalties:
             penalties = self.penalty_factor(nodeslist)
