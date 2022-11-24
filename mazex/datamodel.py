@@ -1,6 +1,8 @@
+import numpy as np
+import networkx as nx
 from mazex.mazes import SquareMaze
 from mazex.exceptions import *
-from mazex.utils import check_elements_equal
+from mazex.utils import check_elements_equal, sdd_path
 
 class Step:
     def __init__(self, loc, trial, previous=None, time=None):
@@ -117,10 +119,28 @@ class Trial:
     def duration(self):
         return self.t_stop - self.t_start
 
+    #FIXME: this property shouldn't have the same name as the method
     @property
     def excess_steps(self):
         # we discount 1 because both start and goal are included in self.steps
         return int(len(self.steps) - 1 - self.shortest_path_length)
+
+    def excess_sdd(self, m_over_n=1, gamma=1):
+        # we discount 1 because both start and goal are included in self.steps
+
+#        # we start by computing the lowest possible SDD
+#        start = self.steps[0].loc
+#        shortest_paths = nx.shortest_paths.all_shortest_paths(self.maze, start, self.goal)
+#        shortest_sdd = np.inf
+#        for p in shortest_paths:
+#            sdd_p = sdd_path(p, m_over_n=m_over_n, gamma=gamma)
+#            if sdd_p < shortest_sdd:
+#                shortest_sdd = sdd_p
+        trial_lower_sdd_bound = self.maze.least_sdd_matrix()[self.maze.nodes().index(self.steps[0].loc), self.maze.nodes().index(self.steps[-1].loc)]
+
+        trial_path_sdd = sdd_path(self.path)
+
+        return trial_path_sdd - trial_lower_sdd_bound
 
     @property
     def loc(self):
@@ -229,6 +249,15 @@ class Session:
             excess_steps += t.excess_steps()
 
         return excess_steps
+
+    def excess_sdd(self, m_over_n=1, gamma=1):
+        """Count total number of excess steps accross trials.
+        """
+        excess_sdd = 0
+        for t in self.trials:
+            excess_sdd += t.excess_sdd()
+
+        return excess_sdd
 
     @property
     def current_trial_index(self):

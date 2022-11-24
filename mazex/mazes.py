@@ -1,3 +1,4 @@
+import functools
 import numpy as np
 import networkx as nx
 import random
@@ -6,7 +7,7 @@ from functools import lru_cache, partial
 import re
 
 from mazex.exceptions import *
-from mazex.utils import copydoc
+from mazex.utils import copydoc, to_peano_coords, sdd_path
 import mazex.analysis
 
 #TODO: save centrality measures as attributes of edges and nodes
@@ -145,6 +146,36 @@ def nodes_reachable_n_steps(maze, node, n):
 
     return endpoints, midpoints
 
+@functools.lru_cache(1024)
+def least_sdd_path_steps_matrix(maze, gamma, m_over_n, peano_order=False):
+    "Returns matrix with least SDD for all start, goal pairs for a given maze."
+    n_nodes = len(maze.nodes())
+    erl_steps_matrix = np.full((n_nodes, n_nodes), np.nan, dtype='float')
+
+    nodes = maze.nodes()
+    if peano_order:
+        peano_order = [to_peano_coords(node) for node in nodes]
+        ordered_nodes = [nodes[i] for i in peano_order]
+    else:
+        ordered_nodes = nodes
+
+    for iv, v in enumerate(ordered_nodes):
+        for iw, w in enumerate(ordered_nodes):
+            if v == w:
+                erl_steps_matrix[iv, iw] = 0
+            else:
+                all_simple_paths = list(nx.algorithms.all_simple_paths(maze, v, w))
+                all_simple_paths_sdd = np.array([sdd_path(p, m_over_n, gamma) for p in all_simple_paths])
+                # we find all the paths where SDD is minimal, in case there is
+                # more than one where that is the case
+                least_sdd_paths_i = np.where(all_simple_paths_sdd == all_simple_paths_sdd.min())[0]
+                least_sdd_paths = [all_simple_paths[i] for i in least_sdd_paths_i]
+                # we need to subract 1 because the paths include the start and
+                # end node and we are interested in the number of nodes
+                # traversed
+                least_sdd_paths_lengths = [len(p)-1 for p in least_sdd_paths]
+                erl_steps_matrix[iv, iw] = np.average(least_sdd_paths_lengths)
+    return erl_steps_matrix
 
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
@@ -165,11 +196,13 @@ class SquareMaze(nx.classes.graph.Graph):
         self._has_changed_since_matrix_peano = True
         self._has_changed_since_dictionary = True
         self._has_changed_since_to_coord_map = True
+        self._has_changed_since_least_sdd = True
 
         self._distances_matrix = None
         self._distances_matrix_peano = None
         self._distances_dictionary = None
         self._distances_to_coord_map = None
+        self._least_sdd_matrix = None
 
         self.nodes_reachable_n_steps = partial(nodes_reachable_n_steps,
                                                self)
@@ -399,6 +432,17 @@ class SquareMaze(nx.classes.graph.Graph):
             self._has_changed_since_matrix = False
 
         return self._distances_matrix
+
+    def least_sdd_matrix(self):
+        #FIXME: this should take different argument values for m_over_n and gamma
+        # If the graph has changed since last calculation of the matrix:
+        if self._has_changed_since_least_sdd:
+            # for some reason the NetworkX algorithm produces a numpy matrix
+            # instead of an array, so we np.array it
+            self._least_sdd_matrix = least_sdd_path_steps_matrix(self, gamma=1, m_over_n=1, peano_order=False)
+            self._has_changed_since_least_sdd = False
+
+        return self._least_sdd_matrix
 
     @property
     def distances_matrix_peano(self):

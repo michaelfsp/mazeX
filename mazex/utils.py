@@ -1,6 +1,7 @@
 """
 Assorted utils.
 """
+import functools
 import numpy as np
 import math
 import networkx as nx
@@ -844,4 +845,32 @@ def to_peano_coords(node):
     peano_maze = mx.examplemazes.peano_maze
     coord = peano_maze.distances_dictionary[(0,0)][node]
     return int(coord)
+
+def euclidean_drive(s, s_T, m_over_n=1):
+    """
+    s: previous node
+    s_T: goal node
+    m_over_n: ration between m and n parameters of drive function
+    """
+    return euclidian_distance(s, s_T)**m_over_n
+
+def sdd_path(path, m_over_n=1, gamma=1, s_T=None):
+    """Given a path over a trial, returns the sum discounted distance.
+    Parameters:
+         path: list of locations
+
+         m_over_n: ratio between m and n parameters from the HRL paper equations. 1 is equal to just taking euclidean distance
+
+        gamma: temporal discount factor 
+    """
+
+    if not s_T:
+        s_T = path[-1]
+
+    sdd = 0
+    for i, _ in enumerate(path[:-1]):
+        s_prime = path[i+1]
+        s_prime_euclidean_drive = euclidean_drive(s_prime, s_T, m_over_n)
+        sdd += gamma**i * s_prime_euclidean_drive
+    return sdd
 
