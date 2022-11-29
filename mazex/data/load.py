@@ -36,7 +36,7 @@ def load_session(background_file, background_PNG, arduino_file_path, bonsai_meta
 
     bonsai_data = BonsaiData(
         dlc_coords_file_path, bonsai_metadata_file_path,
-        metadata_delimiter=',', fps=60, background_file=background_file,
+        metadata_delimiter=',', fps=fps, background_file=background_file,
         background_PNG=background_PNG, maze=maze, frame_number_column=0,
         timestamps_column=1, sync_column=2, hardware_timestamps=True)
 
