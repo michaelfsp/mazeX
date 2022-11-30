@@ -126,6 +126,7 @@ class Trial:
         return int(len(self.steps) - 1 - self.shortest_path_length)
 
     def excess_sdd(self, m_over_n=1, gamma=1):
+        # FIXME: gamma is not being used to compute SDD!!!
         # we discount 1 because both start and goal are included in self.steps
 
 #        # we start by computing the lowest possible SDD
