@@ -1,5 +1,6 @@
 import copy
 import numpy as np
+import pandas as pd
 
 from mazex.data.regionmapping import RegionMapping
 from mazex.data.arduino import ArduinoDataFile
@@ -146,3 +147,22 @@ def load_session(background_file, background_PNG, arduino_file_path, bonsai_meta
                 break
 
     return session
+
+def load_steps_dataframe(session):
+
+    data = []
+
+    for i_t, t in enumerate(session.trials):
+        for i_s, s in enumerate(t.steps[:-1]):
+
+            # check if choice decreased geodesic distance in which case it was an optimal choice
+            if session.maze.distances_dictionary[s.available_nodes[s.choice]][s.trial.goal] < session.maze.distances_dictionary[s.loc][s.trial.goal]:
+                was_optimal = 1
+            else:
+                was_optimal = 0
+
+            data.append([s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, session.maze.name, i_s, i_t, was_optimal])
+
+    steps_df = pd.DataFrame(data, columns=['loc', 'goal', 'available_nodes', 'choice', 'heading', 'maze_name', 'step_#', 'trial_#', 'choice_was_optimal'])
+
+    return steps_df

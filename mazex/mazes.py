@@ -180,7 +180,7 @@ def least_sdd_path_steps_matrix(maze, gamma, m_over_n, peano_order=False):
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
     """
-    def __init__(self, maze_size=None):
+    def __init__(self, maze_size=None, name=None):
         """Generates a square maze of given maze_size and no connections.
         Total number of nodes will maze_size**2.
         """
@@ -188,6 +188,8 @@ class SquareMaze(nx.classes.graph.Graph):
 
         if maze_size:
             self.maze_size = maze_size
+
+        self.name = name
 
         # We will calculate the distances matrix once and then only
         # recalculate if either the nodes or eges of the maze have changed
