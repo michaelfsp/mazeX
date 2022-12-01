@@ -148,7 +148,7 @@ def load_session(background_file, background_PNG, arduino_file_path, bonsai_meta
 
     return session
 
-def load_steps_dataframe(session):
+def load_steps_from_single_session(session):
 
     data = []
 
@@ -161,8 +161,53 @@ def load_steps_dataframe(session):
             else:
                 was_optimal = 0
 
-            data.append([s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, session.maze.name, i_s, i_t, was_optimal])
+            data.append([s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, was_optimal, s.trial.maze.name, i_s, i_t])
 
-    steps_df = pd.DataFrame(data, columns=['loc', 'goal', 'available_nodes', 'choice', 'heading', 'maze_name', 'step_#', 'trial_#', 'choice_was_optimal'])
+    steps_df = pd.DataFrame(data, columns=['loc', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'maze_name', 'step_#', 'trial_#'])
+
+    return steps_df
+
+
+def load_steps_from_several_sessions(sessions):
+
+    # FIX: this is a bit of a hacky way to get an ordered nodes_list data
+    # structure
+    nodes_list = sessions[0].maze.nodes()
+
+    data = []
+
+    n_past_visits_loc = dict.fromkeys(nodes_list, 0)
+    n_past_visits_loc_goal = dict.fromkeys(nodes_list, dict.fromkeys(nodes_list, 0))
+
+    n_past_steps_goal = dict.fromkeys(nodes_list, 0)
+    n_past_trials_goal = dict.fromkeys(nodes_list, 0)
+
+    for i_ses, session in enumerate(sessions):
+
+        for i_t, t in enumerate(session.trials):
+
+            n_past_visits_loc_trial = dict.fromkeys(nodes_list, 0)
+
+            for i_s, s in enumerate(t.steps[:-1]):
+
+                # check if choice decreased geodesic distance in which case it was an optimal choice
+                if session.maze.distances_dictionary[s.available_nodes[s.choice]][s.trial.goal] < session.maze.distances_dictionary[s.loc][s.trial.goal]:
+                    was_optimal = 1
+                else:
+                    was_optimal = 0
+
+                data.append([s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, was_optimal, s.trial.maze.name, i_s, i_t, i_ses, n_past_visits_loc_trial[s.loc], n_past_visits_loc_goal[s.loc][s.trial.goal], n_past_steps_goal[s.trial.goal], n_past_trials_goal[s.trial.goal]])
+
+                # and now we add to the past_visits counters
+
+                n_past_visits_loc[s.loc] += 1
+                n_past_visits_loc_trial[s.loc] += 1
+                n_past_visits_loc_goal[s.loc][s.trial.goal] += 1
+
+                n_past_steps_goal[s.trial.goal] += 1
+
+            n_past_trials_goal[s.trial.goal] += 1
+
+    steps_df = pd.DataFrame(data, columns=['loc', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'maze_name', 'step_#', 'trial_#', 'session_#', 'n_past_visits_loc_trial', 'n_past_visits_loc_goal', 'n_past_steps_goal','n_past_trials_goal'])
 
     return steps_df

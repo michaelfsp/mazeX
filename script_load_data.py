@@ -188,4 +188,10 @@ maze = maze_for_session(mouse, *date)
 
 ses = mx.data.load.load_session(background_file, background_PNG, arduino_file_path, bonsai_metadata_file_path, dlc_coords_file_path, maze, date = date, mouse = mouse)
 
-steps_df = mx.data.load.load_steps_dataframe(ses)
+steps_df = mx.data.load.load_steps_from_single_session(ses)
+
+date2 = ['2019', '09', '20']
+
+ses2 = mx.data.load.load_session(background_file, background_PNG, arduino_file_path, bonsai_metadata_file_path, dlc_coords_file_path, maze, date = date2, mouse = mouse)
+
+steps_sessions_df = mx.data.load.load_steps_from_several_sessions([ses, ses2])
