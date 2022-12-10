@@ -203,7 +203,7 @@ def load_steps_from_several_sessions(sessions):
                 else:
                     was_optimal = 0
 
-                data.append([s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, was_optimal, s.trial.maze.name, i_s, i_t, i_ses, n_past_visits_loc_trial[s.loc], n_past_visits_loc[s.loc], n_past_visits_loc_goal[s.loc][s.trial.goal], n_past_steps_goal[s.trial.goal], n_past_trials_goal[s.trial.goal], step_count])
+                data.append([session.subject, session.maze.name, s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, was_optimal, s.trial.maze.name, i_s, i_t, i_ses, n_past_visits_loc_trial[s.loc], n_past_visits_loc[s.loc], n_past_visits_loc_goal[s.loc][s.trial.goal], n_past_steps_goal[s.trial.goal], n_past_trials_goal[s.trial.goal], step_count])
 
                 # and now we add to the past_visits counters
 
@@ -217,6 +217,6 @@ def load_steps_from_several_sessions(sessions):
 
             n_past_trials_goal[s.trial.goal] += 1
 
-    steps_df = pd.DataFrame(data, columns=['loc', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'maze_name', 'step_#', 'trial_#', 'session_#', 'n_past_visits_loc_trial', 'n_past_visits_loc', 'n_past_visits_loc_goal', 'n_past_steps_goal','n_past_trials_goal', 'step_count'])
+    steps_df = pd.DataFrame(data, columns=['subject', 'maze_name', 'loc', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'maze_name', 'step_n', 'trial_n', 'session_n', 'n_past_visits_loc_trial', 'n_past_visits_loc', 'n_past_visits_loc_goal', 'n_past_steps_goal','n_past_trials_goal', 'step_count'])
 
     return steps_df
