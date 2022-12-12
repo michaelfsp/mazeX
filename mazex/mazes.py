@@ -199,12 +199,14 @@ class SquareMaze(nx.classes.graph.Graph):
         self._has_changed_since_dictionary = True
         self._has_changed_since_to_coord_map = True
         self._has_changed_since_least_sdd = True
+        self._has_changed_since_optimal_choice_dic = True
 
         self._distances_matrix = None
         self._distances_matrix_peano = None
         self._distances_dictionary = None
         self._distances_to_coord_map = None
         self._least_sdd_matrix = None
+        self._optimal_choice_dic = None
 
         self.nodes_reachable_n_steps = partial(nodes_reachable_n_steps,
                                                self)
@@ -445,6 +447,26 @@ class SquareMaze(nx.classes.graph.Graph):
             self._has_changed_since_least_sdd = False
 
         return self._least_sdd_matrix
+
+    @property
+    def optimal_choice_dic(self):
+        if self._has_changed_since_optimal_choice_dic:
+
+            # If the graph has changed since last calculation of the dictionary:
+            optimal_choice_dic = {}
+            for loc in self.nodes():
+                optimal_choice_dic[loc] = {}
+                for goal in self.nodes():
+                    optimal_choice = []
+                    for s_prime in self.neighbors(loc):
+                        if self.distances_dictionary[s_prime][goal] < self.distances_dictionary[loc][goal]:
+                            optimal_choice.append(s_prime)
+                    optimal_choice_dic[loc][goal] = optimal_choice
+
+            self._optimal_choice_dic = optimal_choice_dic
+            self._has_changed_since_optimal_choice_dic = False
+
+        return self._optimal_choice_dic
 
     @property
     def distances_matrix_peano(self):

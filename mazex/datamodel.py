@@ -212,7 +212,7 @@ class Trial:
 
 
 class Session:
-    def __init__(self, date=None, subject=None):
+    def __init__(self, date=None, subject=None, experiment_day=None, maze_day=None):
         """Session initiation method.
 
         Parameters:
@@ -229,6 +229,8 @@ class Session:
 
         self.date = date
         self.subject = subject
+        self.experiment_day = experiment_day
+        self.maze_day = maze_day
 
     def count_total_steps(self):
         """Count total number of steps in session.
@@ -300,3 +302,15 @@ class Session:
     @property
     def trial(self):
         return self.trials[self.current_trial_index]
+
+# TODO: WIP
+#class Experiment:
+#    def __init__(self, subjects, days):
+#        self.subjects = subjects
+#        self.days = days
+#
+#class Subject:
+#    def __init__(self, subject_name=None)
+#
+#class Phase:
+#    def __init__(self):
