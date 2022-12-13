@@ -1,6 +1,7 @@
 import copy
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from mazex.data.regionmapping import RegionMapping
 from mazex.data.arduino import ArduinoDataFile
@@ -279,15 +280,15 @@ def compute_features(steps_df):
     # this is the augmented dataframe to which we will write the computed stats
     steps_df_with_features = steps_df.reindex(steps_df.columns.tolist() + features, axis=1)
 
-    for group_name in grouping.groups.keys():
+    for group_name in tqdm(grouping.groups.keys(), total=len(grouping.groups.keys())):
+
+        # We get a dataframe only with a (subject, maze) combo
         df = grouping.get_group(group_name)
 
-        step_iterator = df.iterrows()
-
-        for i, step_row in step_iterator:
+        for i, step_row in tqdm(df.iterrows(), total=df.shape[0]):
 
             # get a DataFrame with all rows up to current step row
-            df_up_to_row = df.iloc[:i+1, :]
+            df_up_to_row = df.loc[:i, :]
 
             # compute stats
             steps_df_with_features.loc[i, 'loc_count'] = len(df_up_to_row[df_up_to_row['loc']==step_row['loc']])
@@ -295,9 +296,8 @@ def compute_features(steps_df):
             steps_df_with_features.loc[i, 'goal_count'] = len(df_up_to_row[df_up_to_row['goal']==step_row['goal']])
             steps_df_with_features.loc[i, 'trial_loc_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row['loc']) & (df_up_to_row['maze_day']==step_row['maze_day']) & (df_up_to_row['session_trial_count']==step_row['session_trial_count'])])
 
-
-            if '10II' in group_name:
-                import ipdb; ipdb.set_trace()
+#            if '10II' in group_name:
+#                import ipdb; ipdb.set_trace()
 #    # add features to steps_df
 #    for maze_name in all_maze_names:
 #        for subject in all_subject_names:
