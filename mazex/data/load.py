@@ -166,7 +166,7 @@ def load_steps_from_single_session(session):
 
             data.append([s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, was_optimal, s.trial.maze.name, i_s, i_t])
 
-    steps_df = pd.DataFrame(data, columns=['loc', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'maze_name', 'step_#', 'trial_#'])
+    steps_df = pd.DataFrame(data, columns=['location', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'maze_name', 'step_#', 'trial_#'])
 
     return steps_df
 
@@ -220,7 +220,7 @@ def load_steps_from_several_sessions(sessions):
 
             n_past_trials_goal[s.trial.goal] += 1
 
-    steps_df = pd.DataFrame(data, columns=['subject', 'maze_name', 'loc', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'step_n', 'trial_n', 'session_n', 'n_past_visits_loc_trial', 'n_past_visits_loc', 'n_past_visits_loc_goal', 'n_past_steps_goal','n_past_trials_goal', 'step_count'])
+    steps_df = pd.DataFrame(data, columns=['subject', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'step_n', 'trial_n', 'session_n', 'n_past_visits_loc_trial', 'n_past_visits_loc', 'n_past_visits_loc_goal', 'n_past_steps_goal','n_past_trials_goal', 'step_count'])
 
     return steps_df
 
@@ -244,7 +244,7 @@ def load_steps_multi(sessions):
 
                 session_step_count += 1
 
-    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'loc', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count'])
+    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count'])
 
 
 def compute_features(steps_df):
@@ -257,6 +257,7 @@ def compute_features(steps_df):
     """
     # We take care of step local features first, i.e., features for which we only
     # need stepwise info to compute
+
     # We first check if step was optimal
     # We first define a function so that we can vectorize later
     def choice_in_optimal(row):
@@ -288,9 +289,9 @@ def compute_features(steps_df):
             df_up_to_row = df.loc[:i, :]
 
             # compute stats
-            steps_df_with_features.loc[i, 'loc_count'] = len(df_up_to_row[df_up_to_row['loc']==step_row.loc])
-            steps_df_with_features.loc[i, 'loc_goal_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.loc) & (df_up_to_row['goal']==step_row.goal)])
+            steps_df_with_features.loc[i, 'loc_count'] = len(df_up_to_row[df_up_to_row['loc']==step_row.location])
+            steps_df_with_features.loc[i, 'loc_goal_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.location) & (df_up_to_row['goal']==step_row.goal)])
             steps_df_with_features.loc[i, 'goal_count'] = len(df_up_to_row[df_up_to_row['goal']==step_row.goal])
-            steps_df_with_features.loc[i, 'trial_loc_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.loc) & (df_up_to_row['maze_day']==step_row.maze_day) & (df_up_to_row['session_trial_count']==step_row.session_trial_count)])
+            steps_df_with_features.loc[i, 'trial_loc_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.location) & (df_up_to_row['maze_day']==step_row.maze_day) & (df_up_to_row['session_trial_count']==step_row.session_trial_count)])
 
     return steps_df_with_features
