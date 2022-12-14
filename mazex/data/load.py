@@ -149,6 +149,8 @@ def load_session(background_file, background_PNG, arduino_file_path, bonsai_meta
 
     return session
 
+#--------------Methods to load data for a single subject-------------------
+# Single session
 def load_steps_from_single_session(session):
 
     data = []
@@ -168,7 +170,7 @@ def load_steps_from_single_session(session):
 
     return steps_df
 
-
+# Multisessions
 def load_steps_from_several_sessions(sessions):
 
     # FIX: this is a bit of a hacky way to get an ordered nodes_list data
@@ -222,7 +224,7 @@ def load_steps_from_several_sessions(sessions):
 
     return steps_df
 
-
+#-----------------Load steps from sessions of multiple subjects---------------
 def load_steps_multi(sessions):
     """Multisession Multisubject.
     """
@@ -238,21 +240,11 @@ def load_steps_multi(sessions):
 
             for i_s, s in enumerate(t.steps[:-1]):
 
-                data.append([date_time, session.experiment_day, session.maze_day, session.subject, session.maze.name, s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], session.maze.optimal_choice_dic[s.loc][s.trial.goal], s.heading, i_s, session_step_count, i_t])
+                data.append([date_time, session.experiment_day, session.maze_day, session.subject, s.time, session.maze.name, s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], session.maze.optimal_choice_dic[s.loc][s.trial.goal], s.heading, i_s, session_step_count, i_t])
 
                 session_step_count += 1
 
-    steps_df = pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'maze_name', 'loc', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count'])
-
-    def choice_in_optimal(row):
-        if row.choice in row.optimal_choice:
-            return 1
-        else:
-            return 0
-
-    steps_df['choice_was_optimal'] = steps_df.apply(choice_in_optimal, axis=1)
-
-    return steps_df
+    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'loc', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count'])
 
 
 def compute_features(steps_df):
@@ -263,22 +255,25 @@ def compute_features(steps_df):
 
         mazes_dic   :   dictionary containing maze objects for maze names appearing in steps_df column 'maze_name'
     """
-    #all_maze_names = steps_df['maze_name'].unique
-    #all_subject_names = steps_df['subject'].unique
+    # We take care of step local features first, i.e., features for which we only
+    # need stepwise info to compute
+    # We first check if step was optimal
+    # We first define a function so that we can vectorize later
+    def choice_in_optimal(row):
+        if row.choice in row.optimal_choice:
+            return 1
+        else:
+            return 0
 
-    #assert all(maze_name in mazes_dic.keys() for maze_name in all_maze_names), "Not all maze_name instances in steps_df are in mazes_dic's keys"
+    steps_df['choice_was_optimal'] = steps_df.apply(choice_in_optimal, axis=1)
 
-    #loc_count = []
-    #loc_goal_count = []
-    #goal_count = []
-    #trial_loc_count = []
-
-    grouping = steps_df.groupby(['subject', 'maze_name'])
-
+    # Now we compute features that need global information, i.e., information from
+    # other steps in the session, other sessions, etc.
     features = ['loc_count', 'loc_goal_count', 'goal_count', 'trial_loc_count']
-
     # this is the augmented dataframe to which we will write the computed stats
     steps_df_with_features = steps_df.reindex(steps_df.columns.tolist() + features, axis=1)
+
+    grouping = steps_df.groupby(['subject', 'maze_name'])
 
     for group_name in tqdm(grouping.groups.keys(), total=len(grouping.groups.keys())):
 
@@ -297,14 +292,5 @@ def compute_features(steps_df):
             steps_df_with_features.loc[i, 'loc_goal_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.loc) & (df_up_to_row['goal']==step_row.goal)])
             steps_df_with_features.loc[i, 'goal_count'] = len(df_up_to_row[df_up_to_row['goal']==step_row.goal])
             steps_df_with_features.loc[i, 'trial_loc_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.loc) & (df_up_to_row['maze_day']==step_row.maze_day) & (df_up_to_row['session_trial_count']==step_row.session_trial_count)])
-
-#            if '10II' in group_name:
-#                import ipdb; ipdb.set_trace()
-#    # add features to steps_df
-#    for maze_name in all_maze_names:
-#        for subject in all_subject_names:
-#            steps_maze_subject = steps_df[steps_df['maze_name']==maze_name & steps_df['subject'] ==subject]
-#
-#            # count number of times location has ever been visited in this maze topology
 
     return steps_df_with_features
