@@ -285,16 +285,18 @@ def compute_features(steps_df):
         # We get a dataframe only with a (subject, maze) combo
         df = grouping.get_group(group_name)
 
-        for i, step_row in tqdm(df.iterrows(), total=df.shape[0]):
+        for step_row in tqdm(df.itertuples(), total=df.shape[0]):
+
+            i = step_row.Index
 
             # get a DataFrame with all rows up to current step row
             df_up_to_row = df.loc[:i, :]
 
             # compute stats
-            steps_df_with_features.loc[i, 'loc_count'] = len(df_up_to_row[df_up_to_row['loc']==step_row['loc']])
-            steps_df_with_features.loc[i, 'loc_goal_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row['loc']) & (df_up_to_row['goal']==step_row['goal'])])
-            steps_df_with_features.loc[i, 'goal_count'] = len(df_up_to_row[df_up_to_row['goal']==step_row['goal']])
-            steps_df_with_features.loc[i, 'trial_loc_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row['loc']) & (df_up_to_row['maze_day']==step_row['maze_day']) & (df_up_to_row['session_trial_count']==step_row['session_trial_count'])])
+            steps_df_with_features.loc[i, 'loc_count'] = len(df_up_to_row[df_up_to_row['loc']==step_row.loc])
+            steps_df_with_features.loc[i, 'loc_goal_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.loc) & (df_up_to_row['goal']==step_row.goal)])
+            steps_df_with_features.loc[i, 'goal_count'] = len(df_up_to_row[df_up_to_row['goal']==step_row.goal])
+            steps_df_with_features.loc[i, 'trial_loc_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.loc) & (df_up_to_row['maze_day']==step_row.maze_day) & (df_up_to_row['session_trial_count']==step_row.session_trial_count)])
 
 #            if '10II' in group_name:
 #                import ipdb; ipdb.set_trace()
