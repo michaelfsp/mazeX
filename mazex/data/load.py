@@ -7,6 +7,7 @@ from mazex.data.regionmapping import RegionMapping
 from mazex.data.arduino import ArduinoDataFile
 from mazex.data.bonsai import BonsaiData
 from mazex import Session, Trial, Step
+from mazex.utils import manhattan_distance, euclidian_distance, angle_between_nodes, angle_between_node_and_heading
 
 import rsync
 
@@ -252,7 +253,30 @@ def load_steps_multi(sessions):
     return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count', 'step_duration', 'geodesic_distance_goal'])
 
 
-def compute_features(steps_df):
+def row_computations(choice, optimal_choice, goal, location, heading, available_nodes):
+    if choice in optimal_choice:
+        choice_was_optimal = 1
+        geodesic_delta = -1
+    else:
+        choice_was_optimal = 0
+        geodesic_delta = 1
+
+    manhattan_dist_to_goal = manhattan_distance(location, goal)
+    euclidean_dist_to_goal = euclidian_distance(location, goal)
+
+    manhattan_delta = manhattan_distance(choice, goal) - manhattan_dist_to_goal
+    euclidean_delta = euclidian_distance(choice, goal) - euclidean_dist_to_goal
+    angle_to_goal = angle_between_nodes(location, choice, goal)
+    angle_to_heading = angle_between_node_and_heading(location, choice, heading)
+    n_available_nodes = len(available_nodes)
+
+    return (choice_was_optimal, geodesic_delta, manhattan_delta, euclidean_delta, angle_to_goal, angle_to_heading, n_available_nodes, manhattan_dist_to_goal, euclidean_dist_to_goal)
+
+
+row_computations_vec = np.vectorize(row_computations)
+
+
+def compute_features(steps_df, global_features=False):
     """Computes statistical features over steps
 
     Inputs:
@@ -263,40 +287,29 @@ def compute_features(steps_df):
     # We take care of step local features first, i.e., features for which we only
     # need stepwise info to compute
 
-    # We first check if step was optimal
-    # We first define a function so that we can vectorize later
-    def choice_in_optimal(row):
-        if row.choice in row.optimal_choice:
-            return 1
-        else:
-            return 0
+    newfeatures = row_computations_vec(steps_df.choice, steps_df.optimal_choice, steps_df.goal, steps_df.location, steps_df.heading, steps_df.available_nodes)
 
-    steps_df['choice_was_optimal'] = steps_df.apply(choice_in_optimal, axis=1)
+    lst_optimal, lst_geodesic_delta, lst_manhattan_delta, lst_euclidean_delta, lst_angle_to_goal, lst_angle_to_heading, lst_n_available_nodes, lst_manhattan_dist_to_goal, lst_euclidean_dist_to_goal = newfeatures
 
-    # Now we compute features that need global information, i.e., information from
-    # other steps in the session, other sessions, etc.
-    features = ['loc_count', 'loc_goal_count', 'goal_count', 'trial_loc_count']
-    # this is the augmented dataframe to which we will write the computed stats
-    steps_df_with_features = steps_df.reindex(steps_df.columns.tolist() + features, axis=1)
+    steps_df_with_features = steps_df
 
-    grouping = steps_df.groupby(['subject', 'maze_name'])
+    steps_df_with_features['choice_was_optimal'] = lst_optimal
+    steps_df_with_features['geodesic_delta'] = lst_geodesic_delta
+    steps_df_with_features['manhattan_delta'] = lst_manhattan_delta
+    steps_df_with_features['euclidean_delta'] = lst_euclidean_delta
+    steps_df_with_features['angle_to_goal'] = lst_angle_to_goal
+    steps_df_with_features['angle_to_heading'] = lst_angle_to_heading
+    steps_df_with_features['n_available_nodes'] = lst_n_available_nodes
+    steps_df_with_features['manhattan_dist_to_goal'] = lst_manhattan_dist_to_goal
+    steps_df_with_features['euclidean_dist_to_goal'] = lst_euclidean_dist_to_goal
+    
+    if global_features:#
+        # Now we compute features that need global information, i.e., information from
+        # other steps in the session, other sessions, etc.
 
-    for group_name in tqdm(grouping.groups.keys(), total=len(grouping.groups.keys())):
-
-        # We get a dataframe only with a (subject, maze) combo
-        df = grouping.get_group(group_name)
-
-        for step_row in tqdm(df.itertuples(), total=df.shape[0]):
-
-            i = step_row.Index
-
-            # get a DataFrame with all rows up to current step row
-            df_up_to_row = df.loc[:i, :]
-
-            # compute stats
-            steps_df_with_features.loc[i, 'loc_count'] = len(df_up_to_row[df_up_to_row['loc']==step_row.location])
-            steps_df_with_features.loc[i, 'loc_goal_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.location) & (df_up_to_row['goal']==step_row.goal)])
-            steps_df_with_features.loc[i, 'goal_count'] = len(df_up_to_row[df_up_to_row['goal']==step_row.goal])
-            steps_df_with_features.loc[i, 'trial_loc_count'] = len(df_up_to_row[(df_up_to_row['loc']==step_row.location) & (df_up_to_row['maze_day']==step_row.maze_day) & (df_up_to_row['session_trial_count']==step_row.session_trial_count)])
+        steps_df_with_features['loc_count'] = steps_df.groupby(["location", "subject", "maze_name"]).cumcount()
+        steps_df_with_features['loc_goal_count'] = steps_df.groupby(["location", "goal", "subject", "maze_name"]).cumcount()
+        steps_df_with_features['goal_count'] = steps_df.groupby(["goal", "subject", "maze_name"]).cumcount()
+        steps_df_with_features['trial_loc_count'] = steps_df.groupby(["location", "maze_day", "session_trial_count", "subject", "maze_name"]).cumcount()
 
     return steps_df_with_features
