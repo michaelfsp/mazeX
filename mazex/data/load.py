@@ -240,11 +240,13 @@ def load_steps_multi(sessions):
 
             for i_s, s in enumerate(t.steps[:-1]):
 
-                data.append([date_time, session.experiment_day, session.maze_day, session.subject, s.time, session.maze.name, s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], session.maze.optimal_choice_dic[s.loc][s.trial.goal], s.heading, i_s, session_step_count, i_t])
+                step_duration = t.steps[i_s+1].time - t.steps[i_s].time
+
+                data.append([date_time, session.experiment_day, session.maze_day, session.subject, s.time, session.maze.name, s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], session.maze.optimal_choice_dic[s.loc][s.trial.goal], s.heading, i_s, session_step_count, i_t, step_duration])
 
                 session_step_count += 1
 
-    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count'])
+    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count', 'step_duration'])
 
 
 def compute_features(steps_df):

@@ -47,6 +47,37 @@ def angle_between_nodes(loc, node1, node2):
     return np.arccos(np.dot(node1_vec, node2_vec) / (np.linalg.norm(
         node1_vec)*np.linalg.norm(node2_vec)))
 
+@lru_cache(maxsize=65536)
+def angle_between_node_and_heading(loc, node1, heading):
+    """A common function that determines the angle between a given edge and
+    the goal.
+
+    Parameters:
+    -----------
+    node : node or tuple
+        Node on the maze we want to evaluate the angle of
+    
+    loc : node or tuple
+        The current node
+    
+    goal : node or turple
+        The node of the ,y coordinates of the goal location.
+    """
+    if heading == '>':
+        heading_node = (loc[0]+1, loc[1])
+    elif heading == 'v':
+        heading_node = (loc[0], loc[1]-1)
+    elif heading == '<':
+        heading_node = (loc[0]-1, loc[1])
+    elif heading == '^':
+        heading_node = (loc[0], loc[1]+1)
+
+    node1_vec = np.array(node1) - np.array(loc)
+    heading_node_vec = np.array(heading_node) - np.array(loc)
+    
+    return np.arccos(np.dot(node1_vec, heading_node_vec) / (np.linalg.norm(
+        node1_vec)*np.linalg.norm(heading_node_vec)))
+
 @lru_cache(maxsize=128)
 def angles_dictionary(size):
     from mazex.mazes import SquareMaze
