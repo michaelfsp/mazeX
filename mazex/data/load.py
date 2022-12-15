@@ -150,80 +150,6 @@ def load_session(background_file, background_PNG, arduino_file_path, bonsai_meta
 
     return session
 
-#--------------Methods to load data for a single subject-------------------
-# Single session
-def load_steps_from_single_session(session):
-
-    data = []
-
-    for i_t, t in enumerate(session.trials):
-        for i_s, s in enumerate(t.steps[:-1]):
-
-            # check if choice decreased geodesic distance in which case it was an optimal choice
-            if session.maze.distances_dictionary[s.available_nodes[s.choice]][s.trial.goal] < session.maze.distances_dictionary[s.loc][s.trial.goal]:
-                was_optimal = 1
-            else:
-                was_optimal = 0
-
-            data.append([s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, was_optimal, s.trial.maze.name, i_s, i_t])
-
-    steps_df = pd.DataFrame(data, columns=['location', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'maze_name', 'step_#', 'trial_#'])
-
-    return steps_df
-
-# Multisessions
-def load_steps_from_several_sessions(sessions):
-
-    # FIX: this is a bit of a hacky way to get an ordered nodes_list data
-    # structure
-    nodes_list = sessions[0].maze.nodes()
-
-    data = []
-
-    step_count = 0
-    n_past_visits_loc = dict.fromkeys(nodes_list, 0)
-
-    # n_past_visits_loc_goal = dict.fromkeys(nodes_list, dict.fromkeys(nodes_list, 0))
-
-    n_past_visits_loc_goal = dict.fromkeys(nodes_list)
-    
-    for node in nodes_list:
-        n_past_visits_loc_goal[node] = dict.fromkeys(nodes_list, 0)
-
-    n_past_steps_goal = dict.fromkeys(nodes_list, 0)
-    n_past_trials_goal = dict.fromkeys(nodes_list, 0)
-
-    for i_ses, session in enumerate(sessions):
-
-        for i_t, t in enumerate(session.trials):
-
-            n_past_visits_loc_trial = dict.fromkeys(nodes_list, 0)
-
-            for i_s, s in enumerate(t.steps[:-1]):
-
-                # check if choice decreased geodesic distance in which case it was an optimal choice
-                if session.maze.distances_dictionary[s.available_nodes[s.choice]][s.trial.goal] < session.maze.distances_dictionary[s.loc][s.trial.goal]:
-                    was_optimal = 1
-                else:
-                    was_optimal = 0
-
-                data.append([session.subject, session.maze.name, s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], s.heading, was_optimal, i_s, i_t, i_ses, n_past_visits_loc_trial[s.loc], n_past_visits_loc[s.loc], n_past_visits_loc_goal[s.loc][s.trial.goal], n_past_steps_goal[s.trial.goal], n_past_trials_goal[s.trial.goal], step_count])
-
-                # and now we add to the past_visits counters
-
-                n_past_visits_loc[s.loc] += 1
-                n_past_visits_loc_trial[s.loc] += 1
-                n_past_visits_loc_goal[s.loc][s.trial.goal] += 1
-
-                n_past_steps_goal[s.trial.goal] += 1
-
-                step_count += 1
-
-            n_past_trials_goal[s.trial.goal] += 1
-
-    steps_df = pd.DataFrame(data, columns=['subject', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'heading', 'choice_was_optimal', 'step_n', 'trial_n', 'session_n', 'n_past_visits_loc_trial', 'n_past_visits_loc', 'n_past_visits_loc_goal', 'n_past_steps_goal','n_past_trials_goal', 'step_count'])
-
-    return steps_df
 
 #-----------------Load steps from sessions of multiple subjects---------------
 def load_steps_multi(sessions):
@@ -276,7 +202,7 @@ def row_computations(choice, optimal_choice, goal, location, heading, available_
 row_computations_vec = np.vectorize(row_computations)
 
 
-def compute_features(steps_df, global_features=False):
+def compute_features(steps_df):
     """Computes statistical features over steps
 
     Inputs:
@@ -303,13 +229,12 @@ def compute_features(steps_df, global_features=False):
     steps_df_with_features['manhattan_dist_to_goal'] = lst_manhattan_dist_to_goal
     steps_df_with_features['euclidean_dist_to_goal'] = lst_euclidean_dist_to_goal
     
-    if global_features:#
-        # Now we compute features that need global information, i.e., information from
-        # other steps in the session, other sessions, etc.
+    # Now we compute features that need global information, i.e., information from
+    # other steps in the session, other sessions, etc.
 
-        steps_df_with_features['loc_count'] = steps_df.groupby(["location", "subject", "maze_name"]).cumcount()
-        steps_df_with_features['loc_goal_count'] = steps_df.groupby(["location", "goal", "subject", "maze_name"]).cumcount()
-        steps_df_with_features['goal_count'] = steps_df.groupby(["goal", "subject", "maze_name"]).cumcount()
-        steps_df_with_features['trial_loc_count'] = steps_df.groupby(["location", "maze_day", "session_trial_count", "subject", "maze_name"]).cumcount()
+    steps_df_with_features['loc_count'] = steps_df.groupby(["location", "subject", "maze_name"]).cumcount()
+    steps_df_with_features['loc_goal_count'] = steps_df.groupby(["location", "goal", "subject", "maze_name"]).cumcount()
+    steps_df_with_features['goal_count'] = steps_df.groupby(["goal", "subject", "maze_name"]).cumcount()
+    steps_df_with_features['trial_loc_count'] = steps_df.groupby(["location", "maze_day", "session_trial_count", "subject", "maze_name"]).cumcount()
 
     return steps_df_with_features
