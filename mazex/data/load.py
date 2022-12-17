@@ -1,4 +1,5 @@
 import copy
+import warnings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
@@ -43,10 +44,22 @@ def load_session(background_file, background_PNG, arduino_file_path, bonsai_meta
         background_PNG=background_PNG, maze=maze, frame_number_column=0,
         timestamps_column=1, sync_column=2, hardware_timestamps=True)
 
-    aligner = rsync.Rsync_aligner(
-        arduino_data.syncon_event_times.ravel().astype('int'),
-        bonsai_data.syncon_event_times.ravel().astype('int')[0:arduino_data.syncon_event_times.size],
-        chunk_size=5, plot=True)
+    if len(arduino_data.syncon_event_times)==0:
+        warnings.warn("Arduino sync signal missing for mouse {} on experiment day {}".format(mouse, experiment_day))
+        return None
+
+    if len(bonsai_data.syncon_event_times)==0:
+        warnings.warn("Bonsai video sync signal missing for mouse {} on experiment day {}".format(mouse, experiment_day))
+        return None
+
+    try:
+        aligner = rsync.Rsync_aligner(
+            arduino_data.syncon_event_times.ravel().astype('int'),
+            bonsai_data.syncon_event_times.ravel().astype('int')[0:arduino_data.syncon_event_times.size],
+            chunk_size=5, plot=True)
+    except:
+        warnings.warn("Alignment failure for mouse {} on date {}".format(mouse,date))
+        return None
 
     goals = [region_mapping.address_to_coord_dic[poke_address] for poke_address in arduino_data.reward_events[:,1]]
 
