@@ -45,11 +45,11 @@ def load_session(background_file, background_PNG, arduino_file_path, bonsai_meta
         timestamps_column=1, sync_column=2, hardware_timestamps=True)
 
     if len(arduino_data.syncon_event_times)==0:
-        warnings.warn("Arduino sync signal missing for mouse {} on experiment day {}".format(mouse, experiment_day))
+        warnings.warn("Arduino sync signal missing for mouse {} on day {}".format(mouse, date))
         return None
 
     if len(bonsai_data.syncon_event_times)==0:
-        warnings.warn("Bonsai video sync signal missing for mouse {} on experiment day {}".format(mouse, experiment_day))
+        warnings.warn("Bonsai video sync signal missing for mouse {} on day {}".format(mouse, date))
         return None
 
     try:
