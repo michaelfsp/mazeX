@@ -40,7 +40,6 @@ These imports are here for now only for debugging purposes.
 
 #These are import orderwise
 from networkx.exception import  *
-import networkx.external
 import networkx.utils
 # these packages work with Python >= 2.6
 
