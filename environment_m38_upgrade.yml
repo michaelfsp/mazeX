@@ -18,7 +18,7 @@ dependencies:
   - joblib
   - jupyterlab
   - lame
-  - matplotlib
+  - matplotlib<3
   - mkl
   - numba
   - numexpr
