@@ -189,7 +189,7 @@ def load_steps_multi(sessions):
 
                 session_step_count += 1
 
-    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count', 'step_duration', 'geodesic_distance_goal'])
+    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count', 'step_duration', 'geodesic_dist_goal'])
 
 
 def row_computations(choice, optimal_choice, goal, location, heading, available_nodes):
@@ -239,8 +239,8 @@ def compute_features(steps_df):
     steps_df_with_features['angle_to_goal'] = lst_angle_to_goal
     steps_df_with_features['angle_to_heading'] = lst_angle_to_heading
     steps_df_with_features['n_available_nodes'] = lst_n_available_nodes
-    steps_df_with_features['manhattan_dist_to_goal'] = lst_manhattan_dist_to_goal
-    steps_df_with_features['euclidean_dist_to_goal'] = lst_euclidean_dist_to_goal
+    steps_df_with_features['manhattan_dist_goal'] = lst_manhattan_dist_to_goal
+    steps_df_with_features['euclidean_dist_goal'] = lst_euclidean_dist_to_goal
     
     # Now we compute features that need global information, i.e., information from
     # other steps in the session, other sessions, etc.
@@ -249,5 +249,19 @@ def compute_features(steps_df):
     steps_df_with_features['loc_goal_count'] = steps_df.groupby(["location", "goal", "subject", "maze_name"]).cumcount()
     steps_df_with_features['goal_count'] = steps_df.groupby(["goal", "subject", "maze_name"]).cumcount()
     steps_df_with_features['trial_loc_count'] = steps_df.groupby(["location", "maze_day", "session_trial_count", "subject", "maze_name"]).cumcount()
+
+    steps_df_with_features.loc[:, 'maze_trial_count'] = steps_df_with_features['session_trial_count']
+    subject_maze_trial_counts_per_session = steps_df_with_features.groupby(["subject", "maze_name", "maze_day"])['session_trial_count'].max()+1 
+
+    for subject_maze_session in subject_maze_trial_counts_per_session.index:
+        subject, maze_name, maze_day = subject_maze_session
+        n_trials_per_session = subject_maze_trial_counts_per_session[(subject, maze_name)]
+        sum_trials_up_to_this_session = n_trials_per_session.cumsum()
+        past_trials_to_add_to_each_session = sum_trials_up_to_this_session - n_trials_per_session
+        past_trials_to_add_to_this_session = past_trials_to_add_to_each_session[maze_day]
+
+        steps_df_with_features.loc[(steps_df_with_features['subject']==subject)&(steps_df_with_features['maze_name']==maze_name)&(steps_df_with_features['maze_day']==maze_day), 'maze_trial_count'] += past_trials_to_add_to_this_session
+
+        #import ipdb; ipdb.set_trace()
 
     return steps_df_with_features
