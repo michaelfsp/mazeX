@@ -250,6 +250,7 @@ def compute_features(steps_df):
     steps_df_with_features['goal_count'] = steps_df.groupby(["goal", "subject", "maze_name"]).cumcount()
     steps_df_with_features['trial_loc_count'] = steps_df.groupby(["location", "maze_day", "session_trial_count", "subject", "maze_name"]).cumcount()
 
+    # we first copy the session_trial_count and only then add the number of trials of past sessions to get the global trial count for a given maze
     steps_df_with_features.loc[:, 'maze_trial_count'] = steps_df_with_features['session_trial_count']
     subject_maze_trial_counts_per_session = steps_df_with_features.groupby(["subject", "maze_name", "maze_day"])['session_trial_count'].max()+1 
 
@@ -262,6 +263,17 @@ def compute_features(steps_df):
 
         steps_df_with_features.loc[(steps_df_with_features['subject']==subject)&(steps_df_with_features['maze_name']==maze_name)&(steps_df_with_features['maze_day']==maze_day), 'maze_trial_count'] += past_trials_to_add_to_this_session
 
-        #import ipdb; ipdb.set_trace()
+    # we do the same for the step count
+    steps_df_with_features.loc[:, 'maze_step_count'] = steps_df_with_features['session_step_count']
+    subject_maze_step_counts_per_session = steps_df_with_features.groupby(["subject", "maze_name", "maze_day"])['session_step_count'].max()+1 
+
+    for subject_maze_session in subject_maze_step_counts_per_session.index:
+        subject, maze_name, maze_day = subject_maze_session
+        n_steps_per_session = subject_maze_step_counts_per_session[(subject, maze_name)]
+        sum_steps_up_to_this_session = n_steps_per_session.cumsum()
+        past_steps_to_add_to_each_session = sum_steps_up_to_this_session - n_steps_per_session
+        past_steps_to_add_to_this_session = past_steps_to_add_to_each_session[maze_day]
+
+        steps_df_with_features.loc[(steps_df_with_features['subject']==subject)&(steps_df_with_features['maze_name']==maze_name)&(steps_df_with_features['maze_day']==maze_day), 'maze_step_count'] += past_steps_to_add_to_this_session
 
     return steps_df_with_features
