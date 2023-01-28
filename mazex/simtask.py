@@ -168,7 +168,7 @@ class SimSessionRandomGoal(SimSession):
 
     def run(self):
         while not len(self.trials) == n_trials:
-            maze_nodes = self.maze.nodes
+            maze_nodes = list(self.maze.nodes)
             # exclude current location from the list from which the new goal
             # is picked
             maze_nodes.remove(self.trial.step.loc)

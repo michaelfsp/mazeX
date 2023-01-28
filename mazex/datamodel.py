@@ -45,7 +45,10 @@ class Step:
 
     @property
     def available_nodes(self):
-        return self.trial.maze.neighbors(self.loc)
+        # We return a list and not an iterator because the rest of the code
+        # has been programmed with the expectation that available_nodes
+        # returns a list
+        return list(self.trial.maze.neighbors(self.loc))
 
     @property
     def choice(self):
@@ -138,7 +141,7 @@ class Trial:
 #            sdd_p = sdd_path(p, m_over_n=m_over_n, gamma=gamma)
 #            if sdd_p < shortest_sdd:
 #                shortest_sdd = sdd_p
-        trial_lower_sdd_bound = self.maze.least_sdd_matrix()[self.maze.nodes().index(self.steps[0].loc), self.maze.nodes().index(self.steps[-1].loc)]
+        trial_lower_sdd_bound = self.maze.least_sdd_matrix()[list(self.maze.nodes()).index(self.steps[0].loc), list(self.maze.nodes()).index(self.steps[-1].loc)]
 
         trial_path_sdd = sdd_path(self.path)
 

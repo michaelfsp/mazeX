@@ -86,11 +86,11 @@ def angles_dictionary(size):
     angles = {}
     for l in maze.nodes():
         angles[l] = {}
-        n_list = maze.nodes()
+        n_list = list(maze.nodes())
         n_list.remove(l)
         for n in n_list:
             angles[l][n] = {}
-            g_list = maze.nodes()
+            g_list = list(maze.nodes())
             g_list.remove(l)
             g_list.remove(n)
             for g in g_list:
@@ -299,7 +299,7 @@ def get_von_mises_dictionary(size, kappa):
         vm_prob = {}
         for l in maze.nodes():
             vm_prob[l] = {}
-            n_list = maze.nodes()
+            n_list = list(maze.nodes())
             n_list.remove(l)
             for n in n_list:
                 vm_prob[l][n] = {}

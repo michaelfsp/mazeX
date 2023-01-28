@@ -13,7 +13,7 @@ def strict_topology_optimization(maze, distance='euclidian', min_avail_nodes=3,
     goals = maze.nodes()
     for g in goals:
         trial = mx.Trial(maze, g)
-        eval_points = maze.nodes()
+        eval_points = list(maze.nodes())
         eval_points.remove(g)
         for p in eval_points:
             step = mx.Step(p, trial)
