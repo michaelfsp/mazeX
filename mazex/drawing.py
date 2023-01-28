@@ -9,16 +9,17 @@ from mazex.exceptions import *
 from mazex.datamodel import Step, Trial
 from mazex.analysis.distances import distances_plot
 
+from seaborn import cubehelix_palette
+
 # other interesting node colors '#848599'
 def get_cubehelix_RGB(x, nsteps=10, vmin=0, vmax=1, scheme='green',
         hexadecimal=False):
     """Maps a scalar to an RGB tuple from the seaborn version of cubehelix.
     """
-    import sns.apionly as sns_api
     if scheme == 'green':
-        colors = sns_api.cubehelix_palette(nsteps, start=.5, rot=-.75)
+        colors = cubehelix_palette(nsteps, start=.5, rot=-.75)
     elif scheme == 'pink':
-        colors = sns_api.cubehelix_palette(nsteps)
+        colors = cubehelix_palette(nsteps)
 
     # Normalize x to the range [0,1]
     x = (x - vmin) / (vmax - vmin)
@@ -53,7 +54,7 @@ def make_legend_arrow(legend, orig_handle, xdescent, ydescent, width, height,
 
 def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
         nvmin=None, nvmax=None, evmin=None, evmax=None, colorbars=False,
-        ax=None, hold=None, **kwds):
+        ax=None, **kwds):
     """Draw a maze configuration.
 
     Optional parameters:
@@ -91,24 +92,23 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
 
     if not centrality:
         if isinstance(M, SquareMaze):
-            nx.draw(M, pos=M.pos, ax=ax, hold=True, node_color='#797b8c', linewidths=0,
+            nx.draw(M, pos=M.pos, ax=ax, node_color='#797b8c', linewidths=0,
                 node_size=800, width=6, **kwds)
-            nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='white', linewidths=0,
+            nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, node_color='white', linewidths=0,
                     node_size=350)
-            nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='#797b8c', linewidths=0,
+            nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, node_color='#797b8c', linewidths=0,
                     node_size=100)
             pl.tight_layout()
 
     else:
         import matplotlib as mpl
-        import seaborn.apionly as sns_api
         from mpl_toolkits.axes_grid1 import make_axes_locatable
 
-        #nodes_cm = sns_api.cubehelix_palette(40, as_cmap=True)
+        #nodes_cm = cubehelix_palette(40, as_cmap=True)
         #TODO: fix cubehelix palette parameters!!
-        #nodes_cm = sns_api.cubehelix_palette(40, start=.5, rot=-.75,
+        #nodes_cm = cubehelix_palette(40, start=.5, rot=-.75,
         #        as_cmap=True)
-        nodes_cm = sns_api.cubehelix_palette(60, start=0.5, rot=-0.75,
+        nodes_cm = cubehelix_palette(60, start=0.5, rot=-0.75,
                 gamma=1, hue=1, reverse=False, light=0.85, dark=0.15, as_cmap=True)
         if centrality == 'betweenness':
             centralities = M.betweenness_centrality
@@ -151,15 +151,15 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
             n_colors.append(centralities[n])
 
         if isinstance(M, SquareMaze):
-            nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=True,
+            nx.draw_networkx_nodes(M, pos=M.pos, ax=ax,
                     node_color=n_colors, cmap=nodes_cm, vmin=nvmin,
-                    vmax=nvmax, linewidths=0, node_size=800, width=6,
+                    vmax=nvmax, linewidths=0, node_size=800,
                     **kwds)
 
             if not simple_nodes:
-                nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color='white', linewidths=0,
+                nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, node_color='white', linewidths=0,
                         node_size=350)
-                nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, hold=hold, node_color=n_colors,
+                nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, node_color=n_colors,
                         cmap=nodes_cm, vmin=nvmin, vmax=nvmax, linewidths=0,
                         node_size=100)
 
@@ -178,22 +178,22 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                 if not evmax:
                     evmax = max(list(edge_centralities.values()))
 
-                edges_cm = sns_api.cubehelix_palette(60, start=0.5, rot=-0.75,
+                edges_cm = cubehelix_palette(60, start=0.5, rot=-0.75,
                         gamma=1, hue=1, reverse=False, light=0.85, dark=0.15, as_cmap=True)
-                #edges_cm = sns_api.cubehelix_palette(40, start=.5, rot=-.75, as_cmap=True)
-                #edges_cm = sns_api.cubehelix_palette(60, start=.5, rot=-.75,
+                #edges_cm = cubehelix_palette(40, start=.5, rot=-.75, as_cmap=True)
+                #edges_cm = cubehelix_palette(60, start=.5, rot=-.75,
                 #        as_cmap=True)
 
                 e_colors = []
                 for e in M.edges():
                     e_colors.append(edge_centralities[e])
 
-                nx.draw_networkx_edges(M, pos=M.pos, ax=ax, hold=hold,
+                nx.draw_networkx_edges(M, pos=M.pos, ax=ax,
                         edge_color=e_colors, edge_cmap=edges_cm, edge_vmin=evmin,
                         edge_vmax=evmax, width=6.0)
 
             else:
-                nx.draw_networkx_edges(M, pos=M.pos, ax=ax, hold=hold,
+                nx.draw_networkx_edges(M, pos=M.pos, ax=ax,
                         width=6.0)#, edge_color='#797b8c')
 
             # Create the colorbar for the nodes' centrality
@@ -234,7 +234,7 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
         else:
             raise DrawException
 
-def draw_step(S, goal_only=False, ax=None, hold=None, **kwds):
+def draw_step(S, goal_only=False, ax=None, **kwds):
     """Represent a maze configuration.
     
     Parameters:
@@ -250,13 +250,13 @@ def draw_step(S, goal_only=False, ax=None, hold=None, **kwds):
         raise DrawException
     # First we obtain a list of the nodes that are neither current
     # nor goal location
-    normal_nodes = S.trial.maze.nodes()
+    normal_nodes = list(S.trial.maze.nodes())
     # And then we remove current and goal location nodes because
     # those will be plotted differently
     if S.trial.goal != S.loc:
         normal_nodes.remove(S.trial.goal)
 
-    draw_maze(S.trial.maze, ax=ax, hold=True, nodelist=normal_nodes, **kwds)
+    draw_maze(S.trial.maze, ax=ax, nodelist=normal_nodes, **kwds)
 
     # Then we draw the nodes correspoding to current location
     if not goal_only:
@@ -272,15 +272,15 @@ def draw_step(S, goal_only=False, ax=None, hold=None, **kwds):
   # ... and goal location 
     nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
             nodelist=[S.trial.goal], node_color='#f26161', linewidths=0,
-            node_size=800, hold=True)
+            node_size=800)
     nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
             nodelist=[S.trial.goal], node_color='white', linewidths=0,
-            node_size=350, hold=hold)
+            node_size=350)
     nx.draw_networkx_nodes(S.trial.maze, pos=S.trial.maze.pos,
             nodelist=[S.trial.goal], node_color='#f26161', linewidths=0,
-            node_size=100, hold=hold)
+            node_size=100)
 
-def draw_trial(T, goal_only=False, ax=None, hold=None, **kwds):
+def draw_trial(T, goal_only=False, ax=None, **kwds):
     """Draw a Trial. Will represent the taken path if that is available.
     """
     edges = []
@@ -288,22 +288,22 @@ def draw_trial(T, goal_only=False, ax=None, hold=None, **kwds):
     for i in range(len(T.path)-1):
         edges.append((T.path[i], T.path[i+1]))
 
-    draw_step(T.steps[0], goal_only=goal_only, ax=ax, hold=True, **kwds)
+    draw_step(T.steps[0], goal_only=goal_only, ax=ax, **kwds)
 
     if not goal_only:
         nx.draw_networkx_edges(T.maze, pos=T.maze.pos,
                 edgelist=edges, edge_color='#61f261', width=3, style='dashed')
 
-def draw(M, ax=None, hold=None, **kwds):
+def draw(M, ax=None, **kwds):
     """Meta function. Calls the write draw function.
     """
     if isinstance(M, SquareMaze):
-        draw_maze(M, ax=ax, hold=hold, **kwds)
+        draw_maze(M, ax=ax, **kwds)
     
     elif isinstance(M, Step):
-        draw_step(M, ax=ax, hold=hold, **kwds)
+        draw_step(M, ax=ax, **kwds)
     
     elif isinstance(M, Trial):
-        draw_trial(M, ax=ax, hold=hold, **kwds)
+        draw_trial(M, ax=ax, **kwds)
     else:
         raise DrawException

@@ -10,7 +10,7 @@ class TestMaze:
         self.maze = mx.RandomButConnectedSquareMaze(6, 37)
         self.hagent = mx.HeuristicAgent((0,0), beta=float('inf'), kappa=1, xi=0.3, heading = '^')
 
-        self.goals = self.maze.nodes() * 3
+        self.goals = list(self.maze.nodes()) * 3
         random.shuffle(self.goals)
 
         self.htrials = []

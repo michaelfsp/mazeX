@@ -152,7 +152,7 @@ def least_sdd_path_steps_matrix(maze, gamma, m_over_n, peano_order=False):
     n_nodes = len(maze.nodes())
     erl_steps_matrix = np.full((n_nodes, n_nodes), np.nan, dtype='float')
 
-    nodes = maze.nodes()
+    nodes = list(maze.nodes())
     if peano_order:
         peano_order = [to_peano_coords(node) for node in nodes]
         ordered_nodes = [nodes[i] for i in peano_order]
@@ -480,7 +480,7 @@ class SquareMaze(nx.classes.graph.Graph):
             # on a Peano maze from position (0,0)
             nodes_peano_sorted = [None] * 36
             for i, d in enumerate(range(36)):
-                nodes_peano_sorted[i] = self.nodes()[idx_nodes_peano.index(d)]
+                nodes_peano_sorted[i] = list(self.nodes())[idx_nodes_peano.index(d)]
 
             self._distances_matrix_peano = np.asarray(
                     nx.algorithms.floyd_warshall_numpy(self, nodelist=nodes_peano_sorted))
@@ -534,7 +534,7 @@ class SquareMaze(nx.classes.graph.Graph):
         super(SquareMaze, self).__init__()
 
         for i in np.ndindex((maze_size, maze_size)):
-            super(SquareMaze, self).add_node(i, attr_dict={'pos':i})
+            super(SquareMaze, self).add_node(i, pos=i)
 
         self._maze_size = maze_size
 
@@ -617,7 +617,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
         while n_retrieved < n:
             if n_retrieved == 0 or n_retrieved % self.maze_size**2 == 0:
-                goals = self.nodes()
+                goals = list(self.nodes())
                 random.shuffle(goals)
 
             n_retrieved += 1
@@ -652,7 +652,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
         trial_types = {}
         for node in self.nodes():
-            other_nodes = self.nodes()
+            other_nodes = list(self.nodes())
             other_nodes.remove(node)
             trial_types[node] = other_nodes
 
@@ -661,7 +661,7 @@ class SquareMaze(nx.classes.graph.Graph):
                 # beginning of a new cycle
                 trial_type_buffer = copy.deepcopy(trial_types)
 
-                available_first_in_cycle_goals = self.nodes()
+                available_first_in_cycle_goals = list(self.nodes())
                 if last_retrieved:
                     available_first_in_cycle_goals.remove(last_retrieved)
 

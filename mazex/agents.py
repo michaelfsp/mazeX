@@ -722,21 +722,21 @@ class ERLAgent(Agent):
     def get_Q_a(self, s, s_prime, s_T):
         """Helper function to retrieve Q(s,s',s_T) by looking up and using correct indices.
         """
-        s_i = self.maze.nodes().index(s)
-        s_prime_i = self.maze.nodes().index(s_prime)
-        s_T_i = self.maze.nodes().index(s_T)
+        s_i = list(self.maze.nodes()).index(s)
+        s_prime_i = list(self.maze.nodes()).index(s_prime)
+        s_T_i = list(self.maze.nodes()).index(s_T)
 
         return self.Q[s_i, s_prime_i, s_T_i]
 
     def set_Q_a(self, s, s_prime, s_T, new_Q_a):
-        s_i = self.maze.nodes().index(s)
-        s_prime_i = self.maze.nodes().index(s_prime)
-        s_T_i = self.maze.nodes().index(s_T)
+        s_i = list(self.maze.nodes()).index(s)
+        s_prime_i = list(self.maze.nodes()).index(s_prime)
+        s_T_i = list(self.maze.nodes()).index(s_T)
         self.Q[s_i, s_prime_i, s_T_i] = new_Q_a
 
     def get_all_Q_a(self, s, s_T):
-        s_i = self.maze.nodes().index(s)
-        s_T_i = self.maze.nodes().index(s_T)
+        s_i = list(self.maze.nodes()).index(s)
+        s_T_i = list(self.maze.nodes()).index(s_T)
         all_Q_s_s_T = self.Q[s_i, :, s_T_i]
         nan_i = np.isnan(all_Q_s_s_T)
         Q_as = all_Q_s_s_T[~nan_i]
