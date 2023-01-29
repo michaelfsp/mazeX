@@ -406,10 +406,10 @@ def number_connected_non_isomorphic_mazes(size, n_edges, n_samples=10000):
         maze = mx.RandomSquareMaze(size, n_edges)
 
         # we check if this is not a repetition
-        maze_edges = maze.edges()
+        maze_edges = list(maze.edges())
         maze_edges.sort()
         for m in mazes:
-            m_edges = m.edges()
+            m_edges = list(m.edges())
             m_edges.sort()
             
             if m_edges == maze_edges:
@@ -510,10 +510,10 @@ def number_connected_non_isomorphic_mazes_with_rep(size, n_edges,
         for m in mazes:
             if nx.is_isomorphic(m, maze):
                 # we check that the isomorphic maze is not itself
-                maze_edges = maze.edges()
+                maze_edges = list(maze.edges())
                 maze_edges.sort()
                     
-                m_edges = m.edges()
+                m_edges = list(m.edges())
                 m_edges.sort()
 
                 if m_edges == maze_edges:

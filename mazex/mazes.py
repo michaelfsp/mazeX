@@ -247,10 +247,8 @@ class SquareMaze(nx.classes.graph.Graph):
     def dead_end_centrality(self):
         '''It is not a real centrality.
         '''
-        degree_dic = self.degree()
-        items = list(degree_dic.items())
         dead_end_centrality_dic = {}
-        for node, degree in items:
+        for node, degree in self.degree():
             if degree == 1:
                 dead_end_centrality_dic[node] = -1
             else:
@@ -372,7 +370,6 @@ class SquareMaze(nx.classes.graph.Graph):
         find_fiedler = nx.algebraicconnectivity._get_fiedler_func('tracemin')
 
         fiedler_vector_centrality_dic = {}
-        degree_dic = self.degree()
 
         for component in nx.connected_components(G):
             size = len(component)
@@ -381,7 +378,7 @@ class SquareMaze(nx.classes.graph.Graph):
                 fiedler = find_fiedler(L, None, True, 1e-8)[1]
                 for x, c, u in sorted(zip(fiedler, range(size), component)):
                     fiedler_vector_centrality_dic[u] = x/(np.sqrt(
-                        degree_dic[u]))
+                        self.degree[u]))
 
         return fiedler_vector_centrality_dic
 
@@ -420,7 +417,7 @@ class SquareMaze(nx.classes.graph.Graph):
     def degree_matrix(self):
         degree_matrix = np.zeros((self.maze_size**2, self.maze_size**2))
 
-        for i, (nd) in enumerate(self.degree_iter()):
+        for i, (nd) in enumerate(self.degree()):
             degree_matrix[i,i] = nd[1]
 
         return degree_matrix
@@ -540,7 +537,7 @@ class SquareMaze(nx.classes.graph.Graph):
 
     @property
     def pos(self):
-        return nx.get_node_attributes(self, 'pos')
+        return nx.get_node_attributes(self, name='pos')
 
     @property
     def possible_edges(self):
@@ -806,14 +803,14 @@ class RandomButConnectedSquareMaze(SquareMaze):
 
         maze.add_edges_from(maze.possible_edges)
         
-        edges_to_remove = random.sample(maze.edges(),
+        edges_to_remove = random.sample(list(maze.edges()),
                 maze.n_possible_edges-n_connections)
 
         maze.remove_edges_from(edges_to_remove)
 
         while not nx.is_connected(maze):
-            connection_to_remove = random.choice(
-                    maze.edges())
+            connection_to_remove = random.choice(list(
+                    maze.edges()))
             connection_to_add = random.choice(
                     maze.absent_edges)
             maze.remove_edge(*connection_to_remove)
