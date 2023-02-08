@@ -5,7 +5,7 @@ from mazex.exceptions import *
 from mazex.utils import check_elements_equal, sdd_path
 
 class Step:
-    def __init__(self, loc, trial, previous=None, time=None, duration=np.nan):
+    def __init__(self, loc, trial, previous=None, time=np.nan, duration=np.nan):
         """Initializes the Step.
 
         Parameters:
