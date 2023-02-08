@@ -1,0 +1,5 @@
+[tool.pyright]
+venvPath = "/home/michael/miniconda3/envs/"
+venv = "m39n3"
+pythonVersion = "3.9"
+pythonPlatform = "Linux"
