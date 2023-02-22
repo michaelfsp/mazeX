@@ -76,6 +76,112 @@ def _set_loc(self, node):
     self.node_visit_cache[node] = self.step_count
     self.step_count += 1
 
+#---------------Stuff for the most recent ERL & co implementation-------------
+def reward_function(s, s_prime, s_T, step_reward_fun, goal_reward):
+    '''Returns the reward associated with the current transition.
+    '''
+    if s_prime == s_T:
+        R = step_reward_fun(s, s_prime, s_T) + goal_reward
+    else:
+        R = step_reward_fun(s, s_prime, s_T)
+    return R
+    
+    
+# These are the best case scenario costs and rewards, i.e., what could be achievable
+# in a fully connected environment
+optimistic_disc_step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range(d)])
+optimistic_disc_goal_reward = lambda d, gamma, goal_reward: gamma**d * goal_reward
+
+def cost_to_go_goal_reward_init(s, s_T, gamma, step_cost, goal_reward):
+    manhattan_distance_0 = abs(s_T[0] - s[0]) + abs(s_T[1] - s[1])
+    
+    return optimistic_disc_step_costs(manhattan_distance_0, gamma, step_cost) + optimistic_disc_goal_reward(
+    manhattan_distance_0, gamma, goal_reward)
+
+def spatial_drive(s, s_T, m, n):
+    s_xdist = abs(s_T[0] - s[0])
+    s_ydist = abs(s_T[1] - s[1])
+    sum_dists = s_xdist**n + s_ydist**n
+    D = sum_dists**(1/m)
+    return D
+
+def spatial_reward(s, s_prime, s_T, m, n):
+    """Here we calculate the spatial reward based on a specific transition from s to s_prime with a goal set in s_T
+    $ r(s, s_prime, s_T) = D(s, s_T) - D(s, s_T)$
+    """
+    D_s = spatial_drive(s, s_T, m, n)
+    D_s_prime = spatial_drive(s_prime, s_T, m, n)
+    R = D_s - D_s_prime
+    return R
+
+def spatial_drive_dist(d_s, m, n):
+    xdist = abs(d_s[0])
+    ydist = abs(d_s[1])
+    D_d_s = (xdist**n + ydist**n)**(1/m)
+    return D_d_s
+
+def spatial_reward_K(d_s, K, m, n):
+    """Here we calculate the spatial reward based on initial state and a displacement vector K
+    $ r(s, K) = D(d_s) - D(d_s+K)$
+    where $d_s$ is the vector of distance from $s$ to $s_T$
+    """
+    D_d_s = spatial_drive_dist(d_s, m, n)
+    d_s_plus_K = (d_s[0] + K[0], d_s[1] + K[1])
+    D_d_s_plus_K = spatial_drive_dist(d_s_plus_K, m, n)
+    R = D_d_s - D_d_s_plus_K
+    return R
+
+def spatial_reward_init(s, s_T, gamma, m, n):
+    """This is the best case scenario, which corresponds to a fully connected maze."""
+    discounted_rewards = 0
+    # compute initial displacement along x and y axes
+    x_dist = abs(s_T[0] - s[0])
+    y_dist = abs(s_T[1] - s[1])
+    d_s = (x_dist, y_dist)
+    manhattan_dist_0 = d_s[0] + d_s[1]
+    
+    # these are fixed tuples representing a step along x or y in the direction of the goal
+    K_x = (-1, 0)
+    K_y = (0, -1)
+    
+    discounted_rewards = 0
+    # we iterate over possible steps
+    # the agent should always prefer larger rewards first
+    for i in range(0, manhattan_dist_0, 1):
+        if spatial_reward_K(d_s, K_x, m, n) > spatial_reward_K(d_s, K_y, m, n):
+            # then the agent does a step in x
+            K_t = K_x
+        elif spatial_reward_K(d_s, K_x, m, n) < spatial_reward_K(d_s, K_y, m, n):
+            # then the agent does a step in y
+            K_t = K_y
+        else:
+            # then a step in x or y are equivalent so we decide by convention for x
+            # technically the agent should choose either K_x or K_y with 0.5 prob each
+            # but it shouldn't make a difference to assume this convention instead
+            K_t = K_x
+        R = spatial_reward_K(d_s, K_t, m, n)
+        discounted_rewards += gamma**i * R
+        d_s = (d_s[0] + K_t[0], d_s[1] + K_t[1])
+    # sanity check
+    if d_s != (0,0):
+        raise Exception('Final distance is not zero')
+    return discounted_rewards 
+
+step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range(d)])
+
+goal_reward = lambda d, gamma, goal_reward: gamma**d * goal_reward
+
+def spatial_rewards(d, gamma, m, n):
+    discounted_rewards = 0
+    for i, k in enumerate(range(d, 0, -1)):
+        D_s = (k**n)**(1/m)
+        D_s_prime = ((k-1)**n)**(1/m)
+        r = D_s - D_s_prime
+        discounted_rewards += gamma**i * r
+    return discounted_rewards
+
+#-----------------------------------------------------------------------------
+
 def _set_loc_ERL(self, node):
     # we need to use a special _set_loc to trigger Q updates when the agent moves
     # if it is not the very first location
@@ -1016,6 +1122,98 @@ class NStepsAgent(Agent):
 
         return values
 
+
+class OneStepTD(Agent):
+    def __init__(self, maze, alpha, gamma, reward_function, initfun, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6):
+        super(OneStepTD, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initfun = initfun
+        self.alpha = alpha
+        self.gamma = gamma
+        # FIXME: check that I have dtype='float' in other implementations too
+        if callable(initfun):
+            self.V = self._init_V(self.initfun)
+        else: 
+            self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
+        self.goal = None
+        self.reward_function = reward_function
+    
+    def _init_V(self, initfun):
+        V = np.empty((self.maze_size**2, self.maze_size**2))
+        for i, s in enumerate(self.maze.nodes()):
+            for j, s_T in enumerate(self.maze.nodes()):
+                V[i, j] = initfun(s, s_T)
+        return V
+        
+    def _set_loc_OneStepTD(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            old_loc = self.loc
+            new_loc = node
+            if old_loc != new_loc:
+                self.update_V(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+        
+    loc = property(_get_loc, _set_loc_OneStepTD)
+    
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list or type(node) is tuple:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+        
+    def get_V(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.V[s_i, s_T_i]
+
+    def update_V(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        V_s_old = self.get_V(s, s_T)
+        V_s_prime = self.get_V(s_prime, s_T)
+        
+        R = self.reward_function(s, s_prime, s_T)
+
+        RPE = R + self.gamma * V_s_prime - V_s_old
+        V_s_new = V_s_old + self.alpha * RPE
+        
+        self.V[s_i, s_T_i] = V_s_new
+
+    def evaluate(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            R = self.reward_function(self.loc, c, goal)
+            values[i] = (R + self.gamma * self.get_V(c, goal))
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+
 class AStarAgent(Agent):
     def __init__(self, maze, nsteps, loc=None, beta=1, xi=3,
             penalty_criterium='node', penalty_type='exponential',
@@ -1364,5 +1562,113 @@ class BrownianAgent(Agent):
         if penalties:
             penalties = self.penalty_factor(nodeslist)
             values = values - penalties
+
+        return values
+
+
+class Q0(Agent):
+    def __init__(self, maze, alpha, gamma, reward_function, initfun, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6):
+        super(Q0, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initfun = initfun
+        self.alpha = alpha
+        self.gamma = gamma
+        # FIXME: check that I have dtype='float' in other implementations too
+        if callable(initfun):
+            self.Q = self._init_Q(self.initfun)
+        else: 
+            self.Q = np.full((self.maze_size**2, self.maze_size**2, 4), self.initfun, dtype='float')
+        self.goal = None
+        self.reward_function = reward_function
+    
+    def _init_Q(self, initfun):
+        Q = np.full((self.maze_size**2, self.maze_size**2, 4), np.nan)
+        for i, s in enumerate(self.maze.nodes()):
+            for j, s_T in enumerate(self.maze.nodes()):
+                for k, s_prime in enumerate(self.maze.adjacent_neighbors(s)):
+                    Q[i, j, k] = initfun(s_prime, s_T)
+        return Q
+        
+    def _set_loc_Q0(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            old_loc = self.loc
+            new_loc = node
+            if old_loc != new_loc:
+                self.update_Q(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+        
+    loc = property(_get_loc, _set_loc_Q0)
+    
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list or type(node) is tuple:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+        
+    def _get_action_index(self, s, s_T, s_prime):
+        """Helper function to retrieve indices of actions. It is used to retrieve values from the Q(s, s_T, s_prime) tensor.
+        
+        Returns a tuple with the "coordinates" of the action in the tensor
+        """
+        s_i = list(self.maze.nodes()).index(s)
+        s_T_i = list(self.maze.nodes()).index(s_T)
+        s_prime_i = self.maze.adjacent_neighbors(s).index(s_prime)
+        return (s_i, s_T_i, s_prime_i)
+        
+    def get_Q(self, s, s_T, s_prime):
+        """Helper function to retrieve Q(s,s_T,s_prime) by looking up and using correct indices.
+        """
+        Q_s_s_T_s_prime_idxs = self._get_action_index(s, s_T, s_prime)
+        return self.Q[Q_s_s_T_s_prime_idxs]
+
+    def update_Q(self, s, s_prime, s_T):
+        # indices in the order that mazeX orders nodes in the maze
+        s_i, s_prime_i, s_T_i = self._get_node_index([s, s_prime, s_T])
+        
+        # the index of the action in the Q tensor depends on the order of node listing in mazeX _and_ the order
+        # of maze.adjacent_neighbors() for s_prime_i
+        
+        Q_s_s_T_s_prime_idxs = self._get_action_index(s, s_T, s_prime)
+
+        Q_old = self.get_Q(s, s_T, s_prime)
+        max_a_Q_s_prime = np.nanmax(self.Q[s_prime_i, s_T_i, :])
+        
+        R = self.reward_function(s, s_prime, s_T)
+
+        RPE = R + self.gamma * max_a_Q_s_prime - Q_old
+        #if RPE != 0:
+        #    import ipdb; ipdb.set_trace()
+        Q_new = Q_old + self.alpha * RPE
+        
+        self.Q[Q_s_s_T_s_prime_idxs] = Q_new
+
+    def evaluate(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            values[i] = self.get_Q(self.loc, self.goal, c)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
 
         return values
