@@ -3,6 +3,7 @@ import warnings
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
+from tqdm.contrib import tenumerate
 
 from mazex.data.regionmapping import RegionMapping
 from mazex.data.arduino import ArduinoDataFile
@@ -171,21 +172,29 @@ def load_steps_multi(sessions):
 
     data = []
 
-    for session in sessions:
+    for session in tqdm(sessions, position=0, desc='Loading Sessions'):
 
         maze_distances_dict = session.maze.distances_dictionary
+        maze_optimal_choice_dict = session.maze.optimal_choice_dic
 
-        date_time = pd.to_datetime('{}-{}-{}'.format(*session.date))
+        if session.date:
+            date_time = pd.to_datetime('{}-{}-{}'.format(*session.date))
+        else:
+            date_time = None
+
         session_step_count = 0
 
-        for i_t, t in enumerate(session.trials):
+        for i_t, t in tenumerate(session.trials, position=1, leave=False, desc='Processing Trial'):
 
             for i_s, s in enumerate(t.steps[:-1]):
 
                 step_duration = t.steps[i_s+1].time - t.steps[i_s].time
                 geodesic_distance_goal = maze_distances_dict[s.loc][s.trial.goal]
 
-                data.append([date_time, session.experiment_day, session.maze_day, session.subject, s.time, session.maze.name, s.loc, s.trial.goal, s.available_nodes, s.available_nodes[s.choice], session.maze.optimal_choice_dic[s.loc][s.trial.goal], s.heading, i_s, session_step_count, i_t, step_duration, geodesic_distance_goal])
+                available_nodes = s.available_nodes
+                optimal_choice = maze_optimal_choice_dict[s.loc][s.trial.goal]
+
+                data.append([date_time, session.experiment_day, session.maze_day, session.subject, s.time, session.maze.name, s.loc, s.trial.goal, available_nodes, available_nodes[s.choice], optimal_choice, s.heading, i_s, session_step_count, i_t, step_duration, geodesic_distance_goal])
 
                 session_step_count += 1
 
