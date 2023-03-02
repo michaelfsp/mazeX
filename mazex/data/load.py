@@ -194,21 +194,103 @@ def load_steps_multi(sessions):
                 available_nodes = s.available_nodes
                 optimal_choice = maze_optimal_choice_dict[s.loc][s.trial.goal]
 
-                data.append([date_time, session.experiment_day, session.maze_day, session.subject, s.time, session.maze.name, s.loc, s.trial.goal, available_nodes, available_nodes[s.choice], optimal_choice, s.heading, i_s, session_step_count, i_t, step_duration, geodesic_distance_goal])
+                chosen = available_nodes[s.choice]
+
+                if chosen in optimal_choice:
+                    choice_was_optimal = 1
+                    geodesic_delta = -1
+                else:
+                    choice_was_optimal = 0
+                    geodesic_delta = 1
+
+                data.append([date_time, session.experiment_day, session.maze_day, session.subject, s.time, session.maze.name, s.loc, s.trial.goal, available_nodes, available_nodes[s.choice], optimal_choice, s.heading, i_s, session_step_count, i_t, step_duration, geodesic_distance_goal, choice_was_optimal, geodesic_delta])
 
                 session_step_count += 1
 
-    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count', 'step_duration', 'geodesic_dist_goal'])
+    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count', 'step_duration', 'geodesic_dist_goal', 'choice_was_optimal', 'geodesic_delta'])
 
 
-def row_computations(choice, optimal_choice, goal, location, heading, available_nodes):
-    if choice in optimal_choice:
-        choice_was_optimal = 1
-        geodesic_delta = -1
-    else:
-        choice_was_optimal = 0
-        geodesic_delta = 1
+#-----------------Load trials from sessions of multiple subjects---------------
+def load_trials_and_steps_multi(sessions):
+    """Multisession Multisubject.
+    """
+    trial_data = []
+    step_data = []
 
+    for session in tqdm(sessions, position=0, desc='Loading Sessions'):
+
+        maze_distances_dict = session.maze.distances_dictionary
+        maze_optimal_choice_dict = session.maze.optimal_choice_dic
+
+        if session.date:
+            date_time = pd.to_datetime('{}-{}-{}'.format(*session.date))
+        else:
+            date_time = None
+
+        session_step_count = 0
+
+        for i_t, t in tenumerate(session.trials, position=1, leave=False, desc='Processing Trial'):
+
+            n_optimal_steps = 0
+            n_non_optimal_steps = 0
+
+            for i_s, s in enumerate(t.steps[:-1]):
+
+                step_duration = t.steps[i_s+1].time - t.steps[i_s].time
+                geodesic_distance_goal = maze_distances_dict[s.loc][s.trial.goal]
+
+                available_nodes = s.available_nodes
+                optimal_choice = maze_optimal_choice_dict[s.loc][s.trial.goal]
+
+                chosen = available_nodes[s.choice]
+
+                if chosen in optimal_choice:
+                    choice_was_optimal = 1
+                    geodesic_delta = -1
+                    n_optimal_steps += 1
+                else:
+                    choice_was_optimal = 0
+                    geodesic_delta = 1
+                    n_non_optimal_steps += 1
+
+                step_data.append([date_time, session.experiment_day, session.maze_day, session.subject, s.time, session.maze.name, s.loc, s.trial.goal, available_nodes, chosen, optimal_choice, s.heading, i_s, session_step_count, i_t, step_duration, geodesic_distance_goal, choice_was_optimal, geodesic_delta])
+                session_step_count += 1
+
+            trial_geodesic_distance_goal = maze_distances_dict[t.steps[0].loc][t.goal]
+            trial_data.append([date_time, session.experiment_day, session.maze_day, session.subject, t.t_stop - t.t_start, session.maze.name, t.steps[0].loc, t.goal, i_t, trial_geodesic_distance_goal, t.excess_steps(), n_optimal_steps, n_non_optimal_steps])
+
+    trials_df = pd.DataFrame(trial_data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'duration', 'maze_name', 'location', 'goal', 'session_trial_count', 'geodesic_dist_goal', 'excess_steps', 'n_optimal_steps', 'n_non_optimal_steps'])
+    steps_df = pd.DataFrame(step_data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'time', 'maze_name', 'location', 'goal', 'available_nodes', 'choice', 'optimal_choice', 'heading', 'trial_step_count', 'session_step_count', 'session_trial_count', 'step_duration', 'geodesic_dist_goal', 'choice_was_optimal', 'geodesic_delta']) 
+
+    return steps_df, trials_df
+
+
+
+def load_trials_multi(sessions):
+    """Multisession Multisubject.
+    """
+
+    data = []
+
+    for session in tqdm(sessions, position=0, desc='Loading Sessions'):
+
+        maze_distances_dict = session.maze.distances_dictionary
+
+        if session.date:
+            date_time = pd.to_datetime('{}-{}-{}'.format(*session.date))
+        else:
+            date_time = None
+
+        for i_t, t in tenumerate(session.trials, position=1, leave=False, desc='Processing Trial'):
+
+            geodesic_distance_goal = maze_distances_dict[t.steps[0].loc][t.goal]
+
+            data.append([date_time, session.experiment_day, session.maze_day, session.subject, t.t_stop - t.t_start, session.maze.name, t.steps[0].loc, t.goal, i_t, geodesic_distance_goal, t.excess_steps()])
+
+    return pd.DataFrame(data, columns=['date', 'experiment_day', 'maze_day', 'subject', 'duration', 'maze_name', 'location', 'goal', 'session_trial_count', 'geodesic_dist_goal', 'excess_steps'])
+
+
+def row_computations(choice, goal, location, heading, available_nodes):
     manhattan_dist_to_goal = manhattan_distance(location, goal)
     euclidean_dist_to_goal = euclidian_distance(location, goal)
 
@@ -218,7 +300,7 @@ def row_computations(choice, optimal_choice, goal, location, heading, available_
     angle_to_heading = angle_between_node_and_heading(location, choice, heading)
     n_available_nodes = len(available_nodes)
 
-    return (choice_was_optimal, geodesic_delta, manhattan_delta, euclidean_delta, angle_to_goal, angle_to_heading, n_available_nodes, manhattan_dist_to_goal, euclidean_dist_to_goal)
+    return (manhattan_delta, euclidean_delta, angle_to_goal, angle_to_heading, n_available_nodes, manhattan_dist_to_goal, euclidean_dist_to_goal)
 
 
 row_computations_vec = np.vectorize(row_computations)
@@ -235,14 +317,12 @@ def compute_features(steps_df):
     # We take care of step local features first, i.e., features for which we only
     # need stepwise info to compute
 
-    newfeatures = row_computations_vec(steps_df.choice, steps_df.optimal_choice, steps_df.goal, steps_df.location, steps_df.heading, steps_df.available_nodes)
+    newfeatures = row_computations_vec(steps_df.choice, steps_df.goal, steps_df.location, steps_df.heading, steps_df.available_nodes)
 
-    lst_optimal, lst_geodesic_delta, lst_manhattan_delta, lst_euclidean_delta, lst_angle_to_goal, lst_angle_to_heading, lst_n_available_nodes, lst_manhattan_dist_to_goal, lst_euclidean_dist_to_goal = newfeatures
+    lst_manhattan_delta, lst_euclidean_delta, lst_angle_to_goal, lst_angle_to_heading, lst_n_available_nodes, lst_manhattan_dist_to_goal, lst_euclidean_dist_to_goal = newfeatures
 
     steps_df_with_features = steps_df
 
-    steps_df_with_features['choice_was_optimal'] = lst_optimal
-    steps_df_with_features['geodesic_delta'] = lst_geodesic_delta
     steps_df_with_features['manhattan_delta'] = lst_manhattan_delta
     steps_df_with_features['euclidean_delta'] = lst_euclidean_delta
     steps_df_with_features['angle_to_goal'] = lst_angle_to_goal
