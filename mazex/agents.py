@@ -123,7 +123,8 @@ def spatial_drive_dist(d_s, m, n):
 def spatial_reward_K(d_s, K, m, n):
     """Here we calculate the spatial reward based on initial state and a displacement vector K
     $ r(s, K) = D(d_s) - D(d_s+K)$
-    where $d_s$ is the vector of distance from $s$ to $s_T$
+    where $d_s$ is the corrdinates in homeostatic space taking $s_T$ as the origin
+    K is the displacement vector from s to s_prime
     """
     D_d_s = spatial_drive_dist(d_s, m, n)
     d_s_plus_K = (d_s[0] + K[0], d_s[1] + K[1])
@@ -172,6 +173,7 @@ step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range
 goal_reward = lambda d, gamma, goal_reward: gamma**d * goal_reward
 
 def spatial_rewards(d, gamma, m, n):
+    """Not being used"""
     discounted_rewards = 0
     for i, k in enumerate(range(d, 0, -1)):
         D_s = (k**n)**(1/m)
@@ -1144,7 +1146,12 @@ class OneStepTD(Agent):
             self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
         self.goal = None
         self.reward_function = reward_function
-    
+
+        if self.gamma:
+            self.evaluate = self.evaluate_w_gamma
+        else:
+            self.evaluate = self.evaluate_no_gamma
+
     def _init_V(self, initfun):
         V = np.empty((self.maze_size**2, self.maze_size**2))
         for i, s in enumerate(self.maze.nodes()):
@@ -1156,13 +1163,13 @@ class OneStepTD(Agent):
         # we need to use a special _set_loc to trigger Q updates when the agent moves
         # if it is not the very first location
         if self.loc:
-            old_loc = self.loc
-            new_loc = node
-            if old_loc != new_loc:
-                self.update_V(old_loc, new_loc, self.goal)
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                old_loc = self.loc
+                new_loc = node
+                if old_loc != new_loc:
+                    self.update_V(old_loc, new_loc, self.goal)
         _set_loc(self, node)
-        
-    loc = property(_get_loc, _set_loc_OneStepTD)
     
     def _get_node_index(self, node):
         """Helper function to retrieve indices of nodes in a matrix.
@@ -1194,7 +1201,7 @@ class OneStepTD(Agent):
         
         self.V[s_i, s_T_i] = V_s_new
 
-    def evaluate(self, nodeslist, goal, penalties=False):
+    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
         """Gets the next node in the node cache"""
         # TODO: make it such that the goal is not necessarily set by this
         # function so that self._set_loc can then update the self.Q
@@ -1205,6 +1212,25 @@ class OneStepTD(Agent):
         for i, c in enumerate(nodeslist):
             R = self.reward_function(self.loc, c, goal)
             values[i] = (R + self.gamma * self.get_V(c, goal))
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        # save some computation time for agents that don't do learning
+        for i, c in enumerate(nodeslist):
+            values[i] = self.reward_function(self.loc, c, goal)
 
         if penalties:
             penalties = self.penalty_factor(nodeslist)
