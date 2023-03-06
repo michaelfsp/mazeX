@@ -1171,6 +1171,8 @@ class OneStepTD(Agent):
                     self.update_V(old_loc, new_loc, self.goal)
         _set_loc(self, node)
     
+    loc = property(_get_loc, _set_loc_OneStepTD)
+
     def _get_node_index(self, node):
         """Helper function to retrieve indices of nodes in a matrix.
 
