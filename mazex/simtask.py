@@ -129,7 +129,7 @@ class SimSessionGivenGoals(SimSession):
         else:
             termination_condition = lambda self: False
 
-        for goal in tqdm(self.goals):
+        for goal in tqdm(self.goals, leave=False):
             if not termination_condition(self):
                 initial_step = SimStep(self.agent.loc)
                 self.agent.node_visit_cache.clear()
