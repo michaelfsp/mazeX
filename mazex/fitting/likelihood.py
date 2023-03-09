@@ -20,17 +20,17 @@ def value_mean(a, b, c, d):
 @numba.guvectorize('void(float64[:,:], float64[:])', '(m,n)->(m)',
         nopython=True)
 def matrix_column_mean(matrix, output):
-     """Calculate the mean of option values where absent options are NaN."""
-     for i in range(matrix.shape[0]):
-         row = matrix[i,:]
-         counts = 0
-         tot = 0
-         for j in range(row.shape[0]):
-             w = row[j]
-             if not math.isnan(w):
-                 tot += w
-                 counts += 1
-         output[i] = tot/counts
+    """Calculate the mean of option values where absent options are NaN."""
+    for i in range(matrix.shape[0]):
+        row = matrix[i,:]
+        counts = 0
+        tot = 0
+        for j in range(row.shape[0]):
+            w = row[j]
+            if not math.isnan(w):
+                tot += w
+                counts += 1
+        output[i] = tot/counts
 
 # Not being used
 @numba.vectorize('float64(float64, float64, float64, float64)', nopython=True)
@@ -69,6 +69,24 @@ def log_likelihoods(chosen_values, choice_values, likelihoods):
         # the line below implements a protected log
         likelihoods[i] = np.log(((1e-200)/2)+(1-(1e-200))*likelihood)
 
+@numba.guvectorize('void(float64[:], float64[:,:], float64[:], float64[:])',
+'(n),(n,m),(n)->(n)', nopython=True)
+def log_likelihoods_given_beta(chosen_values, choice_values, beta, likelihoods):
+    """Calculate the log likelihood for an array of chosen_values. The output
+    is saved to the array likelihoods, which has to have the same shape as
+    chosen_values."""
+    for i in range(chosen_values.shape[0]):
+        choice_vals = choice_values[i,:]
+        numerator = np.exp(beta[i] * chosen_values[i])
+        denominator = np.nansum(np.exp(beta[i] * choice_vals))
+        #denominator = 0
+        #for v in choice_vals:
+        #    if not math.isnan(v):
+        #        denominator += np.exp(v)
+        likelihood = numerator / denominator
+        # the line below implements a protected log
+        likelihoods[i] = np.log(((1e-200)/2)+(1-(1e-200))*likelihood)
+
 def protected_log(x):
     """Return log of x protected against giving -inf for very small values of
     x."""
@@ -80,10 +98,12 @@ class Likelihood(object):
     def __init__(self, session):
         """Agent should be initialized with 'loc' None.
         """
-        self.session = copy.deepcopy(session)
+        #self.session = copy.deepcopy(session)
+        # I don't think we need to deepcopy anymore
+        self.session = session
 
     def neg_log_likelihood(self, agent):
-        """Compute the likelihood of the data in the session gien the
+        """Compute the likelihood of the data in the session given the
         parameter set specified in the init of this likelihood method.
         """
         first_loc = self.session.trials[0].steps[0].loc
@@ -107,6 +127,28 @@ class Likelihood(object):
                 log_likelihood += protected_log(choice_prob)
 
         return -log_likelihood
+
+    def vect_neg_log_likelihood(self, agent, beta, subtract_mean=True):
+        # TODO: at the moment beta is a scalar but everything is prepared for
+        # it to be a vector with a different value of beta per trial
+        self.chosen_values, self.values = agent.evaluate_session(self.session)
+
+        if subtract_mean:
+            #self.mean_values = np.nanmean(self.comb_values, axis=1)
+            self.mean_values = matrix_column_mean(self.values)
+
+            self.chosen_values -= self.mean_values
+            # before we subtract the mean to self.comb_values (has 2 dims) we have
+            #  to add the empty dimension to self.mean_values but not before
+            #  subtracting self.mean_values from self.comb_chosen_values!!!
+            self.mean_values = self.mean_values[..., np.newaxis]
+            self.values -= self.mean_values
+
+        self.beta_vec = beta * np.ones_like(self.chosen_values)
+        log_likes = np.zeros(self.chosen_values.shape[0])
+        log_likelihoods_given_beta(self.chosen_values, self.values, self.beta_vec, log_likes)
+        #log_likes = log_likelihoods_given_beta(self.chosen_values, self.values, self.beta_vec)
+        return -np.sum(log_likes)
 
 
 class MixtureLikelihood(Likelihood):
