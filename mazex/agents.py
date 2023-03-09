@@ -184,15 +184,7 @@ def spatial_rewards(d, gamma, m, n):
 
 #-----------------------------------------------------------------------------
 
-def _set_loc_ERL(self, node):
-    # we need to use a special _set_loc to trigger Q updates when the agent moves
-    # if it is not the very first location
-    if self.loc:
-        old_loc = self.loc
-        new_loc = node
-        if old_loc != new_loc:
-            self.update_Q(old_loc, new_loc, self.goal)
-    _set_loc(self, node)
+
 
 def euclidean_drive(s, s_T, n_over_m):
     """
@@ -744,6 +736,7 @@ class Agent:
         step_number = 0
         for t in session.trials:
             self.loc = None # klugey but necessary because otherwise agent
+            # also prevents triggering of value update for the RL agents
             # won't allow teleportation
             self.node_visit_cache.clear()
             self.edge_visit_cache.clear()
@@ -762,6 +755,11 @@ class Agent:
                 values[step_number, 0:len(step_values)] = step_values
 
                 step_number += 1
+
+            # once the iteration through all the locations but the last one
+            # has happened we move the agent to the last location so that it 
+            # can trigger a value update for the RL agents
+            self.loc = t.steps[-1].loc
 
         return (value_chosen, values)
 
@@ -809,6 +807,8 @@ class Agent:
 
 
 class ERLAgent(Agent):
+    """This Agent is legacy. Use OneStepTD instead!
+    """
     def __init__(self, maze, gamma, n_over_m, alpha, initval='euclidean', beta=1, loc=None, xi=0,
             penalty_criterium='node', penalty_type='exponential',
             heading=None):
@@ -824,6 +824,16 @@ class ERLAgent(Agent):
         # Reminder: order in Q is (loc, step, goal)
         self.Q = init_Q(maze, initval, n_over_m)
         self.goal = None
+
+    def _set_loc_ERL(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            old_loc = self.loc
+            new_loc = node
+            if old_loc != new_loc:
+                self.update_Q(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
 
     loc = property(_get_loc, _set_loc_ERL)
 
@@ -881,6 +891,24 @@ class ERLAgent(Agent):
             values -= penalties
 
         return values
+
+    def evaluate_session(self, session, penalties=False, restore_Q=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_Q() via _set_loc_ERL(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores Q after session has been evaluated.
+        """
+        if restore_Q:
+            old_Q = copy.deepcopy(self.Q)
+
+        res = super(ERLAgent, self).evaluate_session(session, penalties=penalties)
+
+        if restore_Q:
+            self.Q = old_Q
+
+        return res
 
 
 class HeuristicAgent(Agent):
@@ -1165,10 +1193,11 @@ class OneStepTD(Agent):
         if self.loc:
             # it saves a bit of time for agents that don't learn
             if self.alpha:
-                old_loc = self.loc
-                new_loc = node
-                if old_loc != new_loc:
-                    self.update_V(old_loc, new_loc, self.goal)
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_V(old_loc, new_loc, self.goal)
         _set_loc(self, node)
     
     loc = property(_get_loc, _set_loc_OneStepTD)
@@ -1240,6 +1269,24 @@ class OneStepTD(Agent):
             values -= penalties
 
         return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
 
 
 class AStarAgent(Agent):
@@ -1700,3 +1747,21 @@ class Q0(Agent):
             values -= penalties
 
         return values
+
+    def evaluate_session(self, session, penalties=False, restore_Q=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_Q() via _set_loc_Q0(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores Q after session has been evaluated.
+        """
+        if restore_Q:
+            old_Q = copy.deepcopy(self.Q)
+
+        res = super(Q0, self).evaluate_session(session, penalties=penalties)
+
+        if restore_Q:
+            self.Q = old_Q
+
+        return res
