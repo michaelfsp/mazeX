@@ -92,6 +92,15 @@ def protected_log(x):
     x."""
     return np.log(((1e-200)/2)+(1-(1e-200))*x)
 
+def average_step_likelihood(nll, n_choice_steps):
+    """n_choice_steps is the number of steps excluding the Step at which agent
+    is at the trial's last step, usually at the goal location, i.e. This
+    corresponds to the total number of decisions made in a session.
+    """
+    avg_step_nll = nll / n_choice_steps
+    avg_step_ll = - avg_step_nll
+    return np.exp(avg_step_ll)
+
 class Likelihood(object):
     """A class for the likelihood functions."""
 
@@ -149,6 +158,19 @@ class Likelihood(object):
         log_likelihoods_given_beta(self.chosen_values, self.values, self.beta_vec, log_likes)
         #log_likes = log_likelihoods_given_beta(self.chosen_values, self.values, self.beta_vec)
         return -np.sum(log_likes)
+
+    def avg_step_likelihood(self, agent, beta, subtract_mean=True):
+        nll = self.vect_neg_log_likelihood(agent, beta, subtract_mean=subtract_mean)
+        n_choice_steps = self.session.count_total_steps()
+        return average_step_likelihood(nll, n_choice_steps)
+
+#    def minimize_nll(self, agent_class, ):
+#
+#        def nll(x):
+#            agent = agent_class(*x)
+#
+#        minimize(self.ve
+
 
 
 class MixtureLikelihood(Likelihood):
