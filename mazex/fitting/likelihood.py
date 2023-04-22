@@ -6,6 +6,67 @@ import math
 import numba
 import numexpr as ne
 
+
+#@jit(nopython=True, nogil=True)
+@numba.guvectorize('void(float64[:,:], float64[:,:])', '(m,n)->(m,n)', nopython=True)
+def logsoftmax(x, log_probs):
+    """Adapted from https://ogunlao.github.io/2020/04/26/you_dont_really_know_softmax.html
+    """
+    for i in range(x.shape[0]):
+        # LogSoftMax Implementation 
+        max_x = np.nanmax(x[i, :])
+        exp_x = np.exp(x[i, :] - max_x)
+        sum_exp_x = np.nansum(exp_x)
+        log_sum_exp_x = np.log(sum_exp_x)
+        max_plus_log_sum_exp_x = max_x + log_sum_exp_x
+        log_probs[i, :] = x[i, :] - max_plus_log_sum_exp_x
+
+
+#def logsoftmax(x):
+#    """Adapted from https://ogunlao.github.io/2020/04/26/you_dont_really_know_softmax.html
+#    """
+#    # LogSoftMax Implementation 
+#    max_x = np.nanmax(x)
+#    exp_x = np.exp(x - max_x)
+#    sum_exp_x = np.nansum(exp_x)
+#    log_sum_exp_x = np.log(sum_exp_x)
+#    max_plus_log_sum_exp_x = max_x + log_sum_exp_x
+#    log_probs = x - max_plus_log_sum_exp_x
+#    return log_probs
+
+#@numba.guvectorize('void(float64[:], float64[:,:], float64[:])', '(m),(m,n)->(m)', nopython=True)
+#def logsoftmax_chosen_values(chosen_values, values, log_probs):
+#    """Adapted from https://ogunlao.github.io/2020/04/26/you_dont_really_know_softmax.html
+#    """
+#    for i in range(values.shape[0]):
+#        # LogSoftMax Implementation 
+#        max_x = np.nanmax(values[i, :])
+#        exp_x = np.exp(values[i, :] - max_x)
+#        sum_exp_x = np.nansum(exp_x)
+#        log_sum_exp_x = np.log(sum_exp_x)
+#        max_plus_log_sum_exp_x = max_x + log_sum_exp_x
+#        log_probs[i] = chosen_values[i] - max_plus_log_sum_exp_x
+
+@numba.guvectorize('void(float64[:], float64[:,:], float64[:])', '(m),(m,n)->(m)', nopython=True)
+def logsoftmax_chosen_values(chosen_values, values, log_probs):
+    """Adapted from https://ogunlao.github.io/2020/04/26/you_dont_really_know_softmax.html
+    """
+    for i in range(values.shape[0]):
+        #non_nan_vals = values[i, ~np.isnan(values[i, :])]
+        non_nan_vals_list = []
+        for j in range(values.shape[1]):
+            val = values[i,j]
+            if not math.isnan(val):
+                non_nan_vals_list.append(val)
+        non_nan_vals = np.array(non_nan_vals_list)
+        # LogSoftMax Implementation 
+        max_x = np.max(non_nan_vals)
+        exp_x = np.exp(non_nan_vals - max_x)
+        sum_exp_x = np.sum(exp_x)
+        log_sum_exp_x = np.log(sum_exp_x)
+        max_plus_log_sum_exp_x = max_x + log_sum_exp_x
+        log_probs[i] = chosen_values[i] - max_plus_log_sum_exp_x
+
 @numba.vectorize('float64(float64, float64, float64, float64)', nopython=True)
 def value_mean(a, b, c, d):
     """Calculate the mean of option values where absent options are NaN."""
@@ -157,6 +218,54 @@ class Likelihood(object):
         log_likes = np.zeros(self.chosen_values.shape[0])
         log_likelihoods_given_beta(self.chosen_values, self.values, self.beta_vec, log_likes)
         #log_likes = log_likelihoods_given_beta(self.chosen_values, self.values, self.beta_vec)
+        return -np.sum(log_likes)
+
+    def vect_neg_log_likelihood_max(self, agent, beta, subtract_max=True):
+        # TODO: at the moment beta is a scalar but everything is prepared for
+        # it to be a vector with a different value of beta per trial
+        self.chosen_values, self.values = agent.evaluate_session(self.session)
+
+        if subtract_max:
+            #self.mean_values = np.nanmean(self.comb_values, axis=1)
+            self.max_values = np.nanmax(self.values, axis=1)
+
+            self.chosen_values -= self.max_values
+            # before we subtract the mean to self.comb_values (has 2 dims) we have
+            #  to add the empty dimension to self.mean_values but not before
+            #  subtracting self.mean_values from self.comb_chosen_values!!!
+            self.max_values = self.max_values[..., np.newaxis]
+            self.values -= self.max_values
+
+        self.beta_vec = beta * np.ones_like(self.chosen_values)
+        log_likes = np.zeros(self.chosen_values.shape[0])
+        log_likelihoods_given_beta(self.chosen_values, self.values, self.beta_vec, log_likes)
+        #log_likes = log_likelihoods_given_beta(self.chosen_values, self.values, self.beta_vec)
+        return -np.sum(log_likes)
+
+    def vect_neg_log_likelihood_logsoftmax(self, agent, beta, subtract_max=True, remove_single_choice=True):
+        # TODO: at the moment beta is a scalar but everything is prepared for
+        # it to be a vector with a different value of beta per trial
+        self.chosen_values, self.values = agent.evaluate_session(self.session)
+        
+        if remove_single_choice:
+            multiple_choice_idx = np.nonzero(np.count_nonzero(~np.isnan(self.values), axis=1)>1)[0]
+            self.values = self.values[multiple_choice_idx, :]
+            self.chosen_values = self.chosen_values[multiple_choice_idx]
+
+        if subtract_max:
+            #self.mean_values = np.nanmean(self.comb_values, axis=1)
+            self.max_values = np.nanmax(self.values, axis=1)
+
+            self.chosen_values -= self.max_values
+            # before we subtract the mean to self.comb_values (has 2 dims) we have
+            #  to add the empty dimension to self.mean_values but not before
+            #  subtracting self.mean_values from self.comb_chosen_values!!!
+            self.max_values = self.max_values[..., np.newaxis]
+            self.values -= self.max_values
+
+        #log_likes = np.zeros(self.chosen_values.shape[0])
+        #logsoftmax_chosen_values(beta * self.chosen_values, beta * self.values, log_likes)
+        log_likes = logsoftmax_chosen_values(beta * self.chosen_values, beta * self.values)
         return -np.sum(log_likes)
 
     def avg_step_likelihood(self, agent, beta, subtract_mean=True):

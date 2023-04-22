@@ -15,6 +15,7 @@ from networkx.algorithms.shortest_paths import (astar_path,
 single_source_shortest_path_length)
 
 from numba import jit
+import math
 
 #TODO: Have Agent.evaluate() which takes care of handling penalties, etc..
 #  which would then invoke {HeuristicAgent, OmniscientAgent, ...}.eval_fun()
@@ -90,7 +91,7 @@ def reward_function(s, s_prime, s_T, step_reward_fun, goal_reward):
 # These are the best case scenario costs and rewards, i.e., what could be achievable
 # in a fully connected environment
 optimistic_disc_step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range(d)])
-optimistic_disc_goal_reward = lambda d, gamma, goal_reward: gamma**d * goal_reward
+optimistic_disc_goal_reward = lambda d, gamma, goal_reward: gamma**(d-1) * goal_reward if d !=0 else 0
 
 def cost_to_go_goal_reward_init(s, s_T, gamma, step_cost, goal_reward):
     manhattan_distance_0 = abs(s_T[0] - s[0]) + abs(s_T[1] - s[1])
@@ -167,10 +168,6 @@ def spatial_reward_init(s, s_T, gamma, m, n):
     if d_s != (0,0):
         raise Exception('Final distance is not zero')
     return discounted_rewards 
-
-step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range(d)])
-
-goal_reward = lambda d, gamma, goal_reward: gamma**d * goal_reward
 
 def spatial_rewards(d, gamma, m, n):
     """Not being used"""
@@ -370,25 +367,93 @@ def softmax(beta, avalues):
     """
     # Reduce dimensionality of values to 1, if it is an array, else
     # transform it into an array
+    if math.isinf(beta):
+        probs = np.zeros(len(avalues))
+        probs[avalues == max(avalues)] = 1
 
-    #since the softmax is insensitive to subtraction of a value from
-    #all values, we subtract the mean of the values in order to avoid
-    #numerical overflows (see Daw 2009 (manuscript for Attention &
-    #Performance XXIII)
+    else:
+        #since the softmax is insensitive to subtraction of a value from
+        #all values, we subtract the mean of the values in order to avoid
+        #numerical overflows (see Daw 2009 (manuscript for Attention &
+        #Performance XXIII)
 
-    mavalues = avalues - np.mean(avalues)
+        # I am now subtracting the max instead of the average as it might be
+        # more numerically stable
+        mavalues = avalues - np.max(avalues)
 
-    #this is the calculation of the numerator of the equation
-    exp_elements = np.exp(beta*mavalues)
+        #this is the calculation of the numerator of the equation
+        exp_elements = np.exp(beta*mavalues)
 
-    #this is the calculation of the denominator of the equation
-    denominator = np.sum(exp_elements)
+        #this is the calculation of the denominator of the equation
+        denominator = np.sum(exp_elements)
 
-    #and hnndore we compute the action probabilities
-    probs = exp_elements/denominator
+        #and hnndore we compute the action probabilities
+        probs = exp_elements/denominator
 
     return probs
 
+
+def normsoftmax(gamma, avalues):
+    """From https://openreview.net/pdf?id=4g7nCbpjNwd
+    Normsoftmax: Normalize the input and softmax to accelerate and stabilize training
+    """
+    numerator = avalues / gamma
+    denominator = np.min((np.std(avalues/gamma), 1))
+    softmax_argument = numerator / denominator
+    return softmax(1, softmax_argument)
+
+
+@jit(nopython=True, nogil=True)
+def unitvarsoftmax(beta, avalues):
+    if len(avalues) == 1:
+        # normalization by std only works for 2+ elements
+        return np.array([1.])
+    elif math.isinf(beta):
+        # If beta is +np.inf the the rescaling doesn't matter and is a waste of time
+        return softmax(beta, avalues)
+    else:
+        avalues_rescaled = avalues / np.std(avalues)
+        return softmax(beta, avalues_rescaled)
+
+
+#import jax
+#import jax.numpy as jnp
+#@jax.jit
+#def softmax_jax(beta, avalues):
+#    """A Softmax function.
+#
+#    Parameters:
+#    -----------
+#    beta : float, [0+, inf+]
+#        The inverse temperature parameter of the softmax function. A
+#        very high value causes greedy action, whereas a low value very
+#        stochastic action selection (more exploration).
+#
+#    values : list or numpy.array
+#        The list of values of the actions available to the agent.
+#    """
+#    # Reduce dimensionality of values to 1, if it is an array, else
+#    # transform it into an array
+#
+#    #since the softmax is insensitive to subtraction of a value from
+#    #all values, we subtract the mean of the values in order to avoid
+#    #numerical overflows (see Daw 2009 (manuscript for Attention &
+#    #Performance XXIII)
+#
+#    mavalues = avalues - jnp.mean(avalues)
+#
+#    #this is the calculation of the numerator of the equation
+#    exp_elements = jnp.exp(beta*mavalues)
+#
+#    #this is the calculation of the denominator of the equation
+#    denominator = jnp.sum(exp_elements)
+#
+#    #and hnndore we compute the action probabilities
+#    probs = exp_elements/denominator
+#
+#    return probs
+#
+#
 #import numexpr as ne
 #def softmax_ne(beta, avalues):
 #    #avalues_arr = np.array(avalues)
@@ -408,7 +473,7 @@ def softmax(beta, avalues):
 
 class Agent:
     def __init__(self, beta=1, loc=None, xi=0, penalty_criterium='node',
-            penalty_type='exponential', heading=None):
+            penalty_type='exponential', heading=None, policy='softmax'):
         """Parameters:
         -----------
         beta : float, [0+, inf+]
@@ -445,6 +510,11 @@ class Agent:
             raise NotSupported
 
         self.heading = heading
+
+        if policy == 'softmax':
+            self.pi_fun = softmax
+        elif policy == 'unitvarsoftmax':
+            self.pi_fun = unitvarsoftmax
         # we will use the property decorator to turn self.loc into
         # a smart property that agents with position memory will make
         # use of
@@ -563,7 +633,7 @@ class Agent:
                    probs[values.index(max(values))] == 1
 
         else:
-            probs = softmax(self.beta, values)
+            probs = self.pi_fun(self.beta, values)
 
         return probs
 
@@ -964,7 +1034,14 @@ class HeuristicAgent(Agent):
         except InvalidNode:
             pass
 
-        angles = [angle_between_nodes(self.loc, n, goal) for n in nodeslist]
+        #angles = [angle_between_nodes(self.loc, n, goal) for n in nodeslist]
+        angles = []
+        for n in nodeslist:
+            if self.loc == goal:
+                # if the agent is at the goal already we define all angles as 1rad as it is the equivalent of moving in the opposite direction
+                angles.append(np.pi)
+            else:
+                angles.append(angle_between_nodes(self.loc, n, goal))
 
         if distribution == 'vonmises':
             # since what is stored in self.vm_dist is a 2D array with angles
@@ -1156,10 +1233,10 @@ class NStepsAgent(Agent):
 class OneStepTD(Agent):
     def __init__(self, maze, alpha, gamma, reward_function, initfun, beta=1, loc=None, xi=0,
             penalty_criterium='node', penalty_type='exponential',
-            heading=None, maze_size=6):
+            heading=None, maze_size=6, policy='softmax'):
         super(OneStepTD, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium,
-                penalty_type=penalty_type, heading=heading)
+                penalty_type=penalty_type, heading=heading, policy=policy)
         
         #TODO: remove the hack of passing maze as argument
         self.maze = maze
@@ -1172,6 +1249,11 @@ class OneStepTD(Agent):
             self.V = self._init_V(self.initfun)
         else: 
             self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
+
+        # We now need to set the diagonal to zero because there is no reward to be had once
+        # s == s_T
+        np.fill_diagonal(self.V, 0)
+        
         self.goal = None
         self.reward_function = reward_function
 
@@ -1207,7 +1289,7 @@ class OneStepTD(Agent):
 
         Accepts either a node or a list of nodes
         """
-        if type(node) is list or type(node) is tuple:
+        if type(node) is list:
             return [list(self.maze.nodes()).index(n) for n in node]
         else:
             return list(self.maze.nodes()).index(node)
@@ -1660,6 +1742,12 @@ class Q0(Agent):
             self.Q = self._init_Q(self.initfun)
         else: 
             self.Q = np.full((self.maze_size**2, self.maze_size**2, 4), self.initfun, dtype='float')
+
+        for s_i, s in enumerate(maze.nodes()):
+            for s_T_i, s_T in enumerate(maze.nodes()):
+                if s_i == s_T_i:
+                    self.Q[s_i, s_T_i, :] = 0
+
         self.goal = None
         self.reward_function = reward_function
     
@@ -1675,10 +1763,11 @@ class Q0(Agent):
         # we need to use a special _set_loc to trigger Q updates when the agent moves
         # if it is not the very first location
         if self.loc:
-            old_loc = self.loc
-            new_loc = node
-            if old_loc != new_loc:
-                self.update_Q(old_loc, new_loc, self.goal)
+            if node:
+                old_loc = self.loc
+                new_loc = node
+                if old_loc != new_loc:
+                    self.update_Q(old_loc, new_loc, self.goal)
         _set_loc(self, node)
         
     loc = property(_get_loc, _set_loc_Q0)
@@ -1688,7 +1777,7 @@ class Q0(Agent):
 
         Accepts either a node or a list of nodes
         """
-        if type(node) is list or type(node) is tuple:
+        if type(node) is list:
             return [list(self.maze.nodes()).index(n) for n in node]
         else:
             return list(self.maze.nodes()).index(node)
@@ -1698,8 +1787,8 @@ class Q0(Agent):
         
         Returns a tuple with the "coordinates" of the action in the tensor
         """
-        s_i = list(self.maze.nodes()).index(s)
-        s_T_i = list(self.maze.nodes()).index(s_T)
+        s_i = self._get_node_index(s)
+        s_T_i = self._get_node_index(s_T)
         s_prime_i = self.maze.adjacent_neighbors(s).index(s_prime)
         return (s_i, s_T_i, s_prime_i)
         
@@ -1711,7 +1800,7 @@ class Q0(Agent):
 
     def update_Q(self, s, s_prime, s_T):
         # indices in the order that mazeX orders nodes in the maze
-        s_i, s_prime_i, s_T_i = self._get_node_index([s, s_prime, s_T])
+        s_prime_i, s_T_i = self._get_node_index([s_prime, s_T])
         
         # the index of the action in the Q tensor depends on the order of node listing in mazeX _and_ the order
         # of maze.adjacent_neighbors() for s_prime_i
@@ -1760,6 +1849,132 @@ class Q0(Agent):
             old_Q = copy.deepcopy(self.Q)
 
         res = super(Q0, self).evaluate_session(session, penalties=penalties)
+
+        if restore_Q:
+            self.Q = old_Q
+
+        return res
+
+
+class Q01R(Agent):
+    def __init__(self, maze, alpha, gamma, reward_function, initval, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6):
+        super(Q01R, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.alpha = alpha
+        self.gamma = gamma
+        # FIXME: check that I have dtype='float' in other implementations too
+        self.initval = initval
+        self.Q = self._init_Q1R(self.initval)
+
+        self.goal = None
+        self.reward_function = reward_function
+    
+    def _init_Q1R(self, initfun):
+        Q = np.full((self.maze_size**2, 4), np.nan)
+        for i, s in enumerate(self.maze.nodes()):
+            for k, _ in enumerate(self.maze.adjacent_neighbors(s)):
+                    Q[i, k] = self.initval
+        return Q
+        
+    def _set_loc_Q01R(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            if node:
+                old_loc = self.loc
+                new_loc = node
+                if old_loc != new_loc:
+                    self.update_Q01R(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+        
+    loc = property(_get_loc, _set_loc_Q01R)
+    
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+        
+    def _get_action_index(self, s, s_prime):
+        """Helper function to retrieve indices of actions. It is used to retrieve values from the Q(s, s_T, s_prime) tensor.
+        
+        Returns a tuple with the "coordinates" of the action in the tensor
+        """
+        s_i = self._get_node_index(s)
+        s_prime_i = self.maze.adjacent_neighbors(s).index(s_prime)
+        return (s_i, s_prime_i)
+        
+    def get_Q(self, s, s_prime):
+        """Helper function to retrieve Q(s,s_T,s_prime) by looking up and using correct indices.
+        """
+        Q_s_s_prime_idxs = self._get_action_index(s, s_prime)
+        return self.Q[Q_s_s_prime_idxs]
+
+    def update_Q01R(self, s, s_prime, s_T):
+        # Needs to have s_T as argument so the reward can be calculated but the agent has only
+        # a single value representation and doesn't use the goal information for its update
+        
+        # indices in the order that mazeX orders nodes in the maze
+        s_prime_i = self._get_node_index(s_prime)
+        
+        # the index of the action in the Q tensor depends on the order of node listing in mazeX _and_ the order
+        # of maze.adjacent_neighbors() for s_prime_i
+        
+
+        Q_old = self.get_Q(s, s_prime)
+        max_a_Q_s_prime = np.nanmax(self.Q[s_prime_i, :])
+        
+        R = self.reward_function(s, s_prime, s_T)
+
+        RPE = R + self.gamma * max_a_Q_s_prime - Q_old
+        #if RPE != 0:
+        #    import ipdb; ipdb.set_trace()
+        Q_new = Q_old + self.alpha * RPE
+        
+        Q_s_s_prime_idxs = self._get_action_index(s, s_prime)
+        self.Q[Q_s_s_prime_idxs] = Q_new
+
+    def evaluate(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            values[i] = self.get_Q(self.loc, c)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_Q=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_Q() via _set_loc_Q0(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores Q after session has been evaluated.
+        """
+        if restore_Q:
+            old_Q = copy.deepcopy(self.Q)
+
+        res = super(Q01R, self).evaluate_session(session, penalties=penalties)
 
         if restore_Q:
             self.Q = old_Q
