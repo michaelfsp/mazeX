@@ -2242,12 +2242,14 @@ class Vmaxlearning(Agent):
 
         QRPE = R + self.gamma * V_s_prime - Q_s_s_prime_old
 
-        Q_values[Q_i_s_prime] = Q_s_s_prime_old + self.alpha * QRPE
+        #Q_values[Q_i_s_prime] = Q_s_s_prime_old + self.alpha * QRPE
+        Q_values[Q_i_s_prime] = Q_s_s_prime_old + QRPE
 
         VRPE = Q_values.max() - V_s_old
 
-        V_s_new = V_s_old + VRPE
-        
+        #V_s_new = V_s_old + VRPE
+        V_s_new = V_s_old + self.alpha * VRPE
+
         self.V[s_i, s_T_i] = V_s_new
 
 #    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
