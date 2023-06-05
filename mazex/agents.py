@@ -2150,7 +2150,6 @@ class Vmaxlearning(Agent):
             self.evaluate = self.evaluate_w_gamma
         else:
             self.evaluate = self.evaluate_no_gamma
-#        self.evaluate = self.evaluate_w_gamma
 
     def _init_V(self, initfun):
         V = np.empty((self.maze_size**2, self.maze_size**2))
@@ -2191,35 +2190,6 @@ class Vmaxlearning(Agent):
 
         return self.V[s_i, s_T_i]
 
-#    def update_V(self, s, s_prime, s_T):
-#        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
-#
-#        V_s_old = self.get_V(s, s_T)
-#        V_s_prime = self.get_V(s_prime, s_T)
-#
-#        nodeslist = list(self.maze.neighbors(s))
-#        Q_values = np.zeros(len(nodeslist))
-#
-#        for i, c in enumerate(nodeslist):
-#            R = self.reward_function(s, c, s_T)
-#            Q_values[i] = (R + self.gamma * self.get_V(c, s_T))
-#
-#        A_values = Q_values - Q_values.max()
-#        A_i_s_prime = nodeslist.index(s_prime)
-#        A_s_s_prime = copy.deepcopy(A_values[A_i_s_prime])
-#        
-#        R = self.reward_function(s, s_prime, s_T)
-#
-#        A_RPE = R + self.gamma * V_s_prime - V_s_old - A_s_s_prime
-#
-#        A_values[A_i_s_prime] = A_s_s_prime + self.alpha * A_RPE
-#
-#        A_max_new = A_values.max()
-#
-#        V_s_new = V_s_old + A_max_new
-#        
-#        self.V[s_i, s_T_i] = V_s_new
-
     def update_V(self, s, s_prime, s_T):
         s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
 
@@ -2237,47 +2207,6 @@ class Vmaxlearning(Agent):
         V_s_new = V_s_old + self.alpha * VRPE
 
         self.V[s_i, s_T_i] = V_s_new
-
-#    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
-#        """Gets the next node in the node cache"""
-#        # TODO: make it such that the goal is not necessarily set by this
-#        # function so that self._set_loc can then update the self.Q
-#        # It is a bit hacky...
-#        self.goal = goal
-#        Q_values = np.zeros(len(nodeslist))
-#
-#        for i, c in enumerate(nodeslist):
-#            R = self.reward_function(self.loc, c, goal)
-#            Q_values[i] = (R + self.gamma * self.get_V(c, goal))
-#
-#        A_values = Q_values - Q_values.max()
-#        values = A_values
-#
-#        if penalties:
-#            penalties = self.penalty_factor(nodeslist)
-#
-#            values -= penalties
-#
-#        return values
-#
-##    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
-##        """Gets the next node in the node cache"""
-##        # TODO: make it such that the goal is not necessarily set by this
-##        # function so that self._set_loc can then update the self.Q
-##        # It is a bit hacky...
-##        self.goal = goal
-##        values = np.zeros(len(nodeslist))
-##
-##        # save some computation time for agents that don't do learning
-##        for i, c in enumerate(nodeslist):
-##            values[i] = self.reward_function(self.loc, c, goal)
-##
-##        if penalties:
-##            penalties = self.penalty_factor(nodeslist)
-##
-##            values -= penalties
-##
-##        return values
 
     def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
         """Gets the next node in the node cache"""
