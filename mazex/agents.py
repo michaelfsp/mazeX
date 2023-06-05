@@ -2224,30 +2224,16 @@ class Vmaxlearning(Agent):
         s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
 
         V_s_old = self.get_V(s, s_T)
-        V_s_prime = self.get_V(s_prime, s_T)
 
         nodeslist = list(self.maze.neighbors(s))
         Q_values = np.zeros(len(nodeslist))
-
-        Q_i_s_prime = nodeslist.index(s_prime)
-        Q_s_s_prime_old = copy.deepcopy(Q_values[Q_i_s_prime])
 
         for i, c in enumerate(nodeslist):
             R = self.reward_function(s, c, s_T)
             Q_values[i] = (R + self.gamma * self.get_V(c, s_T))
         
-        R = self.reward_function(s, s_prime, s_T)
-
-        #RPE = R + self.gamma * V_s_prime - V_s_old
-
-        QRPE = R + self.gamma * V_s_prime - Q_s_s_prime_old
-
-        #Q_values[Q_i_s_prime] = Q_s_s_prime_old + self.alpha * QRPE
-        Q_values[Q_i_s_prime] = Q_s_s_prime_old + QRPE
-
         VRPE = Q_values.max() - V_s_old
 
-        #V_s_new = V_s_old + VRPE
         V_s_new = V_s_old + self.alpha * VRPE
 
         self.V[s_i, s_T_i] = V_s_new
