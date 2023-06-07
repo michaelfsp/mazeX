@@ -2510,13 +2510,16 @@ class MaxVmaxlearning(Agent):
         for i, c in enumerate(nodeslist):
             R = self.reward_function(s, c, s_T)
             if c == s_prime:
-                s_prime_neighbors = list(self.maze.neighbors(s_prime))
-                Q_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
-                for j, s_prime_neighbor in enumerate(s_prime_neighbors):
-                    R_s_prime_neighbor = self.reward_function(s_prime, s_prime_neighbor, s_T)
-                    Q_s_prime_neighbors[j] = R_s_prime_neighbor + self.gamma * self.get_V(s_prime_neighbor, s_T)
-                V_s_prime_new = Q_s_prime_neighbors.max()
-                Q_values[i] = (R + self.gamma * V_s_prime_new)
+                if s_prime != s_T:
+                    s_prime_neighbors = list(self.maze.neighbors(s_prime))
+                    Q_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
+                    for j, s_prime_neighbor in enumerate(s_prime_neighbors):
+                        R_s_prime_neighbor = self.reward_function(s_prime, s_prime_neighbor, s_T)
+                        Q_s_prime_neighbors[j] = R_s_prime_neighbor + self.gamma * self.get_V(s_prime_neighbor, s_T)
+                    V_s_prime = Q_s_prime_neighbors.max()
+                else:
+                    V_s_prime = self.get_V(s_prime, s_T)
+                Q_values[i] = (R + self.gamma * V_s_prime)
 
             else:
                 Q_values[i] = (R + self.gamma * self.get_V(c, s_T))
@@ -2659,16 +2662,18 @@ class MaxVlearning(Agent):
         s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
 
         V_s_old = self.get_V(s, s_T)
-        #V_s_prime = self.get_V(s_prime, s_T)
-        s_prime_neighbors = list(self.maze.neighbors(s_prime)) 
-        Q_s_prime = np.zeros(len(s_prime_neighbors))
-        for i, s_prime_prime in enumerate(s_prime_neighbors):
-            Q_s_prime[i] = self.reward_function(s_prime, s_prime_prime, s_T) + self.gamma * self.get_V(s_prime_prime, s_T)
+        R = self.reward_function(s, s_prime, s_T)       
 
-        V_s_prime = Q_s_prime.max()
+        if s_prime != s_T:
+            s_prime_neighbors = list(self.maze.neighbors(s_prime)) 
+            Q_s_prime = np.zeros(len(s_prime_neighbors))
+            for i, s_prime_prime in enumerate(s_prime_neighbors):
+                Q_s_prime[i] = self.reward_function(s_prime, s_prime_prime, s_T) + self.gamma * self.get_V(s_prime_prime, s_T)
+
+            V_s_prime = Q_s_prime.max()
+        else:
+            V_s_prime = self.get_V(s_prime, s_T)
         
-        R = self.reward_function(s, s_prime, s_T)
-
         RPE = R + (self.gamma * V_s_prime) - V_s_old
         V_s_new = V_s_old + self.alpha * RPE
         
