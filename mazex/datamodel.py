@@ -3,6 +3,7 @@ import networkx as nx
 from mazex.mazes import SquareMaze
 from mazex.exceptions import *
 from mazex.utils import check_elements_equal, sdd_path
+from functools import cache
 
 class Step:
     def __init__(self, loc, trial, previous=None, time=np.nan, duration=np.nan):
@@ -287,6 +288,11 @@ class Session:
         return t_last_reward - t_start
 
     @property
+#    @cache
+#TODO: turn trials to a property that flags it has changed in a hidden var
+# so that we can cache .maze
+# then do networkx.utils.misc.graphs_equal(list(set(self.maze))) to  check whether
+# we have the same graph as different instances
     def maze(self):
         """If all steps have the same maze, return that maze, else return a
         list of mazes. This might not be after some refactoring to be done in
