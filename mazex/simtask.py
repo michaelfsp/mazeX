@@ -3,10 +3,13 @@ from mazex.exceptions import *
 from mazex.utils import check_elements_equal
 from mazex.datamodel import *
 import random
+import inspect
 import numpy as np
 
 from numba import jit
 from tqdm import tqdm
+
+import ray
 
 @jit(nopython=True, nogil=True)
 def choose(probs):
@@ -118,7 +121,7 @@ class SimSessionGivenGoals(SimSession):
         super(SimSessionGivenGoals, self).__init__(**kwargs)
 
 
-    def run(self, verbose=False):
+    def run(self, verbose=False, progress_bar=True):
         """Runs the Session's trials sequentially. Note that it will solve
         it again even if it has already been solved.
         """
@@ -128,25 +131,45 @@ class SimSessionGivenGoals(SimSession):
             termination_condition = lambda self: self.total_steps >= self.max_total_steps
         else:
             termination_condition = lambda self: False
+        
+        if progress_bar:
+            for goal in tqdm(self.goals, leave=False):
+                if not termination_condition(self):
+                    initial_step = SimStep(self.agent.loc)
+                    self.agent.node_visit_cache.clear()
+                    self.agent.edge_visit_cache.clear()
+                    # we set loc to current loc such that loc gets added to edge and
+                    #  node_visit_cache
+                    self.agent.loc = self.agent.loc
+                    trial = SimTrial(self.sim_maze, goal, initial_step, self.agent,
+                                               max_steps=self.max_steps)
 
-        for goal in tqdm(self.goals, leave=False):
-            if not termination_condition(self):
-                initial_step = SimStep(self.agent.loc)
-                self.agent.node_visit_cache.clear()
-                self.agent.edge_visit_cache.clear()
-                # we set loc to current loc such that loc gets added to edge and
-                #  node_visit_cache
-                self.agent.loc = self.agent.loc
-                trial = SimTrial(self.sim_maze, goal, initial_step, self.agent,
-                                           max_steps=self.max_steps)
+                    trial.solve()
+                    if verbose:
+                        print('Solved trial %i' %len(trials))
+                    self.total_steps += len(trial.steps) - 1
+                    trials.append(trial)
+                else:
+                    pass
+        else:
+            for goal in self.goals:
+                if not termination_condition(self):
+                    initial_step = SimStep(self.agent.loc)
+                    self.agent.node_visit_cache.clear()
+                    self.agent.edge_visit_cache.clear()
+                    # we set loc to current loc such that loc gets added to edge and
+                    #  node_visit_cache
+                    self.agent.loc = self.agent.loc
+                    trial = SimTrial(self.sim_maze, goal, initial_step, self.agent,
+                                               max_steps=self.max_steps)
 
-                trial.solve()
-                if verbose:
-                    print('Solved trial %i' %len(trials))
-                self.total_steps += len(trial.steps) - 1
-                trials.append(trial)
-            else:
-                pass
+                    trial.solve()
+                    if verbose:
+                        print('Solved trial %i' %len(trials))
+                    self.total_steps += len(trial.steps) - 1
+                    trials.append(trial)
+                else:
+                    pass
 
         self.trials = trials
 
@@ -179,3 +202,39 @@ class SimSessionRandomGoal(SimSession):
                 max_steps=0, goal_reached=True))
 
             super(SimSessionRandomGoal, self).run()
+
+
+class SimParallelExperiment(object):
+    def __init__(self, maze, agent_class, agent_init_opts, initial_step=None):
+
+        self.maze = maze
+        self.agent_class = agent_class
+        self.agent_init_opts = agent_init_opts
+        self.initial_step = initial_step
+        self.sessions = []
+
+    @ray.remote
+    def run_sim_repeat(maze, agent_class, agent_init_opts, n_trials):
+        # we check whether the agent class init method takes maze as an
+        # argument
+        # learning and omniscient agents do, other agents, e.g. heuristic, don't
+        if 'maze' in inspect.getfullargspec(agent_class.__init__).args:
+            simagent = agent_class(maze=maze, loc=(0,0), **agent_init_opts)
+        else:
+            simagent = agent_class(loc=(0,0), **agent_init_opts)
+
+        goals = list(maze.randomgoals(n_trials))
+        simsession = SimSessionGivenGoals(agent=simagent, maze=maze, goals=goals, loc_start=simagent.loc)
+        simsession.run(progress_bar=False)
+        
+        esteps = [t.excess_steps() for t in simsession.trials]
+        return esteps
+
+    def run(self, n_trials, n_repeats):
+        ray_tasks = []
+
+        for _ in range(n_repeats):
+            ray_tasks.append(self.run_sim_repeat.remote(self.maze, self.agent_class, self.agent_init_opts, n_trials))
+
+        simsession_res = ray.get(ray_tasks)
+        return simsession_res
