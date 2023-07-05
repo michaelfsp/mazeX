@@ -88,7 +88,6 @@ def reward_function(s, s_prime, s_T, step_reward_fun, goal_reward):
         R = step_reward_fun(s, s_prime, s_T)
     return R
     
-    
 # These are the best case scenario costs and rewards, i.e., what could be achievable
 # in a fully connected environment
 #optimistic_disc_step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range(d)])
@@ -100,6 +99,27 @@ def cost_to_go_goal_reward_init(s, s_T, gamma, step_cost, goal_reward):
     
     return optimistic_disc_step_costs(manhattan_distance_0, gamma, step_cost) + optimistic_disc_goal_reward(
     manhattan_distance_0, gamma, goal_reward)
+
+#---------------------Rewards as state functions------------------------------
+#--------------------------------No gamma-------------------------------------
+def state_reward_function(s, s_T, state_reward_fun, terminal_state_reward):
+    '''Returns the reward associated with the current transition.
+    '''
+    if s == s_T:
+        R = terminal_state_reward
+    else:
+        R = state_reward_fun(s, s_T)
+    return R
+
+# These are the best case scenario costs and rewards, i.e., what could be achievable
+# in a fully connected environment
+#optimistic_disc_step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range(d)])
+optimistic_disc_state_reward_init = lambda d, state_cost: -d
+
+def state_reward_init(s, s_T, state_reward_val):#, terminal_state_reward):
+    euclidean_distance_s = euclidian_distance(s, s_T)
+    
+    return euclidean_distance_s * state_reward_val
 
 def spatial_drive(s, s_T, m, n):
     s_xdist = abs(s_T[0] - s[0])
@@ -5104,6 +5124,483 @@ class ZTree21(Agent):
         #    #values[i] = self.reward_function(self.loc, c, goal)
         #    values[i] = -mx.utils.euclidian_distance(c, goal)
         values = self.softmax_vals(nodeslist, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class VSR(Agent):
+    def __init__(self, maze, alpha, gamma, reward_function, initfun, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        super(VSR, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initfun = initfun
+        self.alpha = alpha
+        self.gamma = gamma
+        # FIXME: check that I have dtype='float' in other implementations too
+        if callable(initfun):
+            self.V = self._init_V(self.initfun)
+        else: 
+            self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
+
+        # We now need to set the diagonal to zero because there is no reward to be had once
+        # s == s_T
+        np.fill_diagonal(self.V, 0)
+        
+        self.goal = None
+        self.reward_function = reward_function
+
+        if self.gamma:
+            self.evaluate = self.evaluate_w_gamma
+        else:
+            self.evaluate = self.evaluate_no_gamma
+
+    def _init_V(self, initfun):
+        V = np.empty((self.maze_size**2, self.maze_size**2))
+        for i, s in enumerate(self.maze.nodes()):
+            for j, s_T in enumerate(self.maze.nodes()):
+                V[i, j] = initfun(s, s_T)
+        return V
+        
+    def _set_loc_OneStepTD(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_V(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_OneStepTD)
+
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+        
+    def get_V(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.V[s_i, s_T_i]
+
+    def update_V(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        V_s_old = self.get_V(s, s_T)
+
+        R_s = self.reward_function(s, s_T)
+        V_s_prime = self.get_V(s_prime, s_T)
+        V_s_new = R_s + self.gamma * V_s_prime
+
+        VPE = V_s_new - V_s_old
+
+        self.V[s_i, s_T_i] =  V_s_old + self.alpha * VPE
+
+    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            values[i] = self.gamma * self.get_V(c, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        # save some computation time for agents that don't do learning
+        for i, c in enumerate(nodeslist):
+            values[i] = self.reward_function(self.loc, c, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class MaxVmaxSymlearning(Agent):
+    def __init__(self, maze, alpha, gamma, reward_function, initfun, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        super(MaxVmaxSymlearning, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initfun = initfun
+        self.alpha = alpha
+        self.gamma = gamma
+        # FIXME: check that I have dtype='float' in other implementations too
+        if callable(initfun):
+            self.V = self._init_V(self.initfun)
+        else: 
+            self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
+
+        # We now need to set the diagonal to zero because there is no reward to be had once
+        # s == s_T
+        np.fill_diagonal(self.V, 0)
+        
+        self.goal = None
+        self.reward_function = reward_function
+
+        if self.gamma:
+            self.evaluate = self.evaluate_w_gamma
+        else:
+            self.evaluate = self.evaluate_no_gamma
+
+    def _init_V(self, initfun):
+        V = np.empty((self.maze_size**2, self.maze_size**2))
+        for i, s in enumerate(self.maze.nodes()):
+            for j, s_T in enumerate(self.maze.nodes()):
+                V[i, j] = initfun(s, s_T)
+        return V
+        
+    def _set_loc_OneStepTD(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_V(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_OneStepTD)
+
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+        
+    def get_V(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.V[s_i, s_T_i]
+
+    def update_V(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        V_s_old = self.get_V(s, s_T)
+
+        nodeslist = list(self.maze.neighbors(s))
+        Q_values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            R = self.reward_function(s, c, s_T)
+            if c == s_prime:
+                if s_prime != s_T:
+                    s_prime_neighbors = list(self.maze.neighbors(s_prime))
+                    Q_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
+                    for j, s_prime_neighbor in enumerate(s_prime_neighbors):
+                        R_s_prime_neighbor = self.reward_function(s_prime, s_prime_neighbor, s_T)
+                        Q_s_prime_neighbors[j] = R_s_prime_neighbor + self.gamma * self.get_V(s_prime_neighbor, s_T)
+                    V_s_prime = Q_s_prime_neighbors.max()
+                else:
+                    V_s_prime = self.get_V(s_prime, s_T)
+                Q_values[i] = (R + self.gamma * V_s_prime)
+
+            else:
+                Q_values[i] = (R + self.gamma * self.get_V(c, s_T))
+        
+        VRPE = Q_values.max() - V_s_old
+
+        V_s_new = V_s_old + self.alpha * VRPE
+
+        self.V[s_i, s_T_i] = V_s_new
+        self.V[s_T_i, s_i] = V_s_new
+
+    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            R = self.reward_function(self.loc, c, goal)
+            values[i] = (R + self.gamma * self.get_V(c, goal))
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        # save some computation time for agents that don't do learning
+        for i, c in enumerate(nodeslist):
+            values[i] = self.reward_function(self.loc, c, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class VSRMulti(Agent):
+    def __init__(self, maze, alpha, gamma, reward_function, initfun, target_s_prime='exp', target_s_prime_prime='exp' ,beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        """
+        target_s_prime : 'sample', 'exp', 'max'
+        target_s_prime_prime : 'sample', 'exp', 'max', None
+        """
+        super(VSRMulti, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initfun = initfun
+        self.alpha = alpha
+        self.gamma = gamma
+        # FIXME: check that I have dtype='float' in other implementations too
+        if callable(initfun):
+            self.V = self._init_V(self.initfun)
+        else: 
+            self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
+
+        # We now need to set the diagonal to zero because there is no reward to be had once
+        # s == s_T
+        np.fill_diagonal(self.V, 0)
+        
+        self.goal = None
+        self.reward_function = reward_function
+
+        if self.gamma:
+            self.evaluate = self.evaluate_w_gamma
+        else:
+            self.evaluate = self.evaluate_no_gamma
+
+        self.target_s_prime = target_s_prime
+        self.target_s_prime_prime = target_s_prime_prime
+
+    def _init_V(self, initfun):
+        V = np.empty((self.maze_size**2, self.maze_size**2))
+        for i, s in enumerate(self.maze.nodes()):
+            for j, s_T in enumerate(self.maze.nodes()):
+                V[i, j] = initfun(s, s_T)
+        return V
+        
+    def _set_loc_OneStepTD(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_V(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_OneStepTD)
+
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+        
+    def get_V(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.V[s_i, s_T_i]
+
+    def update_V(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        V_s_old = self.get_V(s, s_T)
+        R_s = self.reward_function(s, s_T)
+
+        if s_prime == s_T or self.target_s_prime_prime == None:
+            V_s_prime = self.get_V(s_prime, s_T)
+        else:
+            if self.target_s_prime_prime == 'sample':
+                # TODO: implement this
+                raise Exception('sample-sample updates not yet implemented')
+            elif self.target_s_prime_prime == 'exp' or self.target_s_prime_prime == 'max':
+                R_s_prime = self.reward_function(s_prime, s_T)
+                s_prime_neighbors = list(self.maze.neighbors(s_prime))
+                V_s_prime_neighbors = np.array([self.get_V(s_prime_neighbor, s_T) for s_prime_neighbor in s_prime_neighbors])
+                if self.target_s_prime_prime == 'exp':
+                    V_s_prime = R_s_prime + self.gamma * np.sum(self.choice_probs(V_s_prime_neighbors) * V_s_prime_neighbors)
+                elif self.target_s_prime_prime == 'max':
+                    V_s_prime = R_s_prime + self.gamma * np.max(V_s_prime_neighbors)
+
+        if self.target_s_prime == 'sample':
+            target = V_s_prime
+        elif self.target_s_prime == 'exp' or self.target_s_prime == 'max':
+            s_neighbors = list(self.maze.neighbors(s))
+            V_s_neighbors = np.zeros(len(s_neighbors))
+            for i, s_neighbor in enumerate(s_neighbors):
+                if s_neighbor == s_prime:
+                    V_s_neighbors[i] = V_s_prime
+                else:
+                    V_s_neighbors[i] = self.get_V(s_neighbor, s_T)
+            if self.target_s_prime == 'exp':
+                target = np.sum(self.choice_probs(V_s_neighbors) * V_s_neighbors)
+            elif self.target_s_prime == 'max':
+                target = np.max(V_s_neighbors)
+
+
+        V_s_new = R_s + self.gamma * target
+
+        VPE = V_s_new - V_s_old
+
+        self.V[s_i, s_T_i] =  V_s_old + self.alpha * VPE
+
+    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            values[i] = self.gamma * self.get_V(c, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        # save some computation time for agents that don't do learning
+        for i, c in enumerate(nodeslist):
+            values[i] = self.reward_function(self.loc, c, goal)
 
         if penalties:
             penalties = self.penalty_factor(nodeslist)
