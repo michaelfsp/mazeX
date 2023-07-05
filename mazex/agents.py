@@ -1,5 +1,6 @@
 import copy
 import random
+import functools
 from collections import OrderedDict
 
 import numpy as np
@@ -5452,7 +5453,8 @@ class MaxVmaxSymlearning(Agent):
 
 
 class VSRMulti(Agent):
-    def __init__(self, maze, alpha, gamma, reward_function, initfun, target_s_prime='exp', target_s_prime_prime='exp' ,beta=1, loc=None, xi=0,
+    def __init__(self, maze, alpha, gamma, reward_function, initfun, target_s_prime='exp',
+                 target_s_prime_prime='exp', symmetrical=False, beta=1, loc=None, xi=0,
             penalty_criterium='node', penalty_type='exponential',
             heading=None, maze_size=6, policy='softmax'):
         """
@@ -5472,6 +5474,12 @@ class VSRMulti(Agent):
         # FIXME: check that I have dtype='float' in other implementations too
         if callable(initfun):
             self.V = self._init_V(self.initfun)
+        elif initfun == 'euclidean':
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1)
+            self.V = self._init_V(state_initfunc)
+        elif initfun == 'manhattan':
+            state_initfunc = functools.partial(cost_to_go_goal_reward_init, gamma=1, step_cost=-1, goal_reward=0)
+            self.V = self._init_V(state_initfunc)
         else: 
             self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
 
@@ -5489,6 +5497,8 @@ class VSRMulti(Agent):
 
         self.target_s_prime = target_s_prime
         self.target_s_prime_prime = target_s_prime_prime
+
+        self.symmetrical = symmetrical
 
     def _init_V(self, initfun):
         V = np.empty((self.maze_size**2, self.maze_size**2))
@@ -5571,6 +5581,11 @@ class VSRMulti(Agent):
         VPE = V_s_new - V_s_old
 
         self.V[s_i, s_T_i] =  V_s_old + self.alpha * VPE
+
+        if self.symmetrical:
+
+            self.V[s_T_i, s_i] =  V_s_old + self.alpha * VPE
+
 
     def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
         """Gets the next node in the node cache"""
