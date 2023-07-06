@@ -80,7 +80,7 @@ def _set_loc(self, node):
     self.step_count += 1
 
 #---------------Stuff for the most recent ERL & co implementation-------------
-def reward_function(s, s_prime, s_T, step_reward_fun, goal_reward):
+def combined_reward_function(s, s_prime, s_T, step_reward_fun, goal_reward):
     '''Returns the reward associated with the current transition.
     '''
     if s_prime == s_T:
@@ -117,10 +117,13 @@ def state_reward_function(s, s_T, state_reward_fun, terminal_state_reward):
 #optimistic_disc_step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range(d)])
 optimistic_disc_state_reward_init = lambda d, state_cost: -d
 
-def state_reward_init(s, s_T, state_reward_val):#, terminal_state_reward):
-    euclidean_distance_s = euclidian_distance(s, s_T)
+def state_reward_init(s, s_T, state_reward_val, distance='euclidean'):#, terminal_state_reward):
+    if distance == 'euclidean':
+        distance_s = euclidian_distance(s, s_T)
+    elif distance == 'manhattan':
+        distance_s = manhattan_distance(s, s_T)
     
-    return euclidean_distance_s * state_reward_val
+    return distance_s * state_reward_val
 
 def spatial_drive(s, s_T, m, n):
     s_xdist = abs(s_T[0] - s[0])
@@ -204,6 +207,19 @@ def spatial_rewards(d, gamma, m, n):
 
 #-----------------------------------------------------------------------------
 
+def spatial_state_reward_init(s, s_T, gamma, distance="euclidean"):
+    """This is the best case scenario, which corresponds to a fully connected maze."""
+    if distance == 'euclidean':
+        d0 = int(np.ceil(euclidian_distance(s, s_T)))
+    elif distance == 'manhattan':
+        d0 = int(manhattan_distance(s, s_T))
+    initval = 0
+
+    for i, d in enumerate(range(d0, 0, -1)):
+        initval -= gamma**i * d
+
+    #import ipdb; ipdb.set_trace()
+    return initval
 
 
 def euclidean_drive(s, s_T, n_over_m):
@@ -5475,10 +5491,21 @@ class VSRMulti(Agent):
         if callable(initfun):
             self.V = self._init_V(self.initfun)
         elif initfun == 'euclidean':
-            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1)
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='euclidean')
             self.V = self._init_V(state_initfunc)
         elif initfun == 'manhattan':
-            state_initfunc = functools.partial(cost_to_go_goal_reward_init, gamma=1, step_cost=-1, goal_reward=0)
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='manhattan')
+            self.V = self._init_V(state_initfunc)
+        elif initfun == 'erl_euclidean':
+            state_initfunc = functools.partial(spatial_state_reward_init, gamma=1, distance='euclidean')
+            self.V = self._init_V(state_initfunc)
+        elif initfun == 'erl_manhattan':
+            state_initfunc = functools.partial(spatial_state_reward_init, gamma=1, distance='manhattan')
+            self.V = self._init_V(state_initfunc)
+        elif initfun == 'erl_mix':
+            state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1)
+            state_potential_cost_initfunc = functools.partial(spatial_state_reward_init, gamma=1, distance='manhattan')
+            state_initfunc = lambda s, s_T: state_potential_cost_initfunc(s, s_T) + state_potential_cost_initfunc(s, s_T)
             self.V = self._init_V(state_initfunc)
         else: 
             self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
@@ -5488,7 +5515,31 @@ class VSRMulti(Agent):
         np.fill_diagonal(self.V, 0)
         
         self.goal = None
-        self.reward_function = reward_function
+
+        if callable(reward_function):
+            self.reward_function = reward_function
+        elif reward_function == 'state_cost':
+            state_reward_val = -1
+            terminal_state_reward_val = 0
+            state_cost_to_go_fun = lambda s, s_T: state_reward_val
+            self.reward_function = functools.partial(state_reward_function, state_reward_fun=state_cost_to_go_fun, terminal_state_reward=terminal_state_reward_val)
+        elif reward_function == 'erl':
+            m = 2 # root
+            n = 2 # power of each displacement
+            spatial_drive_state_cost = lambda s, s_T: - spatial_drive(s, s_T, m=m, n=n)
+            self.reward_function = spatial_drive_state_cost
+        elif reward_function == 'mix':
+            state_reward_val = -1
+            terminal_state_reward_val = 0
+            state_cost_to_go_fun = lambda s, s_T: state_reward_val
+            state_travel_cost = reward_function = functools.partial(state_reward_function, state_reward_fun=state_cost_to_go_fun, terminal_state_reward=terminal_state_reward_val)
+
+            m = 2 # root
+            n = 2 # power of each displacement
+            spatial_drive_state_cost = lambda s, s_T: - spatial_drive(s, s_T, m=m, n=n)
+            state_potential_cost = spatial_drive_state_cost
+            mixed_reward_function = lambda s, s_T: state_travel_cost(s, s_T) + state_potential_cost(s, s_T)
+            self.reward_function = mixed_reward_function
 
         if self.gamma:
             self.evaluate = self.evaluate_w_gamma
@@ -5605,24 +5656,6 @@ class VSRMulti(Agent):
 
         return values
 
-    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
-        """Gets the next node in the node cache"""
-        # TODO: make it such that the goal is not necessarily set by this
-        # function so that self._set_loc can then update the self.Q
-        # It is a bit hacky...
-        self.goal = goal
-        values = np.zeros(len(nodeslist))
-
-        # save some computation time for agents that don't do learning
-        for i, c in enumerate(nodeslist):
-            values[i] = self.reward_function(self.loc, c, goal)
-
-        if penalties:
-            penalties = self.penalty_factor(nodeslist)
-
-            values -= penalties
-
-        return values
 
     def evaluate_session(self, session, penalties=False, restore_V=True):
         """Running a session evaluation will trigger location changes which 
@@ -5635,9 +5668,213 @@ class VSRMulti(Agent):
         if restore_V:
             old_V = copy.deepcopy(self.V)
 
-        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+        res = super(VSR, self).evaluate_session(session, penalties=penalties)
 
         if restore_V:
             self.V = old_V
 
         return res
+
+
+class VMulti(Agent):
+    def __init__(self, maze, alpha, gamma, reward_function, initfun, target_s_prime='exp',
+                 target_s_prime_prime='exp', symmetrical=False, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        """
+        target_s_prime : 'sample', 'exp', 'max'
+        target_s_prime_prime : 'sample', 'exp', 'max', None
+        """
+        super(VMulti, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initfun = initfun
+        self.alpha = alpha
+        self.gamma = gamma
+        # FIXME: check that I have dtype='float' in other implementations too
+        if callable(initfun):
+            self.V = self._init_V(self.initfun)
+        elif initfun == 'euclidean':
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='euclidean')
+            self.V = self._init_V(state_initfunc)
+        elif initfun == 'manhattan':
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='manhattan')
+            self.V = self._init_V(state_initfunc)
+        elif initfun == 'erl_euclidean':
+            raise Exception('erl_euclidean init is not yet implemented')
+        elif initfun == 'erl_manhattan':
+            state_initfunc = functools.partial(spatial_reward_init, gamma=1, m=2, n=2)
+            self.V = self._init_V(state_initfunc)
+        elif initfun == 'erl_mix':
+            state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='manhattan')
+            state_potential_cost_initfunc = functools.partial(spatial_reward_init, gamma=1, m=2, n=2)
+            state_initfunc = lambda s, s_T: state_travel_cost_initfunc(s, s_T) + state_potential_cost_initfunc(s, s_T)
+            self.V = self._init_V(state_initfunc)
+        else: 
+            self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
+
+        # We now need to set the diagonal to zero because there is no reward to be had once
+        # s == s_T
+        np.fill_diagonal(self.V, 0)
+        
+        self.goal = None
+
+        if callable(reward_function):
+            self.reward_function = reward_function
+        elif reward_function == 'cost':
+            step_cost_val = -1
+            goal_reward_val = 0
+            cost_to_go_fun = lambda s, s_prime, s_T: step_cost_val
+            self.reward_function = functools.partial(combined_reward_function, step_reward_fun=cost_to_go_fun, goal_reward=goal_reward_val)
+        elif reward_function == 'erl':
+            self.reward_function = functools.partial(spatial_reward, m=2, n=2)
+        elif reward_function == 'mix':
+            step_cost_val = -1
+            goal_reward_val = 0
+            cost_to_go_fun = lambda s, s_prime, s_T: step_cost_val
+            state_travel_cost = functools.partial(combined_reward_function, step_reward_fun=cost_to_go_fun, goal_reward=goal_reward_val)
+            state_potential_cost = functools.partial(spatial_reward, m=2, n=2)
+            mixed_reward_function = lambda s, s_prime, s_T: state_travel_cost(s, s_prime, s_T) + state_potential_cost(s, s_prime, s_T)
+            self.reward_function = mixed_reward_function
+
+        if self.gamma:
+            self.evaluate = self.evaluate_w_gamma
+        else:
+            self.evaluate = self.evaluate_no_gamma
+
+        self.target_s_prime = target_s_prime
+        self.target_s_prime_prime = target_s_prime_prime
+
+        self.symmetrical = symmetrical
+
+    def _init_V(self, initfun):
+        V = np.empty((self.maze_size**2, self.maze_size**2))
+        for i, s in enumerate(self.maze.nodes()):
+            for j, s_T in enumerate(self.maze.nodes()):
+                V[i, j] = initfun(s, s_T)
+        return V
+        
+    def _set_loc_OneStepTD(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_V(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_OneStepTD)
+
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+        
+    def get_V(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.V[s_i, s_T_i]
+
+    def update_V(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        V_s_old = self.get_V(s, s_T)
+
+        if s_prime == s_T or self.target_s_prime_prime == None:
+            V_s_prime = self.get_V(s_prime, s_T)
+        else:
+            if self.target_s_prime_prime == 'sample':
+                # TODO: implement this
+                raise Exception('sample-sample updates not yet implemented')
+            elif self.target_s_prime_prime == 'exp' or self.target_s_prime_prime == 'max':
+                s_prime_neighbors = list(self.maze.neighbors(s_prime))
+                RgV_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
+                for i, s_prime_neighbor in enumerate(s_prime_neighbors):
+                    V_s_prime_neighbor = self.get_V(s_prime_neighbor, s_T)
+                    RgV_s_prime_neighbors[i] = self.reward_function(s_prime, s_prime_neighbor, s_T) + self.gamma * V_s_prime_neighbor
+
+                if self.target_s_prime_prime == 'exp':
+                    V_s_prime = np.sum(self.choice_probs(RgV_s_prime_neighbors) * RgV_s_prime_neighbors)
+                elif self.target_s_prime_prime == 'max':
+                    V_s_prime = np.max(RgV_s_prime_neighbors)
+
+        if self.target_s_prime == 'sample':
+            R = self.reward_function(s, s_prime, s_T)
+            target = R + self.gamma * V_s_prime
+        elif self.target_s_prime == 'exp' or self.target_s_prime == 'max':
+            s_neighbors = list(self.maze.neighbors(s))
+            RgV_s_neighbors = np.zeros(len(s_neighbors))
+            for i, s_neighbor in enumerate(s_neighbors):
+                if s_neighbor == s_prime:
+                    V_s_neighbor = V_s_prime
+                else:
+                    V_s_neighbor = self.get_V(s_neighbor, s_T)
+                RgV_s_neighbors[i] = self.reward_function(s, s_neighbor, s_T) + self.gamma * V_s_neighbor
+
+            if self.target_s_prime == 'exp':
+                target = np.sum(self.choice_probs(RgV_s_neighbors) * RgV_s_neighbors)
+            elif self.target_s_prime == 'max':
+                target = np.max(RgV_s_neighbors)
+
+        VPE = target - V_s_old
+
+        self.V[s_i, s_T_i] =  V_s_old + self.alpha * VPE
+
+        if self.symmetrical:
+
+            self.V[s_T_i, s_i] =  V_s_old + self.alpha * VPE
+
+
+    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        values = np.zeros(len(nodeslist))
+
+        for i, c in enumerate(nodeslist):
+            R = self.reward_function(self.loc, c, goal)
+            values[i] = R + self.gamma * self.get_V(c, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(VSR, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
