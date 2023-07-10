@@ -117,13 +117,24 @@ def state_reward_function(s, s_T, state_reward_fun, terminal_state_reward):
 #optimistic_disc_step_costs = lambda d, gamma, step_cost: sum([gamma**i *step_cost for i in range(d)])
 optimistic_disc_state_reward_init = lambda d, state_cost: -d
 
-def state_reward_init(s, s_T, state_reward_val, distance='euclidean'):#, terminal_state_reward):
+def state_reward_init(s, s_T, state_reward_val=-1, goal_reward_val=0, gamma=1, distance='euclidean'):#, terminal_state_reward):
+    """Use the closed form solution to the geometric series for estimatic optimistic values.
+
+    See https://en.wikipedia.org/wiki/Geometric_series#Sum
+    """
     if distance == 'euclidean':
         distance_s = euclidian_distance(s, s_T)
     elif distance == 'manhattan':
         distance_s = manhattan_distance(s, s_T)
+
+    if gamma == 1:
+        optimistic_cost = state_reward_val * distance_s
+    else:
+        optimistic_cost = state_reward_val * ((1 - gamma**distance_s)/(1 - gamma))
+
+    optimistic_goal_reward = lambda d, gamma, goal_reward: gamma**(d-1) * goal_reward if d !=0 else 0
     
-    return distance_s * state_reward_val
+    return optimistic_cost + optimistic_goal_reward(distance_s, gamma, goal_reward_val)
 
 def spatial_drive(s, s_T, m, n):
     s_xdist = abs(s_T[0] - s[0])
@@ -5696,14 +5707,19 @@ class VMulti(Agent):
         self.alpha = alpha
         self.gamma = gamma
         # FIXME: check that I have dtype='float' in other implementations too
+
+        # Initialization
         if callable(initfun):
             self.V = self._init_V(self.initfun)
+
         elif initfun == 'euclidean':
-            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='euclidean')
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='euclidean')
             self.V = self._init_V(state_initfunc)
+
         elif initfun == 'manhattan':
-            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='manhattan')
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='manhattan')
             self.V = self._init_V(state_initfunc)
+
         elif initfun == 'erl_euclidean':
             raise Exception('erl_euclidean init is not yet implemented')
         elif initfun == 'erl_manhattan':
@@ -5722,7 +5738,8 @@ class VMulti(Agent):
         np.fill_diagonal(self.V, 0)
         
         self.goal = None
-
+        
+        # Reward function
         if callable(reward_function):
             self.reward_function = reward_function
         elif reward_function == 'cost':
