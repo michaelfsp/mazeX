@@ -136,6 +136,15 @@ def state_reward_init(s, s_T, state_reward_val=-1, goal_reward_val=0, gamma=1, d
     
     return optimistic_cost + optimistic_goal_reward(distance_s, gamma, goal_reward_val)
 
+def pbrs_spatial_reward(s, s_prime, s_T, m, n, gamma):
+    """Here we calculate the spatial reward based on a specific transition from s to s_prime with a goal set in s_T
+    $ r(s, s_prime, s_T) = D(s, s_T) - D(s, s_T)$
+    """
+    D_s = spatial_drive(s, s_T, m, n)
+    D_s_prime = spatial_drive(s_prime, s_T, m, n)
+    R = D_s_prime - gamma * D_s
+    return R
+
 def spatial_drive(s, s_T, m, n):
     s_xdist = abs(s_T[0] - s[0])
     s_ydist = abs(s_T[1] - s[1])
@@ -402,6 +411,40 @@ def init_Q(maze, initval=0, n_over_m=None, Q_val_s_equal_s_prime=np.nan,
 #    return probs
 
 @jit(nopython=True, nogil=True)
+def egreedy(epsilon, avalues):
+    """A Softmax function.
+
+    Parameters:
+    -----------
+    beta : float, [0+, inf+]
+        The inverse temperature parameter of the softmax function. A
+        very high value causes greedy action, whereas a low value very
+        stochastic action selection (more exploration).
+
+    values : list or numpy.array
+        The list of values of the actions available to the agent.
+    """
+    if epsilon == 0:
+        probs = np.zeros(len(avalues))
+        max_mask = avalues == max(avalues)
+        # We divide the probability equal among all actions with max value
+        probs[max_mask] = 1 / np.count_nonzero(max_mask)
+
+    elif epsilon == 1:
+        probs = np.ones(len(avalues)) * 1/len(avalues)
+
+    else:
+        probs = np.zeros(len(avalues))
+        # we add the greedy probabilities
+        max_mask = avalues == max(avalues)
+        probs[max_mask] = (1 - epsilon) / np.count_nonzero(max_mask)
+        # and the random probabilities
+        random_probs = np.ones(len(avalues)) * epsilon/len(avalues)
+        probs += random_probs
+
+    return probs
+
+@jit(nopython=True, nogil=True)
 def softmax(beta, avalues):
     """A Softmax function.
 
@@ -419,7 +462,9 @@ def softmax(beta, avalues):
     # transform it into an array
     if math.isinf(beta):
         probs = np.zeros(len(avalues))
-        probs[avalues == max(avalues)] = 1
+        max_mask = avalues == max(avalues)
+        # We divide the probability equal among all actions with max value
+        probs[max_mask] = 1 / np.count_nonzero(max_mask)
 
     else:
         #since the softmax is insensitive to subtraction of a value from
@@ -487,14 +532,22 @@ def softmax_euclidean_cost(beta, zvalues, euclidean_dists):
     return probs
 
 
-def normsoftmax(gamma, avalues):
+def normsoftmax(beta, avalues):
     """From https://openreview.net/pdf?id=4g7nCbpjNwd
     Normsoftmax: Normalize the input and softmax to accelerate and stabilize training
     """
+    gamma = 1/beta
     numerator = avalues / gamma
-    denominator = np.min((np.std(avalues/gamma), 1))
-    softmax_argument = numerator / denominator
-    return softmax(1, softmax_argument)
+    avals_scaled_std = np.std(numerator)
+    if avals_scaled_std == 0:
+        # If std is 0 we can't use it to normalize values but it also means
+        # that all values are the same and we can compute the probability
+        # directly as it should be just 1/#avalues
+        return avalues/avalues.sum()
+    else:
+        denominator = np.min((avals_scaled_std, 1))
+        softmax_argument = numerator / denominator
+        return softmax(1, softmax_argument)
 
 
 @jit(nopython=True, nogil=True)
@@ -506,8 +559,15 @@ def unitvarsoftmax(beta, avalues):
         # If beta is +np.inf the the rescaling doesn't matter and is a waste of time
         return softmax(beta, avalues)
     else:
-        avalues_rescaled = avalues / np.std(avalues)
-        return softmax(beta, avalues_rescaled)
+        avals_std = np.std(avalues)
+        if avals_std == 0:
+            # If std is 0 we can't use it to normalize values but it also means
+            # that all values are the same and we can compute the probability
+            # directly as it should be just 1/#avalues
+            return avalues/avalues.sum()
+        else:
+            avalues_rescaled = avalues / avals_std
+            return softmax(beta, avalues_rescaled)
 
 
 #import jax
@@ -611,6 +671,10 @@ class Agent:
             self.pi_fun = unitvarsoftmax
         elif policy == 'softmax_euclidean_cost':
             self.pi_fun = softmax_euclidean_cost
+        elif policy == 'normsoftmax':
+            self.pi_fun = normsoftmax
+        elif policy == 'egreedy':
+            self.pi_fun = egreedy
         # we will use the property decorator to turn self.loc into
         # a smart property that agents with position memory will make
         # use of
@@ -3998,22 +4062,26 @@ class VSRMulti(Agent):
         # FIXME: check that I have dtype='float' in other implementations too
         if callable(initfun):
             self.V = self._init_V(self.initfun)
+             
         elif initfun == 'euclidean':
-            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='euclidean')
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='euclidean')
             self.V = self._init_V(state_initfunc)
+
         elif initfun == 'manhattan':
-            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='manhattan')
+            state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='manhattan')
             self.V = self._init_V(state_initfunc)
+
         elif initfun == 'erl_euclidean':
-            state_initfunc = functools.partial(spatial_state_reward_init, gamma=1, distance='euclidean')
+            state_initfunc = functools.partial(spatial_state_reward_init, gamma=gamma, distance='euclidean')
             self.V = self._init_V(state_initfunc)
+
         elif initfun == 'erl_manhattan':
-            state_initfunc = functools.partial(spatial_state_reward_init, gamma=1, distance='manhattan')
+            state_initfunc = functools.partial(spatial_state_reward_init, gamma=gamma, distance='manhattan')
             self.V = self._init_V(state_initfunc)
         elif initfun == 'erl_mix':
-            state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1)
+            state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='manhattan')
             state_potential_cost_initfunc = functools.partial(spatial_state_reward_init, gamma=1, distance='manhattan')
-            state_initfunc = lambda s, s_T: state_potential_cost_initfunc(s, s_T) + state_potential_cost_initfunc(s, s_T)
+            state_initfunc = lambda s, s_T: state_travel_cost_initfunc(s, s_T) + state_potential_cost_initfunc(s, s_T)
             self.V = self._init_V(state_initfunc)
         else: 
             self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
@@ -4049,10 +4117,7 @@ class VSRMulti(Agent):
             mixed_reward_function = lambda s, s_T: state_travel_cost(s, s_T) + state_potential_cost(s, s_T)
             self.reward_function = mixed_reward_function
 
-        if self.gamma:
-            self.evaluate = self.evaluate_w_gamma
-        else:
-            self.evaluate = self.evaluate_no_gamma
+        self.evaluate = self.evaluate_w_gamma
 
         self.target_s_prime = target_s_prime
         self.target_s_prime_prime = target_s_prime_prime
@@ -4223,10 +4288,14 @@ class VMulti(Agent):
             state_initfunc = functools.partial(spatial_reward_init, gamma=gamma, m=2, n=2)
             self.V = self._init_V(state_initfunc)
         elif initfun == 'erl_mix':
-            state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1, distance='manhattan')
+            state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='manhattan')
             state_potential_cost_initfunc = functools.partial(spatial_reward_init, gamma=gamma, m=2, n=2)
             state_initfunc = lambda s, s_T: state_travel_cost_initfunc(s, s_T) + state_potential_cost_initfunc(s, s_T)
             self.V = self._init_V(state_initfunc)
+        elif initfun == 'potential':
+            state_initfunc = functools.partial(spatial_reward_init, gamma=gamma, m=2, n=2)
+            self.V = self._init_V(state_initfunc)
+
         else: 
             self.V = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
 
@@ -4239,13 +4308,16 @@ class VMulti(Agent):
         # Reward function
         if callable(reward_function):
             self.reward_function = reward_function
+
         elif reward_function == 'cost':
             step_cost_val = -1
             goal_reward_val = 0
             cost_to_go_fun = lambda s, s_prime, s_T: step_cost_val
             self.reward_function = functools.partial(combined_reward_function, step_reward_fun=cost_to_go_fun, goal_reward=goal_reward_val)
+
         elif reward_function == 'erl':
             self.reward_function = functools.partial(spatial_reward, m=2, n=2)
+
         elif reward_function == 'mix':
             step_cost_val = -1
             goal_reward_val = 0
@@ -4254,6 +4326,20 @@ class VMulti(Agent):
             state_potential_cost = functools.partial(spatial_reward, m=2, n=2)
             mixed_reward_function = lambda s, s_prime, s_T: state_travel_cost(s, s_prime, s_T) + state_potential_cost(s, s_prime, s_T)
             self.reward_function = mixed_reward_function
+
+        elif reward_function == 'pbrs':
+            step_cost_val = -1
+            goal_reward_val = 0
+            cost_to_go_fun = lambda s, s_prime, s_T: step_cost_val
+            state_travel_cost = functools.partial(combined_reward_function, step_reward_fun=cost_to_go_fun, goal_reward=goal_reward_val)
+            state_potential_cost = functools.partial(pbrs_spatial_reward, m=2, n=2, gamma=gamma)
+            mixed_reward_function = lambda s, s_prime, s_T: state_travel_cost(s, s_prime, s_T) - state_potential_cost(s, s_prime, s_T)
+            self.reward_function = mixed_reward_function
+
+        elif reward_function == 'potential':
+            state_potential_cost = functools.partial(pbrs_spatial_reward, m=2, n=2, gamma=gamma)
+
+            self.reward_function = lambda s, s_prime, s_T: -state_potential_cost(s, s_prime, s_T)
 
         self.evaluate = self.evaluate_w_gamma
 
