@@ -5247,3 +5247,1770 @@ class MaxVmaxSymlearning(Agent):
             self.V = old_V
 
         return res
+
+
+class ZOfflearning(Agent):
+    def __init__(self, maze, alpha, gamma=1, rho=10, initval=1, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        super(ZOfflearning, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initval = initval
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rho = rho
+        
+        self.goal = None
+        self.Z = self._init_Z(initval)
+
+#        if self.gamma:
+#            self.evaluate = self.evaluate_w_gamma
+#        else:
+#            self.evaluate = self.evaluate_no_gamma
+
+        self.evaluate = self.evaluate_no_gamma
+
+    def _init_Z(self, initval):
+        #Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2), dtype=np.float128)
+        Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2))
+        # We need to make sure the sure that Z[i,i] = 1 because the cost of the
+        # terminal state has to be 0, which equates to a z-value of 1
+        np.fill_diagonal(Z, 1)
+        return Z
+        
+    def _set_loc_Zlearning(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_Z(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_Zlearning)
+
+    #@cache
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+
+    @cache
+    def default_policy_probs(self, s, s_T):
+        s_neighbors = list(self.maze.neighbors(s))
+        neg_euclidean_dists = np.zeros(len(s_neighbors))
+
+        # save some computation time for agents that don't do learning
+        for i, s_prime in enumerate(s_neighbors):
+            neg_euclidean_dists[i] = -mx.utils.euclidian_distance(s_prime, s_T)
+
+        probs = softmax(1, neg_euclidean_dists)
+        return probs
+        
+    def get_Z(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.Z[s_i, s_T_i]
+
+    def update_Z(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        Z_s_old = self.get_Z(s, s_T)
+        Z_s_prime = self.get_Z(s_prime, s_T)
+        
+        #R = self.reward_function(s, s_prime, s_T)
+
+        #ZPE = (np.exp(-self.rho) * Z_s_prime) - Z_s_old
+        #Z_s_new = Z_s_old + self.alpha * self.importance_ratio(s, s_prime, s_T) * ZPE
+        Z_s_new = (1 - self.alpha) * Z_s_old + self.alpha * self.importance_ratio(s, s_prime, s_T) * np.exp(-self.rho) * Z_s_prime
+        
+        self.Z[s_i, s_T_i] = Z_s_new
+
+#    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+#        """Gets the next node in the node cache"""
+#        # TODO: make it such that the goal is not necessarily set by this
+#        # function so that self._set_loc can then update the self.Q
+#        # It is a bit hacky...
+#        self.goal = goal
+#        values = np.zeros(len(nodeslist))
+#
+#        for i, c in enumerate(nodeslist):
+#            R = self.reward_function(self.loc, c, goal)
+#            values[i] = (R + self.gamma * self.get_V(c, goal))
+#
+#        if penalties:
+#            penalties = self.penalty_factor(nodeslist)
+#
+#            values -= penalties
+#
+#        return values
+#
+    def Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                Pu[i_s, i_s] = 1
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                pu = softmax(1, softmax_vals)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    Pu[i_s, i_s_prime] = pu[j_s_prime]
+        Pu_s_T = Pu[:,i_s_T]
+        return Pu_s_T
+
+    def pu_s_s_T(self, s, s_T):
+        Pu_s_T = self.Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return Pu_s_T[s_neighbors_i]
+
+    def softmax_vals_Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        softmax_vals_Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                pass
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    softmax_vals_Pu[i_s, i_s_prime] = softmax_vals[j_s_prime]
+        softmax_vals_Pu_s_T = softmax_vals_Pu[:,i_s_T]
+        return softmax_vals_Pu_s_T
+
+    def softmax_vals_pu_s_s_T(self, s, s_T):
+        softmax_vals_Pu_s_T = self.softmax_vals_Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return softmax_vals_Pu_s_T[s_neighbors_i]
+    
+    def softmax_vals(self, nodeslist, s_T):
+        s_T_i = list(self.maze.nodes()).index(s_T)
+
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        neighbors_i = [list(self.maze.nodes()).index(d) for d in nodeslist]
+        z_neighbors = self.Z[neighbors_i, s_T_i]
+        softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+        return softmax_vals
+
+    def pi_d_softmax_vals(self, nodeslist, s_T):
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        softmax_vals = -d_E_neighbors
+        return softmax_vals
+
+    def importance_ratio(self, s, s_prime, s_T):
+        s_primes = list(self.maze.neighbors(s))
+        s_primes_i = [list(self.maze.nodes()).index(d) for d in s_primes]
+        chosen_s_prime_i = s_primes.index(s_prime)
+
+        pi_d_softmax_values = self.pi_d_softmax_vals(s_primes, s_T)
+        pi_softmax_values = self.softmax_vals(s_primes, s_T)
+        pi_d_softmax_probs = softmax(1, pi_d_softmax_values)
+        pi_softmax_probs = softmax(1, pi_softmax_values)
+
+        ratio = pi_d_softmax_probs[chosen_s_prime_i] / pi_softmax_probs[chosen_s_prime_i]
+        #ratio = pi_softmax_probs[chosen_s_prime_i] / pi_d_softmax_probs[chosen_s_prime_i]
+
+        return ratio
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        #values = np.zeros(len(nodeslist))
+
+        ## save some computation time for agents that don't do learning
+        #for i, c in enumerate(nodeslist):
+        #    #values[i] = self.reward_function(self.loc, c, goal)
+        #    values[i] = -mx.utils.euclidian_distance(c, goal)
+        values = self.softmax_vals(nodeslist, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class ZTree(Agent):
+    def __init__(self, maze, alpha, gamma=1, rho=10, initval=1, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        super(ZTree, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initval = initval
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rho = rho
+        
+        self.goal = None
+        self.Z = self._init_Z(initval)
+
+#        if self.gamma:
+#            self.evaluate = self.evaluate_w_gamma
+#        else:
+#            self.evaluate = self.evaluate_no_gamma
+
+        self.evaluate = self.evaluate_no_gamma
+
+    def _init_Z(self, initval):
+        #Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2), dtype=np.float128)
+        Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2))
+        # We need to make sure the sure that Z[i,i] = 1 because the cost of the
+        # terminal state has to be 0, which equates to a z-value of 1
+        np.fill_diagonal(Z, 1)
+        return Z
+        
+    def _set_loc_Zlearning(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_Z(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_Zlearning)
+
+    #@cache
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+
+    @cache
+    def default_policy_probs(self, s, s_T):
+        s_neighbors = list(self.maze.neighbors(s))
+        neg_euclidean_dists = np.zeros(len(s_neighbors))
+
+        # save some computation time for agents that don't do learning
+        for i, s_prime in enumerate(s_neighbors):
+            neg_euclidean_dists[i] = -mx.utils.euclidian_distance(s_prime, s_T)
+
+        probs = softmax(1, neg_euclidean_dists)
+        return probs
+        
+    def get_Z(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.Z[s_i, s_T_i]
+
+    def update_Z(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        Z_s_old = self.get_Z(s, s_T)
+
+        s_primes = list(self.maze.neighbors(s))
+
+        #pi_softmax_values = self.softmax_vals(s_primes, s_T)
+        #pi_softmax_probs = softmax(1, pi_softmax_values)
+
+        pi_d_softmax_probs = self.default_policy_probs(s, s_T)
+
+        z_s_primes = np.array([self.get_Z(s, s_T) for s in s_primes])
+
+        z_s_primes *= np.exp(-self.rho)
+
+        expected_Z = np.sum(pi_d_softmax_probs * z_s_primes)
+
+        Z_s_new = (1 - self.alpha) * Z_s_old + self.alpha * expected_Z
+        
+        self.Z[s_i, s_T_i] = Z_s_new
+
+#    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+#        """Gets the next node in the node cache"""
+#        # TODO: make it such that the goal is not necessarily set by this
+#        # function so that self._set_loc can then update the self.Q
+#        # It is a bit hacky...
+#        self.goal = goal
+#        values = np.zeros(len(nodeslist))
+#
+#        for i, c in enumerate(nodeslist):
+#            R = self.reward_function(self.loc, c, goal)
+#            values[i] = (R + self.gamma * self.get_V(c, goal))
+#
+#        if penalties:
+#            penalties = self.penalty_factor(nodeslist)
+#
+#            values -= penalties
+#
+#        return values
+#
+    def Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                Pu[i_s, i_s] = 1
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                pu = softmax(1, softmax_vals)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    Pu[i_s, i_s_prime] = pu[j_s_prime]
+        Pu_s_T = Pu[:,i_s_T]
+        return Pu_s_T
+
+    def pu_s_s_T(self, s, s_T):
+        Pu_s_T = self.Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return Pu_s_T[s_neighbors_i]
+
+    def softmax_vals_Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        softmax_vals_Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                pass
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    softmax_vals_Pu[i_s, i_s_prime] = softmax_vals[j_s_prime]
+        softmax_vals_Pu_s_T = softmax_vals_Pu[:,i_s_T]
+        return softmax_vals_Pu_s_T
+
+    def softmax_vals_pu_s_s_T(self, s, s_T):
+        softmax_vals_Pu_s_T = self.softmax_vals_Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return softmax_vals_Pu_s_T[s_neighbors_i]
+    
+    def softmax_vals(self, nodeslist, s_T):
+        s_T_i = list(self.maze.nodes()).index(s_T)
+
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        neighbors_i = [list(self.maze.nodes()).index(d) for d in nodeslist]
+        z_neighbors = self.Z[neighbors_i, s_T_i]
+        softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+        return softmax_vals
+
+    def pi_d_softmax_vals(self, nodeslist, s_T):
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        softmax_vals = -d_E_neighbors
+        return softmax_vals
+
+    def importance_ratio(self, s, s_prime, s_T):
+        s_primes = list(self.maze.neighbors(s))
+        s_primes_i = [list(self.maze.nodes()).index(d) for d in s_primes]
+        chosen_s_prime_i = s_primes.index(s_prime)
+
+        pi_d_softmax_values = self.pi_d_softmax_vals(s_primes, s_T)
+        pi_softmax_values = self.softmax_vals(s_primes, s_T)
+        pi_d_softmax_probs = softmax(1, pi_d_softmax_values)
+        pi_softmax_probs = softmax(1, pi_softmax_values)
+
+        ratio = pi_d_softmax_probs[chosen_s_prime_i] / pi_softmax_probs[chosen_s_prime_i]
+        #ratio = pi_softmax_probs[chosen_s_prime_i] / pi_d_softmax_probs[chosen_s_prime_i]
+
+        return ratio
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        #values = np.zeros(len(nodeslist))
+
+        ## save some computation time for agents that don't do learning
+        #for i, c in enumerate(nodeslist):
+        #    #values[i] = self.reward_function(self.loc, c, goal)
+        #    values[i] = -mx.utils.euclidian_distance(c, goal)
+        values = self.softmax_vals(nodeslist, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class ZTree2(Agent):
+    def __init__(self, maze, alpha, gamma=1, rho=10, initval=1, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        super(ZTree2, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initval = initval
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rho = rho
+        
+        self.goal = None
+        self.Z = self._init_Z(initval)
+
+#        if self.gamma:
+#            self.evaluate = self.evaluate_w_gamma
+#        else:
+#            self.evaluate = self.evaluate_no_gamma
+
+        self.evaluate = self.evaluate_no_gamma
+
+    def _init_Z(self, initval):
+        #Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2), dtype=np.float128)
+        Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2))
+        # We need to make sure the sure that Z[i,i] = 1 because the cost of the
+        # terminal state has to be 0, which equates to a z-value of 1
+        np.fill_diagonal(Z, 1)
+        return Z
+        
+    def _set_loc_Zlearning(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_Z(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_Zlearning)
+
+    #@cache
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+
+    @cache
+    def default_policy_probs(self, s, s_T):
+        s_neighbors = list(self.maze.neighbors(s))
+        neg_euclidean_dists = np.zeros(len(s_neighbors))
+
+        # save some computation time for agents that don't do learning
+        for i, s_prime in enumerate(s_neighbors):
+            neg_euclidean_dists[i] = -mx.utils.euclidian_distance(s_prime, s_T)
+
+        probs = softmax(1, neg_euclidean_dists)
+        return probs
+        
+    def get_Z(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.Z[s_i, s_T_i]
+
+    def update_Z(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        Z_s_old = self.get_Z(s, s_T)
+        s_primes = list(self.maze.neighbors(s))
+        Z_values = np.zeros(len(s_primes))
+
+        for i, c in enumerate(s_primes):
+            if c == s_prime:
+                if s_prime != s_T:
+                    s_prime_neighbors = list(self.maze.neighbors(s_prime))
+                    Z_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
+                    for j, s_prime_neighbor in enumerate(s_prime_neighbors):
+                        Z_s_prime_neighbors[j] = np.exp(-self.rho) * self.get_Z(s_prime_neighbor, s_T)
+                    pi_d_softmax_probs_s_prime = self.default_policy_probs(s_prime, s_T)
+                    Z_s_prime_prime = np.sum(pi_d_softmax_probs_s_prime * Z_s_prime_neighbors)
+                else:
+                    Z_s_prime_prime = self.get_Z(s_prime, s_T)
+                Z_values[i] = Z_s_prime_prime
+
+            else:
+                Z_values[i] = self.get_Z(c, s_T)
+
+        pi_d_softmax_probs = self.default_policy_probs(s, s_T)
+
+        Z_values *= np.exp(-self.rho)
+
+        expected_Z = np.sum(pi_d_softmax_probs * Z_values)
+
+        Z_s_new = (1 - self.alpha) * Z_s_old + self.alpha * expected_Z
+        
+        self.Z[s_i, s_T_i] = Z_s_new
+
+#    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+#        """Gets the next node in the node cache"""
+#        # TODO: make it such that the goal is not necessarily set by this
+#        # function so that self._set_loc can then update the self.Q
+#        # It is a bit hacky...
+#        self.goal = goal
+#        values = np.zeros(len(nodeslist))
+#
+#        for i, c in enumerate(nodeslist):
+#            R = self.reward_function(self.loc, c, goal)
+#            values[i] = (R + self.gamma * self.get_V(c, goal))
+#
+#        if penalties:
+#            penalties = self.penalty_factor(nodeslist)
+#
+#            values -= penalties
+#
+#        return values
+#
+    def Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                Pu[i_s, i_s] = 1
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                pu = softmax(1, softmax_vals)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    Pu[i_s, i_s_prime] = pu[j_s_prime]
+        Pu_s_T = Pu[:,i_s_T]
+        return Pu_s_T
+
+    def pu_s_s_T(self, s, s_T):
+        Pu_s_T = self.Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return Pu_s_T[s_neighbors_i]
+
+    def softmax_vals_Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        softmax_vals_Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                pass
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    softmax_vals_Pu[i_s, i_s_prime] = softmax_vals[j_s_prime]
+        softmax_vals_Pu_s_T = softmax_vals_Pu[:,i_s_T]
+        return softmax_vals_Pu_s_T
+
+    def softmax_vals_pu_s_s_T(self, s, s_T):
+        softmax_vals_Pu_s_T = self.softmax_vals_Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return softmax_vals_Pu_s_T[s_neighbors_i]
+    
+    def softmax_vals(self, nodeslist, s_T):
+        s_T_i = list(self.maze.nodes()).index(s_T)
+
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        neighbors_i = [list(self.maze.nodes()).index(d) for d in nodeslist]
+        z_neighbors = self.Z[neighbors_i, s_T_i]
+        softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+        return softmax_vals
+
+    def pi_d_softmax_vals(self, nodeslist, s_T):
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        softmax_vals = -d_E_neighbors
+        return softmax_vals
+
+    def importance_ratio(self, s, s_prime, s_T):
+        s_primes = list(self.maze.neighbors(s))
+        s_primes_i = [list(self.maze.nodes()).index(d) for d in s_primes]
+        chosen_s_prime_i = s_primes.index(s_prime)
+
+        pi_d_softmax_values = self.pi_d_softmax_vals(s_primes, s_T)
+        pi_softmax_values = self.softmax_vals(s_primes, s_T)
+        pi_d_softmax_probs = softmax(1, pi_d_softmax_values)
+        pi_softmax_probs = softmax(1, pi_softmax_values)
+
+        ratio = pi_d_softmax_probs[chosen_s_prime_i] / pi_softmax_probs[chosen_s_prime_i]
+        #ratio = pi_softmax_probs[chosen_s_prime_i] / pi_d_softmax_probs[chosen_s_prime_i]
+
+        return ratio
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        #values = np.zeros(len(nodeslist))
+
+        ## save some computation time for agents that don't do learning
+        #for i, c in enumerate(nodeslist):
+        #    #values[i] = self.reward_function(self.loc, c, goal)
+        #    values[i] = -mx.utils.euclidian_distance(c, goal)
+        values = self.softmax_vals(nodeslist, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class ZTreeFast(Agent):
+    def __init__(self, maze, alpha, gamma=1, rho=10, initval=1, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+                 heading=None, maze_size=6, policy='softmax_euclidean_cost'):
+        super(ZTreeFast, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initval = initval
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rho = rho
+        
+        self.goal = None
+        self.Z = self._init_Z(initval)
+
+#        if self.gamma:
+#            self.evaluate = self.evaluate_w_gamma
+#        else:
+#            self.evaluate = self.evaluate_no_gamma
+
+        self.evaluate = self.evaluate_no_gamma
+
+    def _init_Z(self, initval):
+        #Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2), dtype=np.float128)
+        Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2))
+        # We need to make sure the sure that Z[i,i] = 1 because the cost of the
+        # terminal state has to be 0, which equates to a z-value of 1
+        np.fill_diagonal(Z, 1)
+        return Z
+        
+    def _set_loc_Zlearning(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_Z(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_Zlearning)
+
+    #@cache
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+
+    @cache
+    def default_policy_probs(self, s, s_T):
+        s_neighbors = list(self.maze.neighbors(s))
+        neg_euclidean_dists = np.zeros(len(s_neighbors))
+
+        # save some computation time for agents that don't do learning
+        for i, s_prime in enumerate(s_neighbors):
+            neg_euclidean_dists[i] = -mx.utils.euclidian_distance(s_prime, s_T)
+
+        probs = softmax(1, neg_euclidean_dists)
+        return probs
+        
+    def get_Z(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.Z[s_i, s_T_i]
+
+    def update_Z(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        Z_s_old = self.get_Z(s, s_T)
+
+        s_primes = list(self.maze.neighbors(s))
+
+        #pi_softmax_values = self.softmax_vals(s_primes, s_T)
+        #pi_softmax_probs = softmax(1, pi_softmax_values)
+
+        pi_d_softmax_probs = self.default_policy_probs(s, s_T)
+
+        z_s_primes = np.array([self.get_Z(s, s_T) for s in s_primes])
+
+        z_s_primes *= np.exp(-self.rho)
+
+        expected_Z = np.sum(pi_d_softmax_probs * z_s_primes)
+
+        Z_s_new = (1 - self.alpha) * Z_s_old + self.alpha * expected_Z
+        
+        self.Z[s_i, s_T_i] = Z_s_new
+#    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+#        """Gets the next node in the node cache"""
+#        # TODO: make it such that the goal is not necessarily set by this
+#        # function so that self._set_loc can then update the self.Q
+#        # It is a bit hacky...
+#        self.goal = goal
+#        values = np.zeros(len(nodeslist))
+#
+#        for i, c in enumerate(nodeslist):
+#            R = self.reward_function(self.loc, c, goal)
+#            values[i] = (R + self.gamma * self.get_V(c, goal))
+#
+#        if penalties:
+#            penalties = self.penalty_factor(nodeslist)
+#
+#            values -= penalties
+#
+#        return values
+#
+    
+    def softmax_vals(self, nodeslist, s_T):
+        s_T_i = list(self.maze.nodes()).index(s_T)
+
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        neighbors_i = [list(self.maze.nodes()).index(d) for d in nodeslist]
+        z_neighbors = self.Z[neighbors_i, s_T_i]
+        softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+        return softmax_vals
+
+    def pi_d_softmax_vals(self, nodeslist, s_T):
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        softmax_vals = -d_E_neighbors
+        return softmax_vals
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        #values = np.zeros(len(nodeslist))
+
+        ## save some computation time for agents that don't do learning
+        #for i, c in enumerate(nodeslist):
+        #    #values[i] = self.reward_function(self.loc, c, goal)
+        #    values[i] = -mx.utils.euclidian_distance(c, goal)
+        values = self.softmax_vals(nodeslist, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class ZOfflearningRewrite(Agent):
+    def __init__(self, maze, alpha, gamma=1, rho=10, initval=1, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        super(ZOfflearningRewrite, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initval = initval
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rho = rho
+        
+        self.goal = None
+        self.Z = self._init_Z(initval)
+
+#        if self.gamma:
+#            self.evaluate = self.evaluate_w_gamma
+#        else:
+#            self.evaluate = self.evaluate_no_gamma
+
+        self.evaluate = self.evaluate_no_gamma
+
+    def _init_Z(self, initval):
+        #Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2), dtype=np.float128)
+        Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2))
+        # We need to make sure the sure that Z[i,i] = 1 because the cost of the
+        # terminal state has to be 0, which equates to a z-value of 1
+        np.fill_diagonal(Z, 1)
+        return Z
+        
+    def _set_loc_Zlearning(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_Z(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_Zlearning)
+
+    #@cache
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+
+    @cache
+    def default_policy_probs(self, s, s_T):
+        s_neighbors = list(self.maze.neighbors(s))
+        neg_euclidean_dists = np.zeros(len(s_neighbors))
+
+        # save some computation time for agents that don't do learning
+        for i, s_prime in enumerate(s_neighbors):
+            neg_euclidean_dists[i] = -mx.utils.euclidian_distance(s_prime, s_T)
+
+        probs = softmax(1, neg_euclidean_dists)
+        return probs
+        
+    def get_Z(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.Z[s_i, s_T_i]
+
+    def update_Z(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        Z_s_old = self.get_Z(s, s_T)
+        Z_s_prime = self.get_Z(s_prime, s_T)
+        
+        #R = self.reward_function(s, s_prime, s_T)
+
+        #ZPE = (np.exp(-self.rho) * Z_s_prime) - Z_s_old
+        #Z_s_new = Z_s_old + self.alpha * self.importance_ratio(s, s_prime, s_T) * ZPE
+        #Z_s_new = (1 - self.alpha) * Z_s_old + self.alpha * self.importance_ratio(s, s_prime, s_T) * np.exp(-self.rho) * Z_s_prime
+        nodeslist = list(self.maze.neighbors(s))
+        s_primes_pi_d_softmax_vals = self.pi_d_softmax_vals(nodeslist, s_T)
+        s_primes_z = np.array([self.get_Z(s_prime, s_T) for s_prime in nodeslist])
+
+        target = (np.exp(s_primes_pi_d_softmax_vals) * s_primes_z).sum() / (np.exp(s_primes_pi_d_softmax_vals).sum())
+        target *= np.exp(-self.rho) 
+
+        Z_s_new = (1 - self.alpha) * Z_s_old + self.alpha * target
+        self.Z[s_i, s_T_i] = Z_s_new
+
+#    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+#        """Gets the next node in the node cache"""
+#        # TODO: make it such that the goal is not necessarily set by this
+#        # function so that self._set_loc can then update the self.Q
+#        # It is a bit hacky...
+#        self.goal = goal
+#        values = np.zeros(len(nodeslist))
+#
+#        for i, c in enumerate(nodeslist):
+#            R = self.reward_function(self.loc, c, goal)
+#            values[i] = (R + self.gamma * self.get_V(c, goal))
+#
+#        if penalties:
+#            penalties = self.penalty_factor(nodeslist)
+#
+#            values -= penalties
+#
+#        return values
+#
+    def Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                Pu[i_s, i_s] = 1
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                pu = softmax(1, softmax_vals)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    Pu[i_s, i_s_prime] = pu[j_s_prime]
+        Pu_s_T = Pu[:,i_s_T]
+        return Pu_s_T
+
+    def pu_s_s_T(self, s, s_T):
+        Pu_s_T = self.Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return Pu_s_T[s_neighbors_i]
+
+    def softmax_vals_Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        softmax_vals_Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                pass
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    softmax_vals_Pu[i_s, i_s_prime] = softmax_vals[j_s_prime]
+        softmax_vals_Pu_s_T = softmax_vals_Pu[:,i_s_T]
+        return softmax_vals_Pu_s_T
+
+    def softmax_vals_pu_s_s_T(self, s, s_T):
+        softmax_vals_Pu_s_T = self.softmax_vals_Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return softmax_vals_Pu_s_T[s_neighbors_i]
+    
+    def softmax_vals(self, nodeslist, s_T):
+        s_T_i = list(self.maze.nodes()).index(s_T)
+
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        neighbors_i = [list(self.maze.nodes()).index(d) for d in nodeslist]
+        z_neighbors = self.Z[neighbors_i, s_T_i]
+        softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+        return softmax_vals
+
+    def pi_d_softmax_vals(self, nodeslist, s_T):
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        softmax_vals = -d_E_neighbors
+        return softmax_vals
+
+    def importance_ratio(self, s, s_prime, s_T):
+        s_primes = list(self.maze.neighbors(s))
+        s_primes_i = [list(self.maze.nodes()).index(d) for d in s_primes]
+        chosen_s_prime_i = s_primes.index(s_prime)
+
+        pi_d_softmax_values = self.pi_d_softmax_vals(s_primes, s_T)
+        pi_softmax_values = self.softmax_vals(s_primes, s_T)
+        pi_d_softmax_probs = softmax(1, pi_d_softmax_values)
+        pi_softmax_probs = softmax(1, pi_softmax_values)
+
+        ratio = pi_d_softmax_probs[chosen_s_prime_i] / pi_softmax_probs[chosen_s_prime_i]
+        #ratio = pi_softmax_probs[chosen_s_prime_i] / pi_d_softmax_probs[chosen_s_prime_i]
+
+        return ratio
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        #values = np.zeros(len(nodeslist))
+
+        ## save some computation time for agents that don't do learning
+        #for i, c in enumerate(nodeslist):
+        #    #values[i] = self.reward_function(self.loc, c, goal)
+        #    values[i] = -mx.utils.euclidian_distance(c, goal)
+        values = self.softmax_vals(nodeslist, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class ZTree2Rewrite(Agent):
+    def __init__(self, maze, alpha, gamma=1, rho=10, initval=1, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        super(ZTree2Rewrite, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initval = initval
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rho = rho
+        
+        self.goal = None
+        self.Z = self._init_Z(initval)
+
+#        if self.gamma:
+#            self.evaluate = self.evaluate_w_gamma
+#        else:
+#            self.evaluate = self.evaluate_no_gamma
+
+        self.evaluate = self.evaluate_no_gamma
+
+    def _init_Z(self, initval):
+        #Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2), dtype=np.float128)
+        Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2))
+        # We need to make sure the sure that Z[i,i] = 1 because the cost of the
+        # terminal state has to be 0, which equates to a z-value of 1
+        np.fill_diagonal(Z, 1)
+        return Z
+        
+    def _set_loc_Zlearning(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_Z(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_Zlearning)
+
+    #@cache
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+
+    @cache
+    def default_policy_probs(self, s, s_T):
+        s_neighbors = list(self.maze.neighbors(s))
+        neg_euclidean_dists = np.zeros(len(s_neighbors))
+
+        # save some computation time for agents that don't do learning
+        for i, s_prime in enumerate(s_neighbors):
+            neg_euclidean_dists[i] = -mx.utils.euclidian_distance(s_prime, s_T)
+
+        probs = softmax(1, neg_euclidean_dists)
+        return probs
+        
+    def get_Z(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.Z[s_i, s_T_i]
+
+    def update_Z(self, s, s_prime, s_T):
+        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        Z_s_old = self.get_Z(s, s_T)
+        s_primes = list(self.maze.neighbors(s))
+        Z_values = np.zeros(len(s_primes))
+
+        for i, c in enumerate(s_primes):
+            if c == s_prime:
+                if s_prime != s_T:
+                    s_prime_neighbors = list(self.maze.neighbors(s_prime))
+                    Z_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
+                    for j, s_prime_neighbor in enumerate(s_prime_neighbors):
+                        Z_s_prime_neighbors[j] = self.get_Z(s_prime_neighbor, s_T)
+                    pi_d_softmax_probs_s_prime = self.default_policy_probs(s_prime, s_T)
+                    Z_s_prime = np.exp(-self.rho) * np.sum(pi_d_softmax_probs_s_prime * Z_s_prime_neighbors)
+                else:
+                    Z_s_prime = self.get_Z(s_prime, s_T)
+                Z_values[i] = Z_s_prime
+
+            else:
+                Z_values[i] = self.get_Z(c, s_T)
+
+        pi_d_softmax_probs = self.default_policy_probs(s, s_T)
+
+        Z_s_new_target = np.exp(-self.rho) * np.sum(pi_d_softmax_probs * Z_values)
+
+        Z_s_new = (1 - self.alpha) * Z_s_old + self.alpha * Z_s_new_target
+        
+        self.Z[s_i, s_T_i] = Z_s_new
+
+    def Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                Pu[i_s, i_s] = 1
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                pu = softmax(1, softmax_vals)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    Pu[i_s, i_s_prime] = pu[j_s_prime]
+        Pu_s_T = Pu[:,i_s_T]
+        return Pu_s_T
+
+    def pu_s_s_T(self, s, s_T):
+        Pu_s_T = self.Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return Pu_s_T[s_neighbors_i]
+
+    def softmax_vals_Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        softmax_vals_Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                pass
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    softmax_vals_Pu[i_s, i_s_prime] = softmax_vals[j_s_prime]
+        softmax_vals_Pu_s_T = softmax_vals_Pu[:,i_s_T]
+        return softmax_vals_Pu_s_T
+
+    def softmax_vals_pu_s_s_T(self, s, s_T):
+        softmax_vals_Pu_s_T = self.softmax_vals_Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return softmax_vals_Pu_s_T[s_neighbors_i]
+    
+    def softmax_vals(self, nodeslist, s_T):
+        s_T_i = list(self.maze.nodes()).index(s_T)
+
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        neighbors_i = [list(self.maze.nodes()).index(d) for d in nodeslist]
+        z_neighbors = self.Z[neighbors_i, s_T_i]
+        softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+        return softmax_vals
+
+    def pi_d_softmax_vals(self, nodeslist, s_T):
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        softmax_vals = -d_E_neighbors
+        return softmax_vals
+
+    def importance_ratio(self, s, s_prime, s_T):
+        s_primes = list(self.maze.neighbors(s))
+        s_primes_i = [list(self.maze.nodes()).index(d) for d in s_primes]
+        chosen_s_prime_i = s_primes.index(s_prime)
+
+        pi_d_softmax_values = self.pi_d_softmax_vals(s_primes, s_T)
+        pi_softmax_values = self.softmax_vals(s_primes, s_T)
+        pi_d_softmax_probs = softmax(1, pi_d_softmax_values)
+        pi_softmax_probs = softmax(1, pi_softmax_values)
+
+        ratio = pi_d_softmax_probs[chosen_s_prime_i] / pi_softmax_probs[chosen_s_prime_i]
+        #ratio = pi_softmax_probs[chosen_s_prime_i] / pi_d_softmax_probs[chosen_s_prime_i]
+
+        return ratio
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        #values = np.zeros(len(nodeslist))
+
+        ## save some computation time for agents that don't do learning
+        #for i, c in enumerate(nodeslist):
+        #    #values[i] = self.reward_function(self.loc, c, goal)
+        #    values[i] = -mx.utils.euclidian_distance(c, goal)
+        values = self.softmax_vals(nodeslist, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
+
+class ZTree21(Agent):
+    def __init__(self, maze, alpha, gamma=1, rho=10, initval=1, beta=1, loc=None, xi=0,
+            penalty_criterium='node', penalty_type='exponential',
+            heading=None, maze_size=6, policy='softmax'):
+        super(ZTree21, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initval = initval
+        self.alpha = alpha
+        self.gamma = gamma
+        self.rho = rho
+        
+        self.goal = None
+        self.Z = self._init_Z(initval)
+
+#        if self.gamma:
+#            self.evaluate = self.evaluate_w_gamma
+#        else:
+#            self.evaluate = self.evaluate_no_gamma
+
+        self.evaluate = self.evaluate_no_gamma
+
+    def _init_Z(self, initval):
+        #Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2), dtype=np.float128)
+        Z = float(initval) * np.ones((self.maze_size**2, self.maze_size**2))
+        # We need to make sure the sure that Z[i,i] = 1 because the cost of the
+        # terminal state has to be 0, which equates to a z-value of 1
+        np.fill_diagonal(Z, 1)
+        return Z
+        
+    def _set_loc_Zlearning(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_Z(old_loc, new_loc, self.goal)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_Zlearning)
+
+    #@cache
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+
+    @cache
+    def default_policy_probs(self, s, s_T):
+        s_neighbors = list(self.maze.neighbors(s))
+        neg_euclidean_dists = np.zeros(len(s_neighbors))
+
+        # save some computation time for agents that don't do learning
+        for i, s_prime in enumerate(s_neighbors):
+            neg_euclidean_dists[i] = -mx.utils.euclidian_distance(s_prime, s_T)
+
+        probs = softmax(1, neg_euclidean_dists)
+        return probs
+        
+    def get_Z(self, s, s_T):
+        """Helper function to retrieve V(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.Z[s_i, s_T_i]
+
+    def update_Z(self, s, s_prime, s_T):
+        s_i, s_prime_i, s_T_i = self._get_node_index([s, s_prime, s_T])
+
+        Z_s_old = self.get_Z(s, s_T)
+        s_primes = list(self.maze.neighbors(s))
+        Z_values = np.zeros(len(s_primes))
+
+        for i, c in enumerate(s_primes):
+            if c == s_prime:
+                if s_prime != s_T:
+                    s_prime_neighbors = list(self.maze.neighbors(s_prime))
+                    Z_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
+                    for j, s_prime_neighbor in enumerate(s_prime_neighbors):
+                        Z_s_prime_neighbors[j] = self.get_Z(s_prime_neighbor, s_T)
+                    pi_d_softmax_probs_s_prime = self.default_policy_probs(s_prime, s_T)
+                    Z_s_prime = np.exp(-self.rho) * np.sum(pi_d_softmax_probs_s_prime * Z_s_prime_neighbors)
+                else:
+                    Z_s_prime = self.get_Z(s_prime, s_T)
+                Z_values[i] = Z_s_prime
+
+            else:
+                Z_values[i] = self.get_Z(c, s_T)
+
+        pi_d_softmax_probs = self.default_policy_probs(s, s_T)
+
+        Z_s_new_target = np.exp(-self.rho) * np.sum(pi_d_softmax_probs * Z_values)
+
+        Z_s_new = (1 - self.alpha) * Z_s_old + self.alpha * Z_s_new_target
+        
+        self.Z[s_i, s_T_i] = Z_s_new
+        self.Z[s_prime_i, s_T_i] = Z_s_prime
+
+#    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+#        """Gets the next node in the node cache"""
+#        # TODO: make it such that the goal is not necessarily set by this
+#        # function so that self._set_loc can then update the self.Q
+#        # It is a bit hacky...
+#        self.goal = goal
+#        values = np.zeros(len(nodeslist))
+#
+#        for i, c in enumerate(nodeslist):
+#            R = self.reward_function(self.loc, c, goal)
+#            values[i] = (R + self.gamma * self.get_V(c, goal))
+#
+#        if penalties:
+#            penalties = self.penalty_factor(nodeslist)
+#
+#            values -= penalties
+#
+#        return values
+#
+    def Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                Pu[i_s, i_s] = 1
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                pu = softmax(1, softmax_vals)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    Pu[i_s, i_s_prime] = pu[j_s_prime]
+        Pu_s_T = Pu[:,i_s_T]
+        return Pu_s_T
+
+    def pu_s_s_T(self, s, s_T):
+        Pu_s_T = self.Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return Pu_s_T[s_neighbors_i]
+
+    def softmax_vals_Pu_s_T_euclidean(self, s_T):
+        n_nodes = len(self.maze.nodes())
+        softmax_vals_Pu = np.zeros((n_nodes, n_nodes))
+        i_s_T = list(self.maze.nodes()).index(s_T)
+        z = self.Z[:,i_s_T]
+
+        for i_s, s in enumerate(self.maze.nodes()):
+            # if this is the index of the terminal node, then we set the probabilities according to the markov chain
+            if i_s == i_s_T:
+                pass
+            else:
+                neighbors = list(self.maze.neighbors(s))
+                d_E_neighbors = []
+                for s_prime in neighbors:
+                    d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+                d_E_neighbors = np.array(d_E_neighbors)
+                neighbors_i = [list(self.maze.nodes()).index(d) for d in neighbors]
+                z_neighbors = z[neighbors_i]
+                softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+                
+                for j_s_prime, s_prime in enumerate(neighbors):
+                    # j_s_prime is the index of s_prime in the list of choice probs (p)
+                    # i_s_prime is the index of s_prime in the list of all nodes
+                    i_s_prime = list(self.maze.nodes()).index(s_prime) 
+                    softmax_vals_Pu[i_s, i_s_prime] = softmax_vals[j_s_prime]
+        softmax_vals_Pu_s_T = softmax_vals_Pu[:,i_s_T]
+        return softmax_vals_Pu_s_T
+
+    def softmax_vals_pu_s_s_T(self, s, s_T):
+        softmax_vals_Pu_s_T = self.softmax_vals_Pu_s_T_euclidean(s_T)
+        s_neighbors = list(self.maze.neighbors(s))
+        s_neighbors_i = [list(self.maze.nodes()).index(n) for n in s_neighbors]
+        return softmax_vals_Pu_s_T[s_neighbors_i]
+    
+    def softmax_vals(self, nodeslist, s_T):
+        s_T_i = list(self.maze.nodes()).index(s_T)
+
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        neighbors_i = [list(self.maze.nodes()).index(d) for d in nodeslist]
+        z_neighbors = self.Z[neighbors_i, s_T_i]
+        softmax_vals = - d_E_neighbors + np.log(z_neighbors)
+        return softmax_vals
+
+    def pi_d_softmax_vals(self, nodeslist, s_T):
+        d_E_neighbors = []
+        for s_prime in nodeslist:
+            d_E_neighbors.append(mx.utils.euclidian_distance(s_prime, s_T))
+        d_E_neighbors = np.array(d_E_neighbors)
+        softmax_vals = -d_E_neighbors
+        return softmax_vals
+
+    def importance_ratio(self, s, s_prime, s_T):
+        s_primes = list(self.maze.neighbors(s))
+        s_primes_i = [list(self.maze.nodes()).index(d) for d in s_primes]
+        chosen_s_prime_i = s_primes.index(s_prime)
+
+        pi_d_softmax_values = self.pi_d_softmax_vals(s_primes, s_T)
+        pi_softmax_values = self.softmax_vals(s_primes, s_T)
+        pi_d_softmax_probs = softmax(1, pi_d_softmax_values)
+        pi_softmax_probs = softmax(1, pi_softmax_values)
+
+        ratio = pi_d_softmax_probs[chosen_s_prime_i] / pi_softmax_probs[chosen_s_prime_i]
+        #ratio = pi_softmax_probs[chosen_s_prime_i] / pi_d_softmax_probs[chosen_s_prime_i]
+
+        return ratio
+
+    def evaluate_no_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        #values = np.zeros(len(nodeslist))
+
+        ## save some computation time for agents that don't do learning
+        #for i, c in enumerate(nodeslist):
+        #    #values[i] = self.reward_function(self.loc, c, goal)
+        #    values[i] = -mx.utils.euclidian_distance(c, goal)
+        values = self.softmax_vals(nodeslist, goal)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_session(self, session, penalties=False, restore_V=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_V() via _set_loc_OneStepTD(). This means
+        that after each evaluation V will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores V after session has been evaluated.
+        """
+        if restore_V:
+            old_V = copy.deepcopy(self.V)
+
+        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+
+        if restore_V:
+            self.V = old_V
+
+        return res
+
