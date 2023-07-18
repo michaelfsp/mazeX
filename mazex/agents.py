@@ -2454,11 +2454,70 @@ class VSRMulti(Agent):
         return res
 
 
+
+@jit(nopython=True, nogil=True)
+def _triangle_inequality_helper(V_pre):
+    V_post = np.zeros_like(V_pre)
+    V_post[:] = V_pre[:]
+    n_nodes = len(V_post)
+    for i in range(n_nodes):
+        for j in range(n_nodes):
+            for k in range(n_nodes):
+                if i != j and j != k:
+                    V_post[j, k] = np.array([V_post[j, k], V_post[j, i] + V_post[i, k]]).max()
+                else:
+                    continue
+    return V_post
+
+@jit(nopython=True, nogil=True)
+def _triangle_inequality_helper_pbrs(V_pre, dE_matrix, mu):
+    V_post = np.zeros_like(V_pre)
+    V_post[:] = V_pre[:]
+    n_nodes = len(V_post)
+    for i in range(n_nodes):
+        for j in range(n_nodes):
+            for k in range(n_nodes):
+                    if i != j and j != k:
+                        lower_bound = V_post[j, i] - mu * dE_matrix[j, i] + V_post[i, k] - mu * dE_matrix[i, k] + mu * dE_matrix[j, k]
+                        V_post[j, k] = np.array([V_post[j, k], lower_bound]).max()
+                    else:
+                        continue
+    return V_post
+
+@jit(nopython=True, nogil=True)
+def _triangle_inequality_helper_single_intermediate(V_pre, intermediate_i):
+    V_post = np.zeros_like(V_pre)
+    V_post[:] = V_pre[:]
+    n_nodes = len(V_post)
+    for j in range(n_nodes):
+        for k in range(n_nodes):
+            if intermediate_i != j and j != k:
+                V_post[j, k] = np.array([V_post[j, k], V_post[j, intermediate_i] + V_post[intermediate_i, k]]).max()
+            else:
+                continue
+    return V_post
+
+@jit(nopython=True, nogil=True)
+def _triangle_inequality_helper_pbrs_single_intermediate(V_pre, dE_matrix, mu, intermediate_i):
+    V_post = np.zeros_like(V_pre)
+    V_post[:] = V_pre[:]
+    n_nodes = len(V_post)
+    for j in range(n_nodes):
+        for k in range(n_nodes):
+                if intermediate_i != j and j != k:
+                    lower_bound = V_post[j, intermediate_i] - mu * dE_matrix[j, intermediate_i] + V_post[intermediate_i, k] - mu * dE_matrix[intermediate_i, k] + mu * dE_matrix[j, k]
+                    V_post[j, k] = np.array([V_post[j, k], lower_bound]).max()
+                else:
+                    continue
+    return V_post
+
+
 class VMulti(Agent):
     def __init__(self, maze, alpha, gamma, reward_function, initfun, target_s_prime='exp',
                  target_s_prime_prime='exp', symmetrical=False, beta=1, loc=None, xi=0,
-            penalty_criterium='node', penalty_type='exponential',
-            heading=None, maze_size=6, policy='softmax'):
+                 penalty_criterium='node', penalty_type='exponential',
+                 heading=None, maze_size=6, policy='softmax', triangle=False,
+                 short_range=False, mu=1, long_range=True, alpha_triangle=1):
         """
         target_s_prime : 'sample', 'exp', 'max'
         target_s_prime_prime : 'sample', 'exp', 'max', None
@@ -2473,6 +2532,8 @@ class VMulti(Agent):
         self.initfun = initfun
         self.alpha = alpha
         self.gamma = gamma
+        self.mu = mu
+        self.alpha_triangle = alpha_triangle * alpha
         # FIXME: check that I have dtype='float' in other implementations too
 
         # Initialization
@@ -2500,6 +2561,13 @@ class VMulti(Agent):
         elif initfun == 'potential':
             state_initfunc = functools.partial(spatial_reward_init, gamma=gamma, m=2, n=2)
             self.V = self._init_V(state_initfunc)
+        elif initfun == 'pessimistic_cost':
+            state_initfunc = lambda s, s_T: -35
+            self.V = self._init_V(state_initfunc)
+        elif initfun == 'pessimistic_pbrs':
+            state_initfunc = lambda s, s_T: -35 + mu * euclidian_distance(s, s_T) -1
+            self.V = self._init_V(state_initfunc)
+
 #        elif initfun == 'pbrs':
 #            state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='manhattan')
 #            state_potential_cost_initfunc = functools.partial(pbrs_spatial_init, gamma=gamma)
@@ -2543,7 +2611,7 @@ class VMulti(Agent):
             cost_to_go_fun = lambda s, s_prime, s_T: step_cost_val
             state_travel_cost = functools.partial(combined_reward_function, step_reward_fun=cost_to_go_fun, goal_reward=goal_reward_val)
             state_potential_cost = functools.partial(pbrs_spatial_reward, m=2, n=2, gamma=gamma)
-            mixed_reward_function = lambda s, s_prime, s_T: state_travel_cost(s, s_prime, s_T) + state_potential_cost(s, s_prime, s_T)
+            mixed_reward_function = lambda s, s_prime, s_T: state_travel_cost(s, s_prime, s_T) + mu * state_potential_cost(s, s_prime, s_T)
             self.reward_function = mixed_reward_function
 
         elif reward_function == 'potential':
@@ -2557,6 +2625,23 @@ class VMulti(Agent):
         self.target_s_prime_prime = target_s_prime_prime
 
         self.symmetrical = symmetrical
+        self.short_range = short_range
+        self.long_range = long_range
+
+        if gamma == 1 and triangle:
+            self.triangle = triangle
+            if triangle == 'all':
+                if reward_function == 'pbrs':
+                    self.triangle_function = functools.partial(_triangle_inequality_helper_pbrs, dE_matrix=self.maze.euclidean_distances_matrix, mu=mu)
+                else:
+                    self.triangle_function = _triangle_inequality_helper
+            else:
+                if reward_function == 'pbrs':
+                    self.triangle_function = functools.partial(_triangle_inequality_helper_pbrs_single_intermediate, dE_matrix=self.maze.euclidean_distances_matrix, mu=mu)
+                else:
+                    self.triangle_function = _triangle_inequality_helper_single_intermediate
+        else:
+            self.triangle = False
 
     def _init_V(self, initfun):
         V = np.empty((self.maze_size**2, self.maze_size**2))
@@ -2596,56 +2681,105 @@ class VMulti(Agent):
         s_i, s_T_i = self._get_node_index([s, s_T])
 
         return self.V[s_i, s_T_i]
+    
+    def triangle_inequality_updates(self, intermediates_list=None):
+        if intermediates_list == None:
+            # We assume it's all intermediates
+            Vpre = self.V
+            Vpost = self.triangle_function(Vpre)
+            self.V = (1 - self.alpha_triangle) * Vpre + self.alpha_triangle * Vpost
+        else:
+            intermediates_i = self._get_node_index(intermediates_list)
+            for intermediate_i in intermediates_i:
+                Vpre = self.V
+                Vpost = self.triangle_function(Vpre, intermediate_i=intermediate_i)
+                self.V = (1 - self.alpha_triangle) * Vpre + self.alpha_triangle * Vpost
 
     def update_V(self, s, s_prime, s_T):
-        s_i, _, s_T_i = self._get_node_index([s, s_prime, s_T])
+        s_i, s_prime_i, s_T_i = self._get_node_index([s, s_prime, s_T])
+        delta = False
 
-        V_s_old = self.get_V(s, s_T)
+        if self.long_range:
+            V_s_old = self.get_V(s, s_T)
 
-        if s_prime == s_T or self.target_s_prime_prime == None:
-            V_s_prime = self.get_V(s_prime, s_T)
-        else:
-            if self.target_s_prime_prime == 'sample':
-                # TODO: implement this
-                raise Exception('sample-sample updates not yet implemented')
-            elif self.target_s_prime_prime == 'exp' or self.target_s_prime_prime == 'max':
-                s_prime_neighbors = list(self.maze.neighbors(s_prime))
-                RgV_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
-                for i, s_prime_neighbor in enumerate(s_prime_neighbors):
-                    V_s_prime_neighbor = self.get_V(s_prime_neighbor, s_T)
-                    RgV_s_prime_neighbors[i] = self.reward_function(s_prime, s_prime_neighbor, s_T) + self.gamma * V_s_prime_neighbor
+            if s_prime == s_T or self.target_s_prime_prime == None:
+                V_s_prime = self.get_V(s_prime, s_T)
+            else:
+                if self.target_s_prime_prime == 'sample':
+                    # TODO: implement this
+                    raise Exception('sample-sample updates not yet implemented')
+                elif self.target_s_prime_prime == 'exp' or self.target_s_prime_prime == 'max':
+                    s_prime_neighbors = list(self.maze.neighbors(s_prime))
+                    RgV_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
+                    for i, s_prime_neighbor in enumerate(s_prime_neighbors):
+                        V_s_prime_neighbor = self.get_V(s_prime_neighbor, s_T)
+                        RgV_s_prime_neighbors[i] = self.reward_function(s_prime, s_prime_neighbor, s_T) + self.gamma * V_s_prime_neighbor
 
-                if self.target_s_prime_prime == 'exp':
-                    V_s_prime = np.sum(self.choice_probs(RgV_s_prime_neighbors) * RgV_s_prime_neighbors)
-                elif self.target_s_prime_prime == 'max':
-                    V_s_prime = np.max(RgV_s_prime_neighbors)
+                    if self.target_s_prime_prime == 'exp':
+                        V_s_prime = np.sum(self.choice_probs(RgV_s_prime_neighbors) * RgV_s_prime_neighbors)
+                    elif self.target_s_prime_prime == 'max':
+                        V_s_prime = np.max(RgV_s_prime_neighbors)
 
-        if self.target_s_prime == 'sample':
-            R = self.reward_function(s, s_prime, s_T)
-            target = R + self.gamma * V_s_prime
-        elif self.target_s_prime == 'exp' or self.target_s_prime == 'max':
-            s_neighbors = list(self.maze.neighbors(s))
-            RgV_s_neighbors = np.zeros(len(s_neighbors))
-            for i, s_neighbor in enumerate(s_neighbors):
-                if s_neighbor == s_prime:
-                    V_s_neighbor = V_s_prime
+            if self.target_s_prime == 'sample':
+                R = self.reward_function(s, s_prime, s_T)
+                target = R + self.gamma * V_s_prime
+            elif self.target_s_prime == 'exp' or self.target_s_prime == 'max':
+                s_neighbors = list(self.maze.neighbors(s))
+                RgV_s_neighbors = np.zeros(len(s_neighbors))
+                for i, s_neighbor in enumerate(s_neighbors):
+                    if s_neighbor == s_prime:
+                        V_s_neighbor = V_s_prime
+                    else:
+                        V_s_neighbor = self.get_V(s_neighbor, s_T)
+                    RgV_s_neighbors[i] = self.reward_function(s, s_neighbor, s_T) + self.gamma * V_s_neighbor
+
+                if self.target_s_prime == 'exp':
+                    target = np.sum(self.choice_probs(RgV_s_neighbors) * RgV_s_neighbors)
+                elif self.target_s_prime == 'max':
+                    target = np.max(RgV_s_neighbors)
+
+            VPE = target - V_s_old
+
+            self.V[s_i, s_T_i] =  V_s_old + self.alpha * VPE
+
+            if self.symmetrical:
+                self.V[s_T_i, s_i] =  V_s_old + self.alpha * VPE
+
+            if VPE != 0:
+                delta = True
+
+        if self.short_range == 's_prime':
+            LVPE = self.reward_function(s, s_prime, s_prime) - self.V[s_i, s_prime_i]
+            self.V[s_i, s_prime_i] += self.alpha * LVPE
+
+            if self.symmetrical:
+                self.V[s_prime_i, s_i] = self.V[s_i, s_prime_i]
+
+            if LVPE != 0:
+                delta = True
+
+        elif self.short_range == 'all_s_primes':
+            for s_neighbor in list(self.maze.neighbors(s)):
+                s_neighbor_i = self._get_node_index(s_neighbor)
+
+                LVPE = self.reward_function(s, s_neighbor, s_neighbor) - self.V[s_i, s_neighbor_i]
+                self.V[s_i, s_neighbor_i] += self.alpha * LVPE
+
+                if self.symmetrical:
+                    self.V[s_neighbor_i, s_i] = self.V[s_i, s_neighbor_i]
+
+                if LVPE != 0:
+                    delta = True
+
+        if delta and self.triangle:
+            if self.triangle == 'all':
+                self.triangle_inequality_updates(intermediates_list=None)
+            elif self.triangle == 's':
+                if self.symmetrical:
+                    intermediates = [s, s_prime]
                 else:
-                    V_s_neighbor = self.get_V(s_neighbor, s_T)
-                RgV_s_neighbors[i] = self.reward_function(s, s_neighbor, s_T) + self.gamma * V_s_neighbor
-
-            if self.target_s_prime == 'exp':
-                target = np.sum(self.choice_probs(RgV_s_neighbors) * RgV_s_neighbors)
-            elif self.target_s_prime == 'max':
-                target = np.max(RgV_s_neighbors)
-
-        VPE = target - V_s_old
-
-        self.V[s_i, s_T_i] =  V_s_old + self.alpha * VPE
-
-        if self.symmetrical:
-
-            self.V[s_T_i, s_i] =  V_s_old + self.alpha * VPE
-
+                    intermediates = [s]
+                self.triangle_inequality_updates(intermediates_list=intermediates)
 
     def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
         """Gets the next node in the node cache"""

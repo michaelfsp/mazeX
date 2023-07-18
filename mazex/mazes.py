@@ -7,7 +7,7 @@ from functools import lru_cache, partial
 import re
 
 from mazex.exceptions import *
-from mazex.utils import copydoc, to_peano_coords, sdd_path
+from mazex.utils import copydoc, to_peano_coords, sdd_path, euclidian_distance
 import mazex.analysis
 
 #TODO: save centrality measures as attributes of edges and nodes
@@ -195,6 +195,7 @@ class SquareMaze(nx.classes.graph.Graph):
         # recalculate if either the nodes or eges of the maze have changed
         # We save the snapshot of both at time of calculation in these objects
         self._has_changed_since_matrix = True
+        self._has_changed_since_euclidean_matrix = True
         self._has_changed_since_matrix_peano = True
         self._has_changed_since_dictionary = True
         self._has_changed_since_to_coord_map = True
@@ -207,6 +208,7 @@ class SquareMaze(nx.classes.graph.Graph):
         self._distances_to_coord_map = None
         self._least_sdd_matrix = None
         self._optimal_choice_dic = None
+        self._euclidean_distances_matrix = None
 
         self.nodes_reachable_n_steps = partial(nodes_reachable_n_steps,
                                                self)
@@ -421,6 +423,23 @@ class SquareMaze(nx.classes.graph.Graph):
             degree_matrix[i,i] = nd[1]
 
         return degree_matrix
+
+    @property
+    def euclidean_distances_matrix(self):
+        # If the graph has changed since last calculation of the matrix:
+        if self._has_changed_since_euclidean_matrix:
+            # for some reason the NetworkX algorithm produces a numpy matrix
+            # instead of an array, so we np.array it
+            dm = np.zeros((len(list(self.nodes())), len(list(self.nodes()))))
+            for i, n1 in enumerate(list(self.nodes())):
+                for j, n2 in enumerate(list(self.nodes())):
+                    if i != j:
+                        dm[i,j] = euclidian_distance(n1, n2)
+
+            self._euclidean_distances_matrix = dm
+            self._has_changed_since_euclidean_matrix = False
+
+        return self._euclidean_distances_matrix
 
     @property
     def distances_matrix(self):
