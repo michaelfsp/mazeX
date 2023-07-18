@@ -117,6 +117,7 @@ class SimSessionGivenGoals(SimSession):
         self.max_total_steps = max_total_steps
         self.total_steps = 0
         self.loc_start = loc_start
+        self.trials = []
 
         super(SimSessionGivenGoals, self).__init__(**kwargs)
 
@@ -141,14 +142,13 @@ class SimSessionGivenGoals(SimSession):
                     # we set loc to current loc such that loc gets added to edge and
                     #  node_visit_cache
                     self.agent.loc = self.agent.loc
-                    trial = SimTrial(self.sim_maze, goal, initial_step, self.agent,
-                                               max_steps=self.max_steps)
+                    self.trials.append(SimTrial(self.sim_maze, goal, initial_step, self.agent,
+                                               max_steps=self.max_steps))
 
-                    trial.solve()
+                    self.trials[-1].solve()
                     if verbose:
-                        print('Solved trial %i' %len(trials))
-                    self.total_steps += len(trial.steps) - 1
-                    trials.append(trial)
+                        print('Solved trial %i' %len(self.trials))
+                    self.total_steps += len(self.trials[-1].steps) - 1
                 else:
                     pass
         else:
@@ -160,18 +160,16 @@ class SimSessionGivenGoals(SimSession):
                     # we set loc to current loc such that loc gets added to edge and
                     #  node_visit_cache
                     self.agent.loc = self.agent.loc
-                    trial = SimTrial(self.sim_maze, goal, initial_step, self.agent,
-                                               max_steps=self.max_steps)
+                    self.trials.append(SimTrial(self.sim_maze, goal, initial_step, self.agent,
+                                             max_steps=self.max_steps))
 
-                    trial.solve()
+                    self.trials[-1].solve()
                     if verbose:
-                        print('Solved trial %i' %len(trials))
-                    self.total_steps += len(trial.steps) - 1
-                    trials.append(trial)
+                        print('Solved trial %i' %len(self.trials))
+                    self.total_steps += len(self.trials[-1].steps) - 1
                 else:
                     pass
 
-        self.trials = trials
 
 
 class SimSessionRandomGoal(SimSession):
