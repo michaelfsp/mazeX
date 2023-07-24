@@ -510,6 +510,9 @@ def softmax_euclidean_cost(beta, zvalues, euclidean_dists):
         probs = np.zeros(len(avalues))
         probs[avalues == max(avalues)] = 1
 
+    elif beta == 0:
+        probs =  np.ones_like(avalues) / len(avalues)
+
     else:
         #since the softmax is insensitive to subtraction of a value from
         #all values, we subtract the mean of the values in order to avoid
@@ -1618,7 +1621,7 @@ class SwitchAgent(HeuristicAgent):
         return values
 
 class BrownianAgent(Agent):
-    def __init__(self, beta, loc=None, xi=0, penalty_criterium='node',
+    def __init__(self, beta=0, loc=None, xi=0, penalty_criterium='node',
             penalty_type='exponential', heading=None):
         """Creates an agent that follows semi-Brownian motion or truly
         Brownian for xi=0.
@@ -2511,6 +2514,20 @@ def _triangle_inequality_helper_pbrs_single_intermediate(V_pre, dE_matrix, mu, i
                     continue
     return V_post
 
+@jit(nopython=True, nogil=True)
+def _triangle_inequality_helper_lower_bound(V_pre):
+    V_post = np.zeros_like(V_pre)
+    V_post[:] = V_pre[:]
+    n_nodes = len(V_post)
+    for i in range(n_nodes):
+        for j in range(n_nodes):
+            for k in range(n_nodes):
+                if i != j and j != k:
+                    V_post[j, k] = np.array([V_post[j, k], -np.abs(np.abs(V_post[j, i]) - np.abs(V_post[i, k]))]).min()
+                else:
+                    continue
+    return V_post
+
 
 class VMulti(Agent):
     def __init__(self, maze, alpha, gamma, reward_function, initfun, target_s_prime='exp',
@@ -2533,7 +2550,7 @@ class VMulti(Agent):
         self.alpha = alpha
         self.gamma = gamma
         self.mu = mu
-        self.alpha_triangle = alpha_triangle * alpha
+        self.alpha_triangle = alpha_triangle
         # FIXME: check that I have dtype='float' in other implementations too
 
         # Initialization
@@ -2635,6 +2652,11 @@ class VMulti(Agent):
                     self.triangle_function = functools.partial(_triangle_inequality_helper_pbrs, dE_matrix=self.maze.euclidean_distances_matrix, mu=mu)
                 else:
                     self.triangle_function = _triangle_inequality_helper
+            elif triangle == 'lower':
+                if reward_function == 'pbrs':
+                    pass#self.triangle_function = functools.partial(_triangle_inequality_helper_pbrs, dE_matrix=self.maze.euclidean_distances_matrix, mu=mu)
+                else:
+                    self.triangle_function = _triangle_inequality_helper_lower_bound
             else:
                 if reward_function == 'pbrs':
                     self.triangle_function = functools.partial(_triangle_inequality_helper_pbrs_single_intermediate, dE_matrix=self.maze.euclidean_distances_matrix, mu=mu)
@@ -2772,7 +2794,7 @@ class VMulti(Agent):
                     delta = True
 
         if delta and self.triangle:
-            if self.triangle == 'all':
+            if self.triangle == 'all' or self.triangle == 'lower':
                 self.triangle_inequality_updates(intermediates_list=None)
             elif self.triangle == 's':
                 if self.symmetrical:
@@ -2812,7 +2834,7 @@ class VMulti(Agent):
         if restore_V:
             old_V = copy.deepcopy(self.V)
 
-        res = super(VSR, self).evaluate_session(session, penalties=penalties)
+        res = super(VMulti, self).evaluate_session(session, penalties=penalties)
 
         if restore_V:
             self.V = old_V
@@ -3077,7 +3099,7 @@ class Z(Agent):
         if restore_V:
             old_V = copy.deepcopy(self.V)
 
-        res = super(OneStepTD, self).evaluate_session(session, penalties=penalties)
+        res = super(Z, self).evaluate_session(session, penalties=penalties)
 
         if restore_V:
             self.V = old_V
