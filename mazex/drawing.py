@@ -2,7 +2,7 @@
 Visually represent mazes and trials
 """
 import numpy as np
-import pylab as pl
+import matplotlib.pyplot as plt
 import networkx as nx
 from mazex.mazes import SquareMaze
 from mazex.exceptions import *
@@ -86,11 +86,11 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
     if not isinstance(M, SquareMaze):
         raise DrawException
     if not ax:
-        ax = pl.gca()
+        ax = plt.gca()
     # Makes sure the drawings are square and not rectangular
     ax.set_aspect('equal')
 
-    if not centrality:
+    if np.all(centrality == None):
         if isinstance(M, SquareMaze):
             nx.draw(M, pos=M.pos, ax=ax, node_color='#797b8c', linewidths=0,
                 node_size=800, width=6, **kwds)
@@ -98,7 +98,7 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                     node_size=350)
             nx.draw_networkx_nodes(M, pos=M.pos, ax=ax, node_color='#797b8c', linewidths=0,
                     node_size=100)
-            pl.tight_layout()
+            plt.tight_layout()
 
     else:
         import matplotlib as mpl
@@ -110,7 +110,17 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
         #        as_cmap=True)
         nodes_cm = cubehelix_palette(60, start=0.5, rot=-0.75,
                 gamma=1, hue=1, reverse=False, light=0.85, dark=0.15, as_cmap=True)
-        if centrality == 'betweenness':
+
+        if type(centrality) is dict and len(centrality) == len(M.nodes()):
+            centralities = centrality
+
+        elif type(centrality) in (list, np.ndarray) and len(centrality) == len(M.nodes()):
+            #we need to turn the list or array into a dictionary
+            centralities = {}
+            for n, c in zip(M.nodes(), centrality):
+                centralities[n] = c
+
+        elif centrality == 'betweenness':
             centralities = M.betweenness_centrality
 
         elif centrality == 'closeness':
@@ -139,7 +149,7 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
 
         elif centrality == 'spectral_ordering':
             centralities = M.spectral_ordering_centrality
-
+        
         if not nvmin:
             nvmin = min(list(centralities.values()))
 
@@ -163,7 +173,12 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                         cmap=nodes_cm, vmin=nvmin, vmax=nvmax, linewidths=0,
                         node_size=100)
 
-            if edge_centrality:
+
+            if edge_centrality in [False, None]:
+                nx.draw_networkx_edges(M, pos=M.pos, ax=ax,
+                        width=6.0)#, edge_color='#797b8c')
+
+            elif edge_centrality:
                 if type(edge_centrality) is dict:
                     edge_centralities = edge_centrality
 
@@ -192,13 +207,10 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                         edge_color=e_colors, edge_cmap=edges_cm, edge_vmin=evmin,
                         edge_vmax=evmax, width=6.0)
 
-            else:
-                nx.draw_networkx_edges(M, pos=M.pos, ax=ax,
-                        width=6.0)#, edge_color='#797b8c')
 
             # Create the colorbar for the nodes' centrality
             # 1st: create the axes to be used for the colorbars
-            ax = pl.gca()
+            ax = plt.gca()
             ax.set_xlim((-0.5, M.maze_size-0.5))
             ax.set_ylim((-0.5, M.maze_size-0.5))
             ax.set_xticks([])
@@ -213,7 +225,10 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                 n_ticks = [round(nvmin, 3), round(nvmax, 3)]
                 n_cbar = mpl.colorbar.ColorbarBase(n_cbar_ax, cmap=nodes_cm,
                         norm=n_norm, ticks=n_ticks)
-                n_cbar.set_label('Node %s centrality' % (centrality))
+                if type(centrality) is str:
+                    n_cbar.set_label('Node {} centrality'.format(centrality))
+                else:
+                    n_cbar.set_label('Node centrality')
 
                 if edge_centrality:
                     # 1st: create the axes to be used for the colorbars
@@ -227,9 +242,9 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                     e_cbar = mpl.colorbar.ColorbarBase(e_cbar_ax,
                             cmap=edges_cm, norm=e_norm, ticks=e_ticks,
                             orientation='horizontal')
-                    e_cbar.set_label('Edge betweenness centrality')
+                    e_cbar.set_label('Edge centrality')
 
-            pl.tight_layout()
+            plt.tight_layout()
 
         else:
             raise DrawException
