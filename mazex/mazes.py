@@ -177,6 +177,15 @@ def least_sdd_path_steps_matrix(maze, gamma, m_over_n, peano_order=False):
                 erl_steps_matrix[iv, iw] = np.average(least_sdd_paths_lengths)
     return erl_steps_matrix
 
+
+@functools.lru_cache(1024)
+def Pdiff(maze):
+    return np.linalg.inv(maze.degree_matrix) @ nx.adjacency_matrix(maze)
+
+@functools.lru_cache(1024)
+def DiffR(maze, gamma):
+    return np.linalg.inv(np.identity(36) - gamma * Pdiff(maze))
+
 class SquareMaze(nx.classes.graph.Graph):
     """Generic class of for square mazes.
     """
@@ -209,6 +218,8 @@ class SquareMaze(nx.classes.graph.Graph):
         self._least_sdd_matrix = None
         self._optimal_choice_dic = None
         self._euclidean_distances_matrix = None
+        self._Pdiff = None
+        self._DiffR = None
 
         self.nodes_reachable_n_steps = partial(nodes_reachable_n_steps,
                                                self)
@@ -463,6 +474,13 @@ class SquareMaze(nx.classes.graph.Graph):
             self._has_changed_since_least_sdd = False
 
         return self._least_sdd_matrix
+    
+    @property
+    def Pdiff(self):
+        return Pdiff(self)
+
+    def DiffR(self, gamma):
+        return DiffR(self, gamma)
 
     @property
     def optimal_choice_dic(self):
