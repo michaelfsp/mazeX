@@ -173,20 +173,22 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                         cmap=nodes_cm, vmin=nvmin, vmax=nvmax, linewidths=0,
                         node_size=100)
 
+            if edge_centrality == True and str(centrality) == 'betweenness':
+                edge_centralities = M.edge_betweenness_centrality
+                draw_edges_with_centrality = True
 
-            if edge_centrality in [False, None]:
-                nx.draw_networkx_edges(M, pos=M.pos, ax=ax,
-                        width=6.0)#, edge_color='#797b8c')
+            elif edge_centrality == True and str(centrality) == 'current_flow':
+                edge_centralities = M.edge_current_flow_betweenness_centrality
+                draw_edges_with_centrality = True
 
-            elif edge_centrality:
-                if type(edge_centrality) is dict:
-                    edge_centralities = edge_centrality
+            elif type(edge_centrality) is dict:
+                edge_centralities = edge_centrality
+                draw_edges_with_centrality = True
 
-                elif centrality == 'betweenness':
-                    edge_centralities = M.edge_betweenness_centrality
+            else:
+                draw_edges_with_centrality = False
 
-                elif centrality == 'current_flow':
-                    edge_centralities = M.edge_current_flow_betweenness_centrality
+            if draw_edges_with_centrality:
                 if not evmin:
                     evmin = min(list(edge_centralities.values()))
 
@@ -206,6 +208,10 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                 nx.draw_networkx_edges(M, pos=M.pos, ax=ax,
                         edge_color=e_colors, edge_cmap=edges_cm, edge_vmin=evmin,
                         edge_vmax=evmax, width=6.0)
+            
+            else:
+                nx.draw_networkx_edges(M, pos=M.pos, ax=ax,
+                        width=6.0)#, edge_color='#797b8c')
 
 
             # Create the colorbar for the nodes' centrality
@@ -230,7 +236,7 @@ def draw_maze(M, centrality=None, edge_centrality=True, simple_nodes=True,
                 else:
                     n_cbar.set_label('Node centrality')
 
-                if edge_centrality:
+                if draw_edges_with_centrality:
                     # 1st: create the axes to be used for the colorbars
                     e_cbar_ax = divider.append_axes('bottom', size='5%',
                             pad=0.05)
