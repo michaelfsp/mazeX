@@ -3105,3 +3105,420 @@ class Z(Agent):
             self.V = old_V
 
         return res
+
+
+class SR(Agent):
+    def __init__(self, maze, alpha, gamma, reward_function='cost', initfun='identity', target_s_prime='sample',
+                 target_s_prime_prime=None, symmetrical=False, beta=1, loc=None, xi=0,
+                 penalty_criterium='node', penalty_type='exponential',
+                 heading=None, maze_size=6, policy='softmax', triangle=False,
+                 short_range=False, mu=1, long_range=False, alpha_triangle=0, fast_eval=True, reverse_eval=False):
+        """
+        target_s_prime : 'sample', 'exp', 'max'
+        target_s_prime_prime : 'sample', 'exp', 'max', None
+        """
+        super(SR, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading, policy=policy)
+        
+        #TODO: remove the hack of passing maze as argument
+        self.maze = maze
+        self.maze_size = maze_size
+        self.initfun = initfun
+        self.alpha = alpha
+        self.gamma = gamma
+        self.mu = mu
+        self.alpha_triangle = alpha_triangle
+        # FIXME: check that I have dtype='float' in other implementations too
+
+        self.target_s_prime = target_s_prime
+        self.target_s_prime_prime = target_s_prime_prime
+        # Initialization
+
+        if target_s_prime == 'prediffusion':
+            self.M = maze.DiffR(gamma)
+
+        else:
+            if callable(initfun):
+                self.M = self._init_M(self.initfun)
+
+            elif initfun == 'identity':
+                self.M = np.identity(maze_size**2)
+
+            elif initfun == 'euclidean':
+                state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='euclidean')
+                self.M = self._init_M(state_initfunc)
+
+            elif initfun == 'manhattan':
+                state_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='manhattan')
+                self.M = self._init_M(state_initfunc)
+
+            elif initfun == 'erl_euclidean':
+                raise Exception('erl_euclidean init is not yet implemented')
+            elif initfun == 'erl_manhattan':
+                state_initfunc = functools.partial(spatial_reward_init, gamma=gamma, m=2, n=2)
+                self.M = self._init_M(state_initfunc)
+            elif initfun == 'erl_mix':
+                state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='manhattan')
+                state_potential_cost_initfunc = functools.partial(spatial_reward_init, gamma=gamma, m=2, n=2)
+                state_initfunc = lambda s, s_T: state_travel_cost_initfunc(s, s_T) + state_potential_cost_initfunc(s, s_T)
+                self.M = self._init_M(state_initfunc)
+            elif initfun == 'potential':
+                state_initfunc = functools.partial(spatial_reward_init, gamma=gamma, m=2, n=2)
+                self.M = self._init_M(state_initfunc)
+            elif initfun == 'pessimistic_cost':
+                state_initfunc = lambda s, s_T: -35
+                self.M = self._init_M(state_initfunc)
+            elif initfun == 'pessimistic_pbrs':
+                state_initfunc = lambda s, s_T: -35 + mu * euclidian_distance(s, s_T) -1
+                self.M = self._init_M(state_initfunc)
+
+    #        elif initfun == 'pbrs':
+    #            state_travel_cost_initfunc = functools.partial(state_reward_init, state_reward_val=-1, goal_reward_val=0, gamma=gamma, distance='manhattan')
+    #            state_potential_cost_initfunc = functools.partial(pbrs_spatial_init, gamma=gamma)
+    #            state_initfunc = lambda s, s_T: state_travel_cost_initfunc(s, s_T) + state_potential_cost_initfunc(s, s_T)
+    #            self.M = self._init_M(state_initfunc)
+
+            else: 
+                self.M = np.full((self.maze_size**2, self.maze_size**2), self.initfun, dtype='float')
+
+        # The SR should be initiated to the identity
+        #np.fill_diagonal(self.M, 1)
+        
+        self.goal = None
+        self.r_vec = None
+        
+        # Reward function
+        if callable(reward_function):
+            self.reward_function = reward_function
+
+        elif reward_function == 'cost':
+            self.reward_function = lambda s_T_i: -np.logical_not(np.eye(1, 36, s_T_i).flatten()).astype('float')
+
+        elif reward_function == 'reward':
+            self.reward_function = lambda s_T_i: np.eye(1, 36, s_T_i).flatten()
+
+        elif reward_function == 'pbrs_cost':
+            state_travel_cost = lambda s_T_i: -np.logical_not(np.eye(1, 36, s_T_i).flatten()).astype('float')
+            state_potential = lambda s_T_i: -self.maze.euclidean_distances_matrix[:, s_T_i]
+            self.reward_function = lambda s_T_i: state_travel_cost(s_T_i) + self.mu * state_potential(s_T_i)
+
+        elif reward_function == 'pbrs_reward':
+            state_reward = lambda s_T_i: np.eye(1, 36, s_T_i).flatten()
+            state_potential = lambda s_T_i: -self.maze.euclidean_distances_matrix[:, s_T_i]
+            self.reward_function = lambda s_T_i: state_reward(s_T_i) + self.mu * state_potential(s_T_i)
+
+#        elif reward_function == 'erl':
+#            self.reward_function = functools.partial(spatial_reward, m=2, n=2)
+#
+#        elif reward_function == 'mix':
+#            step_cost_val = -1
+#            goal_reward_val = 0
+#            cost_to_go_fun = lambda s, s_prime, s_T: step_cost_val
+#            state_travel_cost = functools.partial(combined_reward_function, step_reward_fun=cost_to_go_fun, goal_reward=goal_reward_val)
+#            state_potential_cost = functools.partial(spatial_reward, m=2, n=2)
+#            mixed_reward_function = lambda s, s_prime, s_T: state_travel_cost(s, s_prime, s_T) + state_potential_cost(s, s_prime, s_T)
+#            self.reward_function = mixed_reward_function
+#
+#        elif reward_function == 'pbrs':
+#            step_cost_val = -1
+#            goal_reward_val = 0
+#            cost_to_go_fun = lambda s, s_prime, s_T: step_cost_val
+#            state_travel_cost = functools.partial(combined_reward_function, step_reward_fun=cost_to_go_fun, goal_reward=goal_reward_val)
+#            state_potential_cost = functools.partial(pbrs_spatial_reward, m=2, n=2, gamma=gamma)
+#            mixed_reward_function = lambda s, s_prime, s_T: state_travel_cost(s, s_prime, s_T) + mu * state_potential_cost(s, s_prime, s_T)
+#            self.reward_function = mixed_reward_function
+#
+#        elif reward_function == 'potential':
+#            state_potential_cost = functools.partial(pbrs_spatial_reward, m=2, n=2, gamma=gamma)
+#
+#            self.reward_function = lambda s, s_prime, s_T: -state_potential_cost(s, s_prime, s_T)
+
+
+        if reward_function == 'reward' and fast_eval:
+            self.evaluate = self.evaluate_w_gamma_single_reward
+        elif reward_function == 'reward' and reverse_eval:
+            self.evaluate = self.evaluate_w_gamma_single_reward_reverse
+        else:
+            self.evaluate = self.evaluate_w_gamma
+
+
+        self.symmetrical = symmetrical
+        self.short_range = short_range
+        self.long_range = long_range
+
+        if gamma == 1 and triangle:
+            self.triangle = triangle
+            if triangle == 'all':
+                if reward_function == 'pbrs':
+                    self.triangle_function = functools.partial(_triangle_inequality_helper_pbrs, dE_matrix=self.maze.euclidean_distances_matrix, mu=mu)
+                else:
+                    self.triangle_function = _triangle_inequality_helper
+            elif triangle == 'lower':
+                if reward_function == 'pbrs':
+                    pass#self.triangle_function = functools.partial(_triangle_inequality_helper_pbrs, dE_matrix=self.maze.euclidean_distances_matrix, mu=mu)
+                else:
+                    self.triangle_function = _triangle_inequality_helper_lower_bound
+            else:
+                if reward_function == 'pbrs':
+                    self.triangle_function = functools.partial(_triangle_inequality_helper_pbrs_single_intermediate, dE_matrix=self.maze.euclidean_distances_matrix, mu=mu)
+                else:
+                    self.triangle_function = _triangle_inequality_helper_single_intermediate
+        else:
+            self.triangle = False
+
+    def _init_M(self, initfun):
+        M = np.empty((self.maze_size**2, self.maze_size**2))
+        for i, s in enumerate(self.maze.nodes()):
+            for j, s_T in enumerate(self.maze.nodes()):
+                M[i, j] = initfun(s, s_T)
+        return M
+        
+    def _set_loc_SR(self, node):
+        # we need to use a special _set_loc to trigger Q updates when the agent moves
+        # if it is not the very first location
+        if self.loc:
+            # it saves a bit of time for agents that don't learn
+            if self.alpha:
+                if node: # this let's us change the location to None without triggering value updates
+                    old_loc = self.loc
+                    new_loc = node
+                    if old_loc != new_loc:
+                        self.update_M(old_loc, new_loc)
+        _set_loc(self, node)
+    
+    loc = property(_get_loc, _set_loc_SR)
+
+    def _get_node_index(self, node):
+        """Helper function to retrieve indices of nodes in a matrix.
+
+        Accepts either a node or a list of nodes
+        """
+        if type(node) is list:
+            return [list(self.maze.nodes()).index(n) for n in node]
+        else:
+            return list(self.maze.nodes()).index(node)
+        
+    def get_M(self, s, s_T):
+        """Helper function to retrieve M(s,s_T) by looking up and using correct indices.
+        """
+        s_i, s_T_i = self._get_node_index([s, s_T])
+
+        return self.M[s_i, s_T_i]
+    
+    def triangle_inequality_updates(self, intermediates_list=None):
+        if intermediates_list == None:
+            # We assume it's all intermediates
+            Mpre = self.M
+            Mpost = self.triangle_function(Mpre)
+            self.M = (1 - self.alpha_triangle) * Mpre + self.alpha_triangle * Mpost
+        else:
+            intermediates_i = self._get_node_index(intermediates_list)
+            for intermediate_i in intermediates_i:
+                Mpre = self.M
+                Mpost = self.triangle_function(Mpre, intermediate_i=intermediate_i)
+                self.M = (1 - self.alpha_triangle) * Mpre + self.alpha_triangle * Mpost
+
+    def update_M(self, s, s_prime):
+        if self.target_s_prime == 'prediffusion':
+            pass
+
+        else:
+            s_i, s_prime_i = self._get_node_index([s, s_prime])
+            if self.target_s_prime == 'sample':
+                new_M_s_row = np.eye(1,36,s_i).flatten() + self.gamma * self.M[s_prime_i, :]
+
+            elif self.target_s_prime == 'exp':
+
+                s_neighbors = list(self.maze.neighbors(s))
+
+                goal_i = self._get_node_index(self.goal)
+                neighbors_i = self._get_node_index(s_neighbors)
+                self.r_vec = self.reward_function(goal_i)
+                all_values = self.M @ self.r_vec
+                values = all_values[neighbors_i]
+                choice_probs = self.choice_probs(values)
+                new_M_s_row = np.eye(1,36,s_i).flatten() + self.gamma * choice_probs @ self.M[neighbors_i, :]
+
+            elif self.target_s_prime == 'max':
+
+                s_neighbors = list(self.maze.neighbors(s))
+
+                goal_i = self._get_node_index(self.goal)
+                neighbors_i = self._get_node_index(s_neighbors)
+                self.r_vec = self.reward_function(goal_i)
+                all_values = self.M @ self.r_vec
+                values = all_values[neighbors_i]
+                new_M_s_row = np.eye(1,36,s_i).flatten() + self.gamma * self.M[neighbors_i, :][values.argmax()]
+    #            if np.std(values) > 0:
+    #                import ipdb; ipdb.set_trace()
+
+            elif self.target_s_prime == 'diffusion':
+
+                s_neighbors = list(self.maze.neighbors(s))
+
+                goal_i = self._get_node_index(self.goal)
+                neighbors_i = self._get_node_index(s_neighbors)
+                choice_probs = np.ones_like(neighbors_i) / len(neighbors_i)
+                new_M_s_row = np.eye(1,36,s_i).flatten() + self.gamma * choice_probs @ self.M[neighbors_i, :]
+
+            self.M[s_i, :] = (1 - self.alpha) * self.M[s_i, :] + self.alpha * new_M_s_row
+
+#        if self.long_range:
+#            M_s_old = self.get_M(s, s_T)
+#
+#            if s_prime == s_T or self.target_s_prime_prime == None:
+#                M_s_prime = self.get_M(s_prime, s_T)
+#            else:
+#                if self.target_s_prime_prime == 'sample':
+#                    # TODO: implement this
+#                    raise Exception('sample-sample updates not yet implemented')
+#                elif self.target_s_prime_prime == 'exp' or self.target_s_prime_prime == 'max':
+#                    s_prime_neighbors = list(self.maze.neighbors(s_prime))
+#                    RgM_s_prime_neighbors = np.zeros(len(s_prime_neighbors))
+#                    for i, s_prime_neighbor in enumerate(s_prime_neighbors):
+#                        M_s_prime_neighbor = self.get_M(s_prime_neighbor, s_T)
+#                        RgM_s_prime_neighbors[i] = self.reward_function(s_prime, s_prime_neighbor, s_T) + self.gamma * M_s_prime_neighbor
+#
+#                    if self.target_s_prime_prime == 'exp':
+#                        M_s_prime = np.sum(self.choice_probs(RgM_s_prime_neighbors) * RgM_s_prime_neighbors)
+#                    elif self.target_s_prime_prime == 'max':
+#                        M_s_prime = np.max(RgM_s_prime_neighbors)
+#
+#            if self.target_s_prime == 'sample':
+#                R = self.reward_function(s, s_prime, s_T)
+#                target = R + self.gamma * M_s_prime
+#            elif self.target_s_prime == 'exp' or self.target_s_prime == 'max':
+#                s_neighbors = list(self.maze.neighbors(s))
+#                RgM_s_neighbors = np.zeros(len(s_neighbors))
+#                for i, s_neighbor in enumerate(s_neighbors):
+#                    if s_neighbor == s_prime:
+#                        M_s_neighbor = M_s_prime
+#                    else:
+#                        M_s_neighbor = self.get_M(s_neighbor, s_T)
+#                    RgM_s_neighbors[i] = self.reward_function(s, s_neighbor, s_T) + self.gamma * M_s_neighbor
+#
+#                if self.target_s_prime == 'exp':
+#                    target = np.sum(self.choice_probs(RgM_s_neighbors) * RgM_s_neighbors)
+#                elif self.target_s_prime == 'max':
+#                    target = np.max(RgM_s_neighbors)
+#
+#            MPE = target - M_s_old
+#
+#            self.M[s_i, s_T_i] =  M_s_old + self.alpha * MPE
+#
+#            if self.symmetrical:
+#                self.M[s_T_i, s_i] =  M_s_old + self.alpha * MPE
+#
+#            if MPE != 0:
+#                delta = True
+#
+#        if self.short_range == 's_prime':
+#            LMPE = self.reward_function(s, s_prime, s_prime) - self.M[s_i, s_prime_i]
+#            self.M[s_i, s_prime_i] += self.alpha * LMPE
+#
+#            if self.symmetrical:
+#                self.M[s_prime_i, s_i] = self.M[s_i, s_prime_i]
+#
+#            if LMPE != 0:
+#                delta = True
+#
+#        elif self.short_range == 'all_s_primes':
+#            for s_neighbor in list(self.maze.neighbors(s)):
+#                s_neighbor_i = self._get_node_index(s_neighbor)
+#
+#                LMPE = self.reward_function(s, s_neighbor, s_neighbor) - self.M[s_i, s_neighbor_i]
+#                self.M[s_i, s_neighbor_i] += self.alpha * LMPE
+#
+#                if self.symmetrical:
+#                    self.M[s_neighbor_i, s_i] = self.M[s_i, s_neighbor_i]
+#
+#                if LMPE != 0:
+#                    delta = True
+#
+#        if delta and self.triangle:
+#            if self.triangle == 'all' or self.triangle == 'lower':
+#                self.triangle_inequality_updates(intermediates_list=None)
+#            elif self.triangle == 's':
+#                if self.symmetrical:
+#                    intermediates = [s, s_prime]
+#                else:
+#                    intermediates = [s]
+#                self.triangle_inequality_updates(intermediates_list=intermediates)
+
+
+    def evaluate_w_gamma_single_reward(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        goal_i = self._get_node_index(goal)
+        nodeslist_i = self._get_node_index(nodeslist)
+        
+        values = self.M[nodeslist_i, goal_i]
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_w_gamma_single_reward_reverse(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        goal_i = self._get_node_index(goal)
+        nodeslist_i = self._get_node_index(nodeslist)
+        
+        values = self.M[goal_i, nodeslist_i]
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+    def evaluate_w_gamma(self, nodeslist, goal, penalties=False):
+        """Gets the next node in the node cache"""
+        # TODO: make it such that the goal is not necessarily set by this
+        # function so that self._set_loc can then update the self.Q
+        # It is a bit hacky...
+        self.goal = goal
+        goal_i = self._get_node_index(goal)
+        nodeslist_i = self._get_node_index(nodeslist)
+        
+        self.r_vec = self.reward_function(goal_i)
+
+        all_values = self.M @ self.r_vec
+        values = all_values[nodeslist_i]
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values -= penalties
+
+        return values
+
+
+    def evaluate_session(self, session, penalties=False, restore_M=True):
+        """Running a session evaluation will trigger location changes which 
+        in turn will trigger update_M() via _set_loc_OneStepTD(). This means
+        that after each evaluation M will be altered and as a consequence
+        repeated runnings of evaluate_session() would yield different results
+        on the same session. For that reason we use this wrapper function that
+        restores M after session has been evaluated.
+        """
+        if restore_M:
+            old_M = copy.deepcopy(self.M)
+
+        res = super(SR, self).evaluate_session(session, penalties=penalties)
+
+        if restore_M:
+            self.M = old_M
+
+        return res
