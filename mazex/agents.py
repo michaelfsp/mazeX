@@ -629,7 +629,7 @@ def unitvarsoftmax(beta, avalues):
 #    return probs
 
 class Agent:
-    def __init__(self, beta=1, loc=None, xi=0, penalty_criterium='node',
+    def __init__(self, beta=1., loc=None, xi=0., penalty_criterium='node',
             penalty_type='exponential', heading=None, policy='softmax'):
         """Parameters:
         -----------
