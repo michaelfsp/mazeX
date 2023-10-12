@@ -8,7 +8,7 @@ from scipy.stats import vonmises
 
 import mazex as mx
 from mazex.exceptions import *
-from mazex.utils import (angle_between_nodes, assert_is_node,
+from mazex.utils import (angle_between_nodes, angle_between_node_and_heading, assert_is_node,
 assert_nodes_adjacent, get_von_mises_dictionary, get_von_mises_array,
 euclidian_distance, manhattan_distance, scale_dict_values)
 
@@ -1058,15 +1058,16 @@ class HeuristicAgent(Agent):
                 penalty_criterium=penalty_criterium, penalty_type=penalty_type,
                 heading=heading)
 
+        self.distribution = distribution
         self.kappa = kappa
-        if self.kappa:
+        if self.kappa and distribution == 'vonmises':
             self.vm_dist = get_von_mises_array(maze_size, kappa)
             self.max_vm = vonmises.pdf(0, kappa=kappa)
 
         #self.angles_dic = get_angles_dictionary(maze_size)
         #self.angles_dic = angle_between_nodes
 
-    def evaluate(self, nodeslist, goal, distribution='cos', penalties=True):
+    def evaluate(self, nodeslist, goal, distribution=None, penalties=True):
         """Returns a vector with the edge values of each edge given as
         input.
 
@@ -1086,6 +1087,10 @@ class HeuristicAgent(Agent):
 
         # this little trick makes the method work even if not a list
         # but a single node is passed
+
+        if not distribution:
+            distribution = self.distribution
+
         try:
             assert_is_node(nodeslist)
             nodeslist = [nodeslist]
@@ -1416,7 +1421,7 @@ class MixtureAgent(Agent):
 
 
     def __init__(self, maze, loc=None, beta=1, xi=0, gamma=0, delta=0,
-                 epsilon=0, zeta=0, nsteps=2, centrality='edge_betweenness'):
+                 epsilon=0, zeta=0, pi=0, nsteps=2, centrality='edge_betweenness'):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi)
 
         self.maze = maze
@@ -1425,6 +1430,7 @@ class MixtureAgent(Agent):
         self._delta = delta #    Planning
         self._epsilon = epsilon #N Steps
         self._zeta = zeta #      Centrality
+        self._pi = pi #     Forward
 
         self._nsteps = nsteps
         self._centrality = centrality #HACK: this is not being used directly
@@ -1451,6 +1457,12 @@ class MixtureAgent(Agent):
                                                     loc=loc)
         else:
             self.centrality_agent = None
+
+        if pi:
+            # HACK: we have to assume some orientation for the first step
+            self.forward_agent = ForwardAgent(loc=loc, heading='^')
+        else:
+            self.forward_agent = None
 
     @property
     def gamma(self):
@@ -1505,6 +1517,16 @@ class MixtureAgent(Agent):
                                                 centrality=self._centrality,
                                                 loc=self.loc)
         self._zeta = new_zeta
+
+    @property
+    def pi(self):
+        return self._pi
+
+    @pi.setter
+    def pi(self, new_pi):
+        if not self.forward_agent and new_pi != 0:
+            self.forward_agent = ForwardAgent(loc=self.loc)
+        self._pi = new_pi
 
     @property
     def centrality(self):
@@ -1570,8 +1592,15 @@ class MixtureAgent(Agent):
         else:
             penalties = 0
 
+        if self.pi:
+            forward_value = self.forward_agent.evaluate(nodeslist, goal,
+                    penalties = False)
+        else:
+            forward_value = 0
+
         value = ((self.gamma*heuristic_value + self.delta*omniscient_value +
-                self.epsilon*nsteps_value + self.zeta*centrality_value)
+                self.epsilon*nsteps_value + self.zeta*centrality_value +
+            self.pi*forward_value)
                 - penalties)
         return value
 
@@ -1590,6 +1619,8 @@ class MixtureAgent(Agent):
             self.nsteps_agent._loc = node
         if self._zeta:
             self.centrality_agent._loc = node
+        if self._pi:
+            self.forward_agent._loc = node
 
     loc = property(_get_loc, set_loc)
 
@@ -1636,6 +1667,59 @@ class BrownianAgent(Agent):
         if penalties:
             penalties = self.penalty_factor(nodeslist)
             values = values - penalties
+
+        return values
+
+
+class ForwardAgent(Agent):
+    def __init__(self, beta=0, loc=None, xi=0, penalty_criterium='node',
+            penalty_type='exponential', heading=None, distribution='cos',
+                 kappa=None, maze_size=6):
+        """Creates an agent that follows semi-Brownian motion with a forward direction bias.
+        """
+        super(ForwardAgent, self).__init__(loc=loc, beta=beta, xi=xi,
+                penalty_criterium=penalty_criterium,
+                penalty_type=penalty_type, heading=heading)
+
+        self.distribution = distribution
+        self.kappa = kappa
+        if self.kappa and distribution == 'vonmises':
+            self.vm_dist = get_von_mises_array(maze_size, kappa)
+            self.max_vm = vonmises.pdf(0, kappa=kappa)
+
+    def evaluate(self, nodeslist, goal, distribution=None, penalties=True):
+
+        if not distribution:
+            distribution = self.distribution
+
+        try:
+            assert_is_node(nodeslist)
+            nodeslist = [nodeslist]
+        except InvalidNode:
+            pass
+
+        angles = []
+        for n in nodeslist:
+            angles.append(angle_between_node_and_heading(self.loc, n, self.heading))
+
+        if distribution == 'vonmises':
+            # since what is stored in self.vm_dist is a 2D array with angles
+            # and values, we first determine the index of the closes angle entry
+            # in the matrix and then retrieve the distribution value
+            vm_indices = [np.argmin(abs(self.vm_dist[0] - angle)) for angle in angles]
+
+            dist_val = self.vm_dist[1][vm_indices]
+
+        elif distribution == 'cos':
+            dist_val = np.cos(angles)
+
+        if penalties:
+            penalties = self.penalty_factor(nodeslist)
+
+            values = dist_val - penalties
+
+        else:
+            values = dist_val
 
         return values
 
