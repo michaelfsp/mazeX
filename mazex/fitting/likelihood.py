@@ -315,6 +315,7 @@ class MixtureLikelihood(Likelihood):
             delta=1,
             epsilon=1,
             zeta=1,
+            pi=1,
             nsteps=nsteps,
             centrality=centrality,
             loc=None,
@@ -339,6 +340,11 @@ class MixtureLikelihood(Likelihood):
             self.centrality_chosen_values,
             self.centrality_values,
         ) = self.agent.centrality_agent.evaluate_session(session)
+
+        (
+            self.forward_chosen_values,
+            self.forward_values,
+        ) = self.agent.forward_agent.evaluate_session(session)
 
         (
             self.penalty_chosen_values,
@@ -412,6 +418,21 @@ class MixtureLikelihood(Likelihood):
             subtract_mean=subtract_mean,
         )
 
+    def gdpi_nll(self, params_array, subtract_mean=True):
+        gamma, delta, pi = params_array
+        epsilon = 0
+        zeta = 0
+        xi = 0
+        return self.vect_nll(
+            gamma=gamma,
+            delta=delta,
+            epsilon=epsilon,
+            zeta=zeta,
+            pi=pi,
+            xi=xi,
+            subtract_mean=subtract_mean,
+        )
+
     def gzx_nll(self, params_array, subtract_mean=True):
         gamma, zeta, xi = params_array
         delta = 0
@@ -468,7 +489,7 @@ class MixtureLikelihood(Likelihood):
         )
 
     def vect_nll(
-        self, gamma, delta, epsilon, zeta, xi, subtract_mean=True, numexpr=True
+        self, gamma, delta, epsilon, zeta, pi, xi, subtract_mean=True, numexpr=True
     ):
         # this is essentially a vectorized softmax with beta = 1
         if numexpr:
@@ -477,12 +498,14 @@ class MixtureLikelihood(Likelihood):
             sncv = self.nsteps_chosen_values
             sccv = self.centrality_chosen_values
             spcv = self.penalty_chosen_values
+            spicv = self.forward_chosen_values
 
             self.comb_chosen_values = ne.evaluate(
                 "(gamma * shcv\
                     + delta * socv\
                     + epsilon * sncv\
                     + zeta * sccv\
+                    + pi * spicv\
                     - xi * spcv)"
             )
 
@@ -491,12 +514,14 @@ class MixtureLikelihood(Likelihood):
             snv = self.nsteps_values
             scv = self.centrality_values
             spv = self.penalty_values
+            spiv = self.forward_values
 
             self.comb_values = ne.evaluate(
                 "(gamma * shv\
                     + delta * sov\
                     + epsilon * snv\
                     + zeta * scv\
+                    + pi * spiv\
                     - xi * spv)"
             )
         else:
@@ -505,6 +530,7 @@ class MixtureLikelihood(Likelihood):
                 + delta * self.omniscient_chosen_values
                 + epsilon * self.nsteps_chosen_values
                 + zeta * self.centrality_chosen_values
+                + pi * self.forward_chosen_values
                 - xi * self.penalty_chosen_values
             )
 
@@ -513,6 +539,7 @@ class MixtureLikelihood(Likelihood):
                 + delta * self.omniscient_values
                 + epsilon * self.nsteps_values
                 + zeta * self.centrality_values
+                + pi * self.forward_values
                 - xi * self.penalty_values
             )
 
