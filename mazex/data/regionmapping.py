@@ -4,7 +4,12 @@ import numpy as np
 import pylab as pl
 
 import xml.etree.ElementTree as ET
-import shapely.geometry
+
+import warnings
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=DeprecationWarning)
+    import shapely.geometry
+
 from descartes.patch import PolygonPatch
 from PIL import Image
 
