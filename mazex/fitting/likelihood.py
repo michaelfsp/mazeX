@@ -303,7 +303,9 @@ class Likelihood(object):
 
 
 class MixtureLikelihood(Likelihood):
-    def __init__(self, session, nsteps=2, centrality="edge_betweenness"):
+    def __init__(
+        self, session, nsteps=2, centrality="edge_betweenness", penalty_criterium="node"
+    ):
         # TODO: turn nsteps into a property and make it such that changing it
         # triggers recalculation of (only) the nsteps likelihood components
         super(MixtureLikelihood, self).__init__(session)
@@ -316,8 +318,10 @@ class MixtureLikelihood(Likelihood):
             epsilon=1,
             zeta=1,
             pi=1,
+            psi=1,
             nsteps=nsteps,
             centrality=centrality,
+            penalty_criterium=penalty_criterium,
             loc=None,
         )
 
@@ -345,6 +349,12 @@ class MixtureLikelihood(Likelihood):
             self.forward_chosen_values,
             self.forward_values,
         ) = self.agent.forward_agent.evaluate_session(session)
+
+        self.agent.penalty_type = "constant"
+        (
+            self.constant_penalty_chosen_values,
+            self.constant_penalty_values,
+        ) = self.agent.evaluate_penalties_session(session)
 
         (
             self.penalty_chosen_values,
@@ -433,6 +443,22 @@ class MixtureLikelihood(Likelihood):
             subtract_mean=subtract_mean,
         )
 
+    def gdpipsi_nll(self, params_array, subtract_mean=True):
+        gamma, delta, pi, psi = params_array
+        epsilon = 0
+        zeta = 0
+        xi = 0
+        return self.vect_nll(
+            gamma=gamma,
+            delta=delta,
+            epsilon=epsilon,
+            zeta=zeta,
+            pi=pi,
+            psi=psi,
+            xi=xi,
+            subtract_mean=subtract_mean,
+        )
+
     def gzx_nll(self, params_array, subtract_mean=True):
         gamma, zeta, xi = params_array
         delta = 0
@@ -489,7 +515,7 @@ class MixtureLikelihood(Likelihood):
         )
 
     def vect_nll(
-        self, gamma, delta, epsilon, zeta, pi, xi, subtract_mean=True, numexpr=True
+        self, gamma, delta, epsilon, zeta, pi, psi, xi, subtract_mean=True, numexpr=True
     ):
         # this is essentially a vectorized softmax with beta = 1
         if numexpr:
@@ -499,6 +525,7 @@ class MixtureLikelihood(Likelihood):
             sccv = self.centrality_chosen_values
             spcv = self.penalty_chosen_values
             spicv = self.forward_chosen_values
+            spsicv = self.constant_penalty_chosen_values
 
             self.comb_chosen_values = ne.evaluate(
                 "(gamma * shcv\
@@ -506,6 +533,7 @@ class MixtureLikelihood(Likelihood):
                     + epsilon * sncv\
                     + zeta * sccv\
                     + pi * spicv\
+                    - psi * spsicv\
                     - xi * spcv)"
             )
 
@@ -515,6 +543,7 @@ class MixtureLikelihood(Likelihood):
             scv = self.centrality_values
             spv = self.penalty_values
             spiv = self.forward_values
+            spsiv = self.constant_penalty_values
 
             self.comb_values = ne.evaluate(
                 "(gamma * shv\
@@ -522,6 +551,7 @@ class MixtureLikelihood(Likelihood):
                     + epsilon * snv\
                     + zeta * scv\
                     + pi * spiv\
+                    - psi * spsiv\
                     - xi * spv)"
             )
         else:
@@ -531,6 +561,7 @@ class MixtureLikelihood(Likelihood):
                 + epsilon * self.nsteps_chosen_values
                 + zeta * self.centrality_chosen_values
                 + pi * self.forward_chosen_values
+                - psi * self.constant_penalty_chosen_values
                 - xi * self.penalty_chosen_values
             )
 
@@ -540,6 +571,7 @@ class MixtureLikelihood(Likelihood):
                 + epsilon * self.nsteps_values
                 + zeta * self.centrality_values
                 + pi * self.forward_values
+                - psi * self.constant_penalty_values
                 - xi * self.penalty_values
             )
 

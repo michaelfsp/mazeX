@@ -830,13 +830,11 @@ class Agent:
 
     def _constant_penalty_factor(self, nodeslist):
         """Returns the penalty factor for each node on a list.
-        The rule is: for nodes which have never been visited the penalty is 0.
-        All nodes which have been visited get ordered by step count at last
-        visit in reverse order. The penalty is self.xi for last visited,
-        self.xi*2**-1 for before last visited, self.xi*2**-2 for before before
-        last visited, ...
+        The rule is: for nodes which have never been visited the penalty is 
+        -xi (a "reward") whereas for visited nodes it is +xi (negative, 
+        as penalties get subtracted from values
         """
-        penalties = np.zeros(len(nodeslist))
+        penalties = -np.ones(len(nodeslist)) * self.xi
 
         for i,n in enumerate(nodeslist):
             if self.penalty_criterium == 'edge_unidir':
@@ -1421,8 +1419,9 @@ class MixtureAgent(Agent):
 
 
     def __init__(self, maze, loc=None, beta=1, xi=0, gamma=0, delta=0,
-                 epsilon=0, zeta=0, pi=0, nsteps=2, centrality='edge_betweenness'):
-        super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi)
+                 epsilon=0, zeta=0, pi=0, psi=0, nsteps=2, centrality='edge_betweenness',
+                 penalty_criterium='node'):
+        super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi, penalty_criterium=penalty_criterium)
 
         self.maze = maze
 
