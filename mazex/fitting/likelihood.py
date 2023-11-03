@@ -1,5 +1,7 @@
 import numpy as np
 from mazex.agents import HeuristicAgent, MixtureAgent
+from mazex.data.load import load_steps_multi, compute_features
+from mazex.utils import pad_with_nan
 
 import math
 import numba
@@ -304,7 +306,12 @@ class Likelihood(object):
 
 class MixtureLikelihood(Likelihood):
     def __init__(
-        self, session, nsteps=2, centrality="edge_betweenness", penalty_criterium="node"
+        self,
+        session,
+        nsteps=2,
+        centrality="edge_betweenness",
+        penalty_criterium="node",
+        pandas_interface=False,
     ):
         # TODO: turn nsteps into a property and make it such that changing it
         # triggers recalculation of (only) the nsteps likelihood components
@@ -318,48 +325,139 @@ class MixtureLikelihood(Likelihood):
             epsilon=1,
             zeta=1,
             pi=1,
-            psi=1,
             nsteps=nsteps,
             centrality=centrality,
             penalty_criterium=penalty_criterium,
             loc=None,
         )
 
-        (
-            self.heuristic_chosen_values,
-            self.heuristic_values,
-        ) = self.agent.heuristic_agent.evaluate_session(session)
+        if pandas_interface:
+            session_df = load_steps_multi([session])
+            session_df = compute_features(session_df)
+            self.session_df = session_df
 
-        (
-            self.omniscient_chosen_values,
-            self.omniscient_values,
-        ) = self.agent.omniscient_agent.evaluate_session(session)
+            self.heuristic_chosen_values = np.cos(np.array(session_df.angle_to_goal))
+            # we have to pad lists with nans because different lists in the list of lists have different lengths
+            all_angle_to_goal_padded = pad_with_nan(
+                session_df.all_angle_to_goal, max_len=4
+            )
+            self.heuristic_values = np.cos(np.array(all_angle_to_goal_padded))
 
-        (
-            self.nsteps_chosen_values,
-            self.nsteps_values,
-        ) = self.agent.nsteps_agent.evaluate_session(session)
+            self.forward_chosen_values = np.cos(np.array(session_df.angle_to_heading))
+            # we have to pad lists with nans because different lists in the list of lists have different lengths
+            all_angle_to_heading_padded = pad_with_nan(
+                session_df.all_angle_to_heading, max_len=4
+            )
+            self.forward_values = np.cos(np.array(all_angle_to_heading_padded))
 
-        (
-            self.centrality_chosen_values,
-            self.centrality_values,
-        ) = self.agent.centrality_agent.evaluate_session(session)
+            if penalty_criterium == "node":
+                self.constant_penalty_chosen_values = np.array(
+                    session_df.chosen_node_visited
+                )
+                self.constant_penalty_values = np.array(
+                    pad_with_nan(session_df.available_node_visited)
+                )
 
-        (
-            self.forward_chosen_values,
-            self.forward_values,
-        ) = self.agent.forward_agent.evaluate_session(session)
+            elif penalty_criterium == "edge_unidir":
+                self.constant_penalty_chosen_values = np.array(
+                    session_df.chosen_dir_edge_visited
+                )
+                self.constant_penalty_values = np.array(
+                    pad_with_nan(session_df.available_dir_edge_visited)
+                )
 
-        self.agent.penalty_type = "constant"
-        (
-            self.constant_penalty_chosen_values,
-            self.constant_penalty_values,
-        ) = self.agent.evaluate_penalties_session(session)
+            self.omniscient_chosen_values = -np.array(session_df.geodesic_delta)
+            self.omniscient_values = -np.array(
+                pad_with_nan(session_df.all_geodesic_deltas)
+            )
 
-        (
-            self.penalty_chosen_values,
-            self.penalty_values,
-        ) = self.agent.evaluate_penalties_session(session)
+            # HACK: this is a temporary fix
+            (
+                self.nsteps_chosen_values,
+                self.nsteps_values,
+            ) = self.agent.nsteps_agent.evaluate_session(session)
+
+            (
+                self.centrality_chosen_values,
+                self.centrality_values,
+            ) = self.agent.centrality_agent.evaluate_session(session)
+
+            self.agent.penalty_type = "exponential"
+            (
+                self.penalty_chosen_values,
+                self.penalty_values,
+            ) = self.agent.evaluate_penalties_session(session)
+
+        else:
+            #            (
+            #                self.heuristic_chosen_values,
+            #                self.heuristic_values,
+            #            ) = self.agent.heuristic_agent.evaluate_session(session)
+            #
+            #            (
+            #                self.omniscient_chosen_values,
+            #                self.omniscient_values,
+            #            ) = self.agent.omniscient_agent.evaluate_session(session)
+            #
+            #            (
+            #                self.nsteps_chosen_values,
+            #                self.nsteps_values,
+            #            ) = self.agent.nsteps_agent.evaluate_session(session)
+            #
+            #            (
+            #                self.centrality_chosen_values,
+            #                self.centrality_values,
+            #            ) = self.agent.centrality_agent.evaluate_session(session)
+            #
+            #            (
+            #                self.forward_chosen_values,
+            #                self.forward_values,
+            #            ) = self.agent.forward_agent.evaluate_session(session)
+
+            (
+                heuristicv,
+                omniscientv,
+                nstepsv,
+                centralityv,
+                forwardv,
+            ) = self.agent.evaluate_session_subagents(session)
+
+            (
+                self.heuristic_chosen_values,
+                self.heuristic_values,
+            ) = heuristicv
+
+            (
+                self.omniscient_chosen_values,
+                self.omniscient_values,
+            ) = omniscientv
+
+            (
+                self.nsteps_chosen_values,
+                self.nsteps_values,
+            ) = nstepsv
+
+            (
+                self.centrality_chosen_values,
+                self.centrality_values,
+            ) = centralityv
+
+            (
+                self.forward_chosen_values,
+                self.forward_values,
+            ) = forwardv
+
+            self.agent.penalty_type = "constant"
+            (
+                self.constant_penalty_chosen_values,
+                self.constant_penalty_values,
+            ) = self.agent.evaluate_penalties_session(session)
+
+            self.agent.penalty_type = "exponential"
+            (
+                self.penalty_chosen_values,
+                self.penalty_values,
+            ) = self.agent.evaluate_penalties_session(session)
 
     # Deprecated!
     def slow_nll(self, params_array):
