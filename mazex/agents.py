@@ -40,7 +40,7 @@ def _set_loc(self, node):
     elif new_loc is None:
         self._loc = None
 
-    elif not old_loc is None and not node is None:
+    elif old_loc is not None and node is not None and old_loc != new_loc:
         # I am calling it a directed edge because our edges normally
         # have a specific node order specification but here we care
         # about node order in that it specifies a direction
@@ -759,20 +759,7 @@ class Agent:
         However do note that heading_note might have coordinates that
         are outside of the maze. This should still be OK.
         """
-        if not self.heading:
-            raise NoHeading
-        elif self.heading == '^':
-            heading_node = (self.loc[0], self.loc[1]+1)
-        elif self.heading == 'v':
-            heading_node = (self.loc[0], self.loc[1]-1)
-        elif self.heading == '<':
-            heading_node = (self.loc[0]-1, self.loc[1])
-        elif self.heading == '>':
-            heading_node = (self.loc[0]+1, self.loc[1])
-        else:
-            raise InvalidHeading
-
-        return angle_between_nodes(self.loc, node, heading_node)
+        return angle_between_node_and_heading(self.loc, node, self.heading)
 
     def choice_probs(self, values, debug=False):
         """Return choice probabilities given edge_values.
