@@ -1738,11 +1738,13 @@ class BrownianAgent(Agent):
 
 
 class ForwardAgent(Agent):
-    def __init__(self, beta=0, loc=None, xi=0, penalty_criterium='node',
+    def __init__(self, beta=1, loc=None, xi=0, penalty_criterium='node',
             penalty_type='exponential', heading=None, distribution='cos',
                  kappa=None, maze_size=6):
         """Creates an agent that follows semi-Brownian motion with a forward direction bias.
         """
+        self.heading_history = []
+        self._heading = None
         super(ForwardAgent, self).__init__(loc=loc, beta=beta, xi=xi,
                 penalty_criterium=penalty_criterium,
                 penalty_type=penalty_type, heading=heading)
@@ -1752,6 +1754,16 @@ class ForwardAgent(Agent):
         if self.kappa and distribution == 'vonmises':
             self.vm_dist = get_von_mises_array(maze_size, kappa)
             self.max_vm = vonmises.pdf(0, kappa=kappa)
+
+
+    def _set_heading(self, heading):
+        self.heading_history.append(self.heading)
+        self._heading = heading
+        
+    def _get_heading(self):
+        return self._heading
+        
+    heading = property(_get_heading, _set_heading)
 
     def evaluate(self, nodeslist, goal, distribution=None, penalties=True):
 
@@ -1766,7 +1778,7 @@ class ForwardAgent(Agent):
 
         angles = []
         for n in nodeslist:
-            angles.append(angle_between_node_and_heading(self.loc, n, self.heading))
+            angles.append(self.angle_to_heading(n))
 
         if distribution == 'vonmises':
             # since what is stored in self.vm_dist is a 2D array with angles
@@ -1788,6 +1800,60 @@ class ForwardAgent(Agent):
             values = dist_val
 
         return values
+
+    def evaluate_session(self, session, penalties=False):
+        """Return a vector with value of each chosen step and a matrix with
+        values for every choice at every given step such that it can be fed to
+        a likelihood function for fitting purposes.
+
+        Note: it will change agent's loc and node and edge visit_caches
+        """
+        #self.loc = None # stupid hack just to prevent that the change of
+        # location later on is not assumed if it fails some validity check
+        # usually for contiguity / possible transtion
+        first_loc = session.trials[0].steps[0].loc
+        self.loc = first_loc
+
+        # Find out the size of the array we need
+        # Since when the agent is at the goal there is no decision to be made
+        # we need n-1 rows per trial as the last one is the goal, or n in case
+        # the goal was not reached
+        # Session.count_total_steps already takes care of that
+        n_steps = session.count_total_steps()
+        value_chosen = np.zeros(n_steps)
+
+        values = np.empty((n_steps, 4))
+        values.fill(np.nan)
+
+        step_number = 0
+        for t in session.trials:
+            #self.loc = None # klugey but necessary because otherwise agent
+            # also prevents triggering of value update for the RL agents
+            # won't allow teleportation
+            self.node_visit_cache.clear()
+            self.edge_visit_cache.clear()
+
+            for s in t.steps[:-1]: # last step is the goal
+                self.loc = s.loc
+
+                if penalties is False:
+                    step_values = self.evaluate(s.available_nodes, t.goal,
+                            penalties=False)
+                else:
+                    step_values = self.evaluate(s.available_nodes, t.goal,
+                            penalties=True)
+
+                value_chosen[step_number] = step_values[s.choice]
+                values[step_number, 0:len(step_values)] = step_values
+
+                step_number += 1
+
+            # once the iteration through all the locations but the last one
+            # has happened we move the agent to the last location so that it 
+            # can trigger a value update for the RL agents
+            #self.loc = t.steps[-1].loc
+
+        return (value_chosen, values)
 
 
 class Q0(Agent):
