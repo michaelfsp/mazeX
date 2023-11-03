@@ -264,6 +264,10 @@ def load_steps_multi(sessions):
                     choice_was_optimal = 0
                     geodesic_delta = 1
 
+                all_geodesic_deltas = [
+                    -1 if node in optimal_choice else 1 for node in s.available_nodes
+                ]
+
                 data.append(
                     [
                         date_time,
@@ -285,6 +289,7 @@ def load_steps_multi(sessions):
                         geodesic_distance_goal,
                         choice_was_optimal,
                         geodesic_delta,
+                        all_geodesic_deltas,
                     ]
                 )
 
@@ -312,6 +317,7 @@ def load_steps_multi(sessions):
             "geodesic_dist_goal",
             "choice_was_optimal",
             "geodesic_delta",
+            "all_geodesic_deltas",
         ],
     )
 
@@ -500,6 +506,7 @@ def load_trials_multi(sessions):
 
 
 def row_computations(choice, goal, location, heading, available_nodes):
+    n_available_nodes = len(available_nodes)
     manhattan_dist_to_goal = manhattan_distance(location, goal)
     euclidean_dist_to_goal = euclidian_distance(location, goal)
 
@@ -507,7 +514,22 @@ def row_computations(choice, goal, location, heading, available_nodes):
     euclidean_delta = euclidian_distance(choice, goal) - euclidean_dist_to_goal
     angle_to_goal = angle_between_nodes(location, choice, goal)
     angle_to_heading = angle_between_node_and_heading(location, choice, heading)
-    n_available_nodes = len(available_nodes)
+
+    all_manhattan_deltas = [
+        manhattan_distance(choice, goal) - manhattan_dist_to_goal
+        for choice in available_nodes
+    ]
+    all_euclidean_deltas = [
+        euclidian_distance(choice, goal) - euclidean_dist_to_goal
+        for choice in available_nodes
+    ]
+    all_angles_to_goal = [
+        angle_between_nodes(location, choice, goal) for choice in available_nodes
+    ]
+    all_angles_to_heading = [
+        angle_between_node_and_heading(location, choice, heading)
+        for choice in available_nodes
+    ]
 
     return (
         manhattan_delta,
@@ -517,10 +539,16 @@ def row_computations(choice, goal, location, heading, available_nodes):
         n_available_nodes,
         manhattan_dist_to_goal,
         euclidean_dist_to_goal,
+        np.array(all_manhattan_deltas, dtype=object),
+        np.array(all_euclidean_deltas, dtype=object),
+        np.array(all_angles_to_goal, dtype=object),
+        np.array(all_angles_to_heading, dtype=object),
     )
 
 
-row_computations_vec = np.vectorize(row_computations)
+row_computations_vec = np.vectorize(
+    row_computations  # , signature="(),(),(),(),()->(),(),(),(),(),(),(),(),(),(),()"
+)
 
 
 def compute_features(steps_df):
@@ -550,7 +578,17 @@ def compute_features(steps_df):
         lst_n_available_nodes,
         lst_manhattan_dist_to_goal,
         lst_euclidean_dist_to_goal,
+        lst_all_manhattan_deltas,
+        lst_all_euclidean_deltas,
+        lst_all_angle_to_goal,
+        lst_all_angle_to_heading,
     ) = newfeatures
+
+    # the lst_all_* features are, each of them, an array of arrays. we will turn it into a list of lists
+    lst_all_manhattan_deltas = [row.tolist() for row in lst_all_manhattan_deltas]
+    lst_all_euclidean_deltas = [row.tolist() for row in lst_all_euclidean_deltas]
+    lst_all_angle_to_goal = [row.tolist() for row in lst_all_angle_to_goal]
+    lst_all_angle_to_heading = [row.tolist() for row in lst_all_angle_to_heading]
 
     steps_df_with_features = steps_df
 
@@ -561,6 +599,10 @@ def compute_features(steps_df):
     steps_df_with_features["n_available_nodes"] = lst_n_available_nodes
     steps_df_with_features["manhattan_dist_goal"] = lst_manhattan_dist_to_goal
     steps_df_with_features["euclidean_dist_goal"] = lst_euclidean_dist_to_goal
+    steps_df_with_features["all_manhattan_delta"] = lst_all_manhattan_deltas
+    steps_df_with_features["all_euclidean_delta"] = lst_all_euclidean_deltas
+    steps_df_with_features["all_angle_to_goal"] = lst_all_angle_to_goal
+    steps_df_with_features["all_angle_to_heading"] = lst_all_angle_to_heading
 
     # Now we compute features that need global information, i.e., information from
     # other steps in the session, other sessions, etc.
@@ -577,6 +619,79 @@ def compute_features(steps_df):
     steps_df_with_features["trial_loc_count"] = steps_df.groupby(
         ["location", "maze_day", "session_trial_count", "subject", "maze_name"]
     ).cumcount()
+
+    # compute revisit values for nodes and edges
+    lst_dir_edge_chosen = []
+    for index, row in steps_df.iterrows():
+        lst_dir_edge_chosen.append((row["location"], row["choice"]))
+
+    steps_df_with_features["dir_edge_chosen"] = lst_dir_edge_chosen
+
+    lst_chosen_dir_edge_visited = []
+    lst_available_dir_edge_visited = []
+    lst_chosen_node_visited = []
+    lst_available_node_visited = []
+    for group_name, trial_df in steps_df_with_features.groupby(
+        ["maze_day", "session_trial_count", "subject", "maze_name"]
+    ):
+        trial_first_idx = trial_df.index[0]
+        for index, row in trial_df.iterrows():
+            # we check if the chosen edge was already crossed in this direction
+
+            # the logic might seem inverted (checking elementwise if the elements of the list of dir_edges_chosen during current trial is in the list of length 1 with the choice and testing if there is any hit) but it is correct
+            if (
+                trial_df.loc[trial_first_idx : index - 1, "dir_edge_chosen"]
+                .isin([row["choice"]])
+                .any()
+            ):
+                lst_chosen_dir_edge_visited.append(1)
+            else:
+                lst_chosen_dir_edge_visited.append(-1)
+
+            # we do the same for all available edges
+            available_dir_edge_visited = []
+            for node in row["available_nodes"]:
+                available_edge = (row["location"], node)
+                if (
+                    trial_df.loc[trial_first_idx : index - 1, "dir_edge_chosen"]
+                    .isin([available_edge])
+                    .any()
+                ):
+                    available_dir_edge_visited.append(1)
+                else:
+                    available_dir_edge_visited.append(-1)
+            lst_available_dir_edge_visited.append(available_dir_edge_visited)
+
+            # and now we compute the same for nodes
+            # first the chosen node
+            if (
+                trial_df.loc[trial_first_idx : index - 1, "location"]
+                .isin([row["choice"]])
+                .any()
+            ):
+                lst_chosen_node_visited.append(1)
+            else:
+                lst_chosen_node_visited.append(-1)
+
+            # now all the available nodes
+            available_node_visited = []
+            for node in row["available_nodes"]:
+                if (
+                    trial_df.loc[trial_first_idx : index - 1, "location"]
+                    .isin([node])
+                    .any()
+                ):
+                    available_node_visited.append(1)
+                else:
+                    available_node_visited.append(-1)
+            lst_available_node_visited.append(available_node_visited)
+
+    steps_df_with_features["chosen_dir_edge_visited"] = lst_chosen_dir_edge_visited
+    steps_df_with_features[
+        "available_dir_edge_visited"
+    ] = lst_available_dir_edge_visited
+    steps_df_with_features["chosen_node_visited"] = lst_chosen_node_visited
+    steps_df_with_features["available_node_visited"] = lst_available_node_visited
 
     # we first copy the session_trial_count and only then add the number of trials of past sessions to get the global trial count for a given maze
     steps_df_with_features.loc[:, "maze_trial_count"] = steps_df_with_features[
