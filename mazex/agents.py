@@ -1406,7 +1406,7 @@ class MixtureAgent(Agent):
 
 
     def __init__(self, maze, loc=None, beta=1, xi=0, gamma=0, delta=0,
-                 epsilon=0, zeta=0, pi=0, psi=0, nsteps=2, centrality='edge_betweenness',
+                 epsilon=0, zeta=0, pi=0, nsteps=2, centrality='edge_betweenness',
                  penalty_criterium='node'):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi, penalty_criterium=penalty_criterium)
 
@@ -1587,7 +1587,7 @@ class MixtureAgent(Agent):
         value = ((self.gamma*heuristic_value + self.delta*omniscient_value +
                 self.epsilon*nsteps_value + self.zeta*centrality_value +
             self.pi*forward_value)
-                - penalties)
+                - self.xi * penalties)
         return value
 
     def set_loc(self, node):
