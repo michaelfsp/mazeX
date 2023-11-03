@@ -1605,6 +1605,91 @@ class MixtureAgent(Agent):
 
     loc = property(_get_loc, set_loc)
 
+    def evaluate_session_subagents(self, session, penalties=False):
+        """Return a vector with value of each chosen step and a matrix with
+        values for every choice at every given step such that it can be fed to
+        a likelihood function for fitting purposes.
+
+        Note: it will change agent's loc and node and edge visit_caches
+        """
+        self.loc = None # stupid hack just to prevent that the change of
+        # location later on is not assumed if it fails some validity check
+        # usually for contiguity / possible transtion
+        first_loc = session.trials[0].steps[0].loc
+        self.loc = first_loc
+
+        # Find out the size of the array we need
+        # Since when the agent is at the goal there is no decision to be made
+        # we need n-1 rows per trial as the last one is the goal, or n in case
+        # the goal was not reached
+        # Session.count_total_steps already takes care of that
+
+        agent_values = {}
+        components = ('heuristic', 'omniscient', 'nsteps', 'centrality', 'forward') #, 'constant_penalty', 'exponential_penalty')
+        for c in components:
+            agent_values[c] = {}
+            n_steps = session.count_total_steps()
+            value_chosen = np.zeros(n_steps)
+            agent_values[c]['value_chosen'] = value_chosen
+
+            values = np.empty((n_steps, 4))
+            values.fill(np.nan)
+            agent_values[c]['values'] = values
+
+        step_number = 0
+        for t in session.trials:
+            self.loc = None # klugey but necessary because otherwise agent
+            # also prevents triggering of value update for the RL agents
+            # won't allow teleportation
+            self.node_visit_cache.clear()
+            self.edge_visit_cache.clear()
+
+            for s in t.steps[:-1]: # last step is the goal
+                self.loc = s.loc
+
+                for c in components:
+                    if c == 'heuristic':
+                        agent = self.heuristic_agent
+                    elif c == 'omniscient':
+                        agent = self.omniscient_agent
+                    elif c == 'nsteps':
+                        agent = self.nsteps_agent
+                    elif c == 'centrality':
+                        agent = self.centrality_agent
+                    elif c == 'forward':
+                        agent = self.forward_agent
+
+                    step_values = agent.evaluate(s.available_nodes, t.goal)
+
+                    agent_values[c]['value_chosen'][step_number] = step_values[s.choice]
+                    agent_values[c]['values'][step_number, 0:len(step_values)] = step_values
+
+                step_number += 1
+
+            # once the iteration through all the locations but the last one
+            # has happened we move the agent to the last location so that it 
+            # can trigger a value update for the RL agents
+            self.loc = t.steps[-1].loc
+
+
+#        self.agent.penalty_type = "constant"
+#        (
+#            self.constant_penalty_chosen_values,
+#            self.constant_penalty_values,
+#        ) = self.agent.evaluate_penalties_session(session)
+#
+#        self.agent.penalty_type = "exponential"
+#        (
+#            self.penalty_chosen_values,
+#            self.penalty_values,
+#        ) = self.agent.evaluate_penalties_session(session)
+        
+        results = []
+        for c in components:
+            results.append((agent_values[c]['value_chosen'], agent_values[c]['values']))
+
+        return results
+
 class SwitchAgent(HeuristicAgent):
     def __init__(self, beta, maze, xi, loc=None, penalty_criterium='node',
             penalty_type='exponential', distribution='cos', kappa=None,
