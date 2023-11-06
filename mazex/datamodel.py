@@ -29,12 +29,16 @@ class Step:
         """
         self.loc = loc
         self.trial = trial
-        self.previous = previous
         self.time = time
         self.duration = duration
         # sets .subsequent for the previous step
-        if previous:
+        if isinstance(previous, Step):
             previous.subsequent = self
+            self.previous = previous
+            self.previous_loc = previous.loc
+        else:
+            self.previous = None
+            self.previous_loc = previous_loc
 
         self.subsequent = None
         self._heading = None
@@ -58,32 +62,18 @@ class Step:
     @property
     def heading(self):
         if self._heading:
-            return self._heading
-
-        elif self.previous:
-            if self.previous.loc[1] < self.loc[1]:
-                direction = '^'
-            elif self.previous.loc[1] > self.loc[1]:
-                direction = 'v'
-            elif self.previous.loc[0] < self.loc[0]:
-                direction = '>'
-            elif self.previous.loc[0] > self.loc[0]:
-                direction = '<'
-
-        elif not self.previous:
-            if self.subsequent:
-                # this case this is the first step of a trial
-                if self.subsequent.loc[1] > self.loc[1]:
-                    direction = '^'
-                elif self.subsequent.loc[1] < self.loc[1]:
-                    direction = 'v'
-                elif self.subsequent.loc[0] > self.loc[0]:
-                    direction = '>'
-                elif self.subsequent.loc[0] < self.loc[0]:
-                    direction = '<'
-
-            else:
-                direction = None #it should only happen if it is an isolated step
+            direction = self._heading
+        elif self.previous_loc:
+            if self.previous_loc[1] < self.loc[1]:
+                direction = "^"
+            elif self.previous_loc[1] > self.loc[1]:
+                direction = "v"
+            elif self.previous_loc[0] < self.loc[0]:
+                direction = ">"
+            elif self.previous_loc[0] > self.loc[0]:
+                direction = "<"
+        else:
+            direction = "o"  # it should only happen if it is an isolated step
 
         return direction
 
