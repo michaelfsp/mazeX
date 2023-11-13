@@ -319,6 +319,53 @@ class BonsaiData:
 
         return t_axis, visited_ports
 
+    # TODO: this function's output should be included as an optional output to get_trajectory in order to not duplicate get_trajectory calls
+    def get_last_loc_before_trial_start(
+        self, t_start, t_stop, search_t_start=None, maze=None, tolerance=30
+    ):
+        if not maze:
+            maze = self.maze
+        if not maze:
+            raise InvalidMaze
+        if not search_t_start:
+            # if we don't specify a window to search for the last location in, it defaults to the start of this session/recording
+            search_t_start = self.t_start
+
+        t_axis_previous, visited_ports_previous = self.get_trajectory(
+            t_start=search_t_start, t_stop=t_start, maze=maze, tolerance=tolerance
+        )
+
+        if len(visited_ports_previous) == 0:
+            return None
+
+        else:
+            t_axis, visited_ports = self.get_trajectory(
+                t_start, t_stop, maze, tolerance
+            )
+
+            trial_first_loc = visited_ports[0]
+
+            if len(visited_ports_previous) == 1:
+                # it can happen that we can only detect one location prior to time t_start
+                # we save it and check later if it is plausible, i.e. 1 step away
+                previous_loc = visited_ports_previous[-1]
+
+            else:
+                # list has at least two elements
+                if trial_first_loc == visited_ports_previous[-1]:
+                    # The trial start location is also the last location on the list of locations visited prior
+                    previous_loc = visited_ports_previous[-2]
+                else:
+                    # the location is not repeated
+                    previous_loc = visited_ports_previous[-1]
+
+        # we test if previous_loc is one edge away from the trial_first_loc
+        # if this is not the case, something went wrong and we return None
+        if maze.distances_dictionary[trial_first_loc][previous_loc] != 1:
+            return None
+        else:
+            return previous_loc
+
     def plot(self, t_start=None, t_stop=None, picture=True, color_map=None):
         img = Image.open(self.background_PNG)
 
