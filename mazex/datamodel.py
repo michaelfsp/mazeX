@@ -114,8 +114,15 @@ class Step:
 
 
 class Trial:
-    def __init__(self, maze, goal, max_steps=0, goal_reached=True,
-            delay_period=0, shortened=False):
+    def __init__(
+        self,
+        maze,
+        goal,
+        max_steps=0,
+        goal_reached=True,
+        delay_period=0,
+        shortened=False,
+    ):
         if isinstance(maze, SquareMaze):
             self.maze = maze
         else:
@@ -143,15 +150,18 @@ class Trial:
         # FIXME: gamma is not being used to compute SDD!!!
         # we discount 1 because both start and goal are included in self.steps
 
-#        # we start by computing the lowest possible SDD
-#        start = self.steps[0].loc
-#        shortest_paths = nx.shortest_paths.all_shortest_paths(self.maze, start, self.goal)
-#        shortest_sdd = np.inf
-#        for p in shortest_paths:
-#            sdd_p = sdd_path(p, m_over_n=m_over_n, gamma=gamma)
-#            if sdd_p < shortest_sdd:
-#                shortest_sdd = sdd_p
-        trial_lower_sdd_bound = self.maze.least_sdd_matrix()[list(self.maze.nodes()).index(self.steps[0].loc), list(self.maze.nodes()).index(self.steps[-1].loc)]
+        #        # we start by computing the lowest possible SDD
+        #        start = self.steps[0].loc
+        #        shortest_paths = nx.shortest_paths.all_shortest_paths(self.maze, start, self.goal)
+        #        shortest_sdd = np.inf
+        #        for p in shortest_paths:
+        #            sdd_p = sdd_path(p, m_over_n=m_over_n, gamma=gamma)
+        #            if sdd_p < shortest_sdd:
+        #                shortest_sdd = sdd_p
+        trial_lower_sdd_bound = self.maze.least_sdd_matrix()[
+            list(self.maze.nodes()).index(self.steps[0].loc),
+            list(self.maze.nodes()).index(self.steps[-1].loc),
+        ]
 
         trial_path_sdd = sdd_path(self.path)
 
