@@ -68,31 +68,43 @@ def load_session(
         hardware_timestamps=True,
     )
 
+    fail = False
+
     if len(arduino_data.syncon_event_times) == 0:
         warnings.warn(
             "Arduino sync signal missing for mouse {} on day {}".format(mouse, date)
         )
-        return None
+        fail = True
 
-    if len(bonsai_data.syncon_event_times) == 0:
+    elif len(bonsai_data.syncon_event_times) == 0:
         warnings.warn(
             "Bonsai video sync signal missing for mouse {} on day {}".format(
                 mouse, date
             )
         )
-        return None
+        fail = True
 
-    try:
-        aligner = rsync.Rsync_aligner(
-            arduino_data.syncon_event_times.ravel().astype("int"),
-            bonsai_data.syncon_event_times.ravel().astype("int")[
-                0 : arduino_data.syncon_event_times.size
-            ],
-            chunk_size=5,
-            plot=True,
-        )
-    except:
-        warnings.warn("Alignment failure for mouse {} on date {}".format(mouse, date))
+    else:
+        try:
+            aligner = rsync.Rsync_aligner(
+                arduino_data.syncon_event_times.ravel().astype("int"),
+                bonsai_data.syncon_event_times.ravel().astype("int")[
+                    0 : arduino_data.syncon_event_times.size
+                ],
+                chunk_size=5,
+                plot=True,
+            )
+        except:
+            warnings.warn(
+                "Alignment failure for mouse {} on date {}".format(mouse, date)
+            )
+
+            fail = True
+
+    if fail:
+        # import ipdb
+        #
+        # ipdb.set_trace()
         return None
 
     goals = [
@@ -106,6 +118,7 @@ def load_session(
 
     # iterate over trials
     trial_count = 0
+    search_t_start = None  # for the very first trial of the session the time to reconstruct past steps from, as for determininig the previous_loc of the initial step, is the beginning of the session. For that we need to pass None
     for i, tgoal in enumerate(zip(arduino_data.reward_event_times[1:-1], goals[1:-1])):
         # counters
         trial_count += 1
@@ -134,6 +147,23 @@ def load_session(
         # and removal of this catch if
         if len(visited_ports) == 0:
             continue
+
+        # TODO: search_t_start should move to at least the previous trial of the same session to save time not reconstructing every trajectory from the beginning
+
+        last_port_before_trial_begin = bonsai_data.get_last_loc_before_trial_start(
+            t_start=trial_begin_t_video,
+            t_stop=trial_end_t_video,
+            search_t_start=search_t_start,
+        )
+
+        # we save the start time of this trial so we can use if to truncate the segment prior to next trial for which we reconstruct the trajectory and infer locations visited such as to find previous_loc
+        search_t_start = trial_begin_t_video
+
+        #
+        # if visited_ports[0] == previous_goal:
+        #     all_visited_ports.extend(visited_ports[1:])
+        # else:
+        #     all_visited_ports.extend(visited_ports)
         # now we convert the time at which visits to a port are detected
         # back to Arduino time
         port_visit_times_arduino = aligner.B_to_A(port_visit_times_video)
@@ -147,6 +177,7 @@ def load_session(
             loc=visited_ports[0],
             trial=trial,
             time=previous_goal_t + arduino_data.delay_period,
+            previous_loc=last_port_before_trial_begin,
         )
 
         trial.steps.append(initial_step)
@@ -224,6 +255,15 @@ def load_session(
                     # the animal didn't consume reward or there is another more exotic problem
                     discarded_trials_not_consumed += 1
                 break
+
+        # import ipdb
+        #
+        # ipdb.set_trace()
+    # if len(session.trials) == 0:
+    #     import ipdb
+    #
+    #     ipdb.set_trace()
+    #     return None
 
     return session
 
