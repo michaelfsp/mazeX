@@ -5,8 +5,11 @@ from mazex.exceptions import *
 from mazex.utils import check_elements_equal, sdd_path
 from functools import cache
 
+
 class Step:
-    def __init__(self, loc, trial, previous=None, time=np.nan, duration=np.nan):
+    def __init__(
+        self, loc, trial, previous=None, previous_loc=None, time=np.nan, duration=np.nan
+    ):
         """Initializes the Step.
 
         Parameters:
@@ -64,14 +67,29 @@ class Step:
         if self._heading:
             direction = self._heading
         elif self.previous_loc:
-            if self.previous_loc[1] < self.loc[1]:
+            if (
+                self.previous_loc[1] < self.loc[1]
+                and self.previous_loc[0] == self.loc[0]
+            ):
                 direction = "^"
-            elif self.previous_loc[1] > self.loc[1]:
+            elif (
+                self.previous_loc[1] > self.loc[1]
+                and self.previous_loc[0] == self.loc[0]
+            ):
                 direction = "v"
-            elif self.previous_loc[0] < self.loc[0]:
+            elif (
+                self.previous_loc[0] < self.loc[0]
+                and self.previous_loc[1] == self.loc[1]
+            ):
                 direction = ">"
-            elif self.previous_loc[0] > self.loc[0]:
+            elif (
+                self.previous_loc[0] > self.loc[0]
+                and self.previous_loc[1] == self.loc[1]
+            ):
                 direction = "<"
+            else:
+                # self.previous_loc exists but it is not one node away from loc which means some problem has occurred
+                direction = "o"
         else:
             direction = "o"  # it should only happen if it is an isolated step
 
@@ -93,6 +111,7 @@ class Step:
             path.insert(0, previous_step.loc)
             previous_step = previous_step.previous
         return path
+
 
 class Trial:
     def __init__(self, maze, goal, max_steps=0, goal_reached=True,
