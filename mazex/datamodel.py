@@ -46,7 +46,7 @@ class Step:
         # should in principle have the same order as Step.available_nodes
         self.values = []
         self.probs = []
-        self.penalties = [] # may be used later for debugging
+        self.penalties = []  # may be used later for debugging
 
     @property
     def available_nodes(self):
@@ -114,7 +114,7 @@ class Trial:
     def duration(self):
         return self.t_stop - self.t_start
 
-    #FIXME: this property shouldn't have the same name as the method
+    # FIXME: this property shouldn't have the same name as the method
     @property
     def excess_steps(self):
         # we discount 1 because both start and goal are included in self.steps
@@ -145,7 +145,8 @@ class Trial:
     @property
     def manhattan_distance(self):
         return abs(self.goal[0] - self.steps[0].loc[0]) + abs(
-                self.goal[1] - self.steps[0].loc[1])
+            self.goal[1] - self.steps[0].loc[1]
+        )
 
     @property
     def step(self):
@@ -157,8 +158,7 @@ class Trial:
 
     @property
     def shortest_path_length(self):
-        return self.maze.distances_dictionary[
-                self.steps[0].loc][self.goal]
+        return self.maze.distances_dictionary[self.steps[0].loc][self.goal]
 
     @property
     def t_start(self):
@@ -192,12 +192,12 @@ class Trial:
             return False
 
     def excess_steps(self):
-        """Count total excess steps made in trial (vs shortest path).
-        """
+        """Count total excess steps made in trial (vs shortest path)."""
         if self.goal_reached:
-            shortest_path_length = self.maze.distances_dictionary[
-                    self.path[0]][self.goal]
-            actual_path_length = len(self.path) -1 #we have to subtract one
+            shortest_path_length = self.maze.distances_dictionary[self.path[0]][
+                self.goal
+            ]
+            actual_path_length = len(self.path) - 1  # we have to subtract one
             #   because the path includes the goal location
 
             return int(actual_path_length - shortest_path_length)
@@ -228,20 +228,17 @@ class Session:
         self.maze_day = maze_day
 
     def count_total_steps(self):
-        """Count total number of steps in session.
-
-        """
+        """Count total number of steps in session."""
         total_steps = 0
         for t in self.trials:
-        # we discount 1 because both start and goal are included in self.steps
+            # we discount 1 because both start and goal are included in self.steps
 
             total_steps += len(t.steps) - 1
 
         return total_steps
 
     def count_excess_steps(self):
-        """Count total number of excess steps accross trials.
-        """
+        """Count total number of excess steps accross trials."""
         excess_steps = 0
         for t in self.trials:
             excess_steps += t.excess_steps()
@@ -249,8 +246,7 @@ class Session:
         return excess_steps
 
     def excess_sdd(self, m_over_n=1, gamma=1):
-        """Count total number of excess steps accross trials.
-        """
+        """Count total number of excess steps accross trials."""
         excess_sdd = 0
         for t in self.trials:
             excess_sdd += t.excess_sdd()
@@ -278,11 +274,11 @@ class Session:
         return t_last_reward - t_start
 
     @property
-#    @cache
-#TODO: turn trials to a property that flags it has changed in a hidden var
-# so that we can cache .maze
-# then do networkx.utils.misc.graphs_equal(list(set(self.maze))) to  check whether
-# we have the same graph as different instances
+    #    @cache
+    # TODO: turn trials to a property that flags it has changed in a hidden var
+    # so that we can cache .maze
+    # then do networkx.utils.misc.graphs_equal(list(set(self.maze))) to  check whether
+    # we have the same graph as different instances
     def maze(self):
         """If all steps have the same maze, return that maze, else return a
         list of mazes. This might not be after some refactoring to be done in
@@ -303,14 +299,15 @@ class Session:
     def trial(self):
         return self.trials[self.current_trial_index]
 
+
 # TODO: WIP
-#class Experiment:
+# class Experiment:
 #    def __init__(self, subjects, days):
 #        self.subjects = subjects
 #        self.days = days
 #
-#class Subject:
+# class Subject:
 #    def __init__(self, subject_name=None)
 #
-#class Phase:
+# class Phase:
 #    def __init__(self):
