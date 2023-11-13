@@ -753,12 +753,6 @@ class Agent:
         """
         #TODO: verify that this is the way coordinates are specified
 
-        """We will create a virtual heading_node which corresponds to
-        the node the agent is facing in order to facilitate
-        calculation by reusing the method anglet_between_nodes().
-        However do note that heading_note might have coordinates that
-        are outside of the maze. This should still be OK.
-        """
         return angle_between_node_and_heading(self.loc, node, self.heading)
 
     def choice_probs(self, values, debug=False):
