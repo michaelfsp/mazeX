@@ -74,6 +74,8 @@ def angle_between_node_and_heading(loc, node1, heading):
         heading_node = (loc[0] - 1, loc[1])
     elif heading == "^":
         heading_node = (loc[0], loc[1] + 1)
+    elif heading == "o":
+        return np.nan
     else:
         raise InvalidHeading
 
