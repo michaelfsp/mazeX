@@ -316,6 +316,8 @@ class MixtureLikelihood(Likelihood):
         # TODO: turn nsteps into a property and make it such that changing it
         # triggers recalculation of (only) the nsteps likelihood components
         super(MixtureLikelihood, self).__init__(session)
+        init_loc = session.trials[0].steps[0].loc
+        init_heading = session.trials[0].steps[0].heading
         self.agent = MixtureAgent(
             maze=self.session.maze,
             beta=1,
@@ -328,7 +330,8 @@ class MixtureLikelihood(Likelihood):
             nsteps=nsteps,
             centrality=centrality,
             penalty_criterium=penalty_criterium,
-            loc=None,
+            loc=init_loc,
+            heading=init_heading,
         )
 
         if pandas_interface:
