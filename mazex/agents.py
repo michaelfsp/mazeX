@@ -1019,7 +1019,7 @@ class Agent:
 
 
 class HeuristicAgent(Agent):
-    def __init__(self, beta=1, xi=3, loc=None, penalty_criterium='node',
+    def __init__(self, beta=1, xi=0, loc=None, penalty_criterium='node',
             penalty_type='exponential', heading=None, distribution='cos',
             kappa=None, maze_size=6):
         """Creates an agent that follows a directional heuristic.
@@ -1112,7 +1112,7 @@ class HeuristicAgent(Agent):
         return values
 
 class ManhattanAgent(Agent):
-    def __init__(self, beta=1, xi=3, loc=None, penalty_criterium='node',
+    def __init__(self, beta=1, xi=0, loc=None, penalty_criterium='node',
             penalty_type='exponential', heading=None):
         """Creates an agent that follows a Manhattan distance heuristic.
 
@@ -1164,7 +1164,7 @@ class ManhattanAgent(Agent):
 
 class CentralityAgent(Agent):
     def __init__(self, maze, centrality='edge_betweenness', loc=None, beta=1,
-            xi=3, penalty_criterium='node', penalty_type='exponential',
+            xi=0, penalty_criterium='node', penalty_type='exponential',
             heading=None):
         """Creates an agent which evaluates options according to centrality
         measures.
@@ -1231,7 +1231,7 @@ class CentralityAgent(Agent):
         return values
 
 class NStepsAgent(Agent):
-    def __init__(self, maze, nsteps, loc=None, beta=1, xi=3,
+    def __init__(self, maze, nsteps, loc=None, beta=1, xi=0,
             penalty_criterium='node', penalty_type='exponential',
             heading=None):
         #TODO: Allow manhattan as well as euclidian distance
@@ -1273,7 +1273,7 @@ class NStepsAgent(Agent):
 
 
 class AStarAgent(Agent):
-    def __init__(self, maze, nsteps, loc=None, beta=1, xi=3,
+    def __init__(self, maze, nsteps, loc=None, beta=1, xi=0,
             penalty_criterium='node', penalty_type='exponential',
             heading=None):
         #TODO: Allow manhattan as well as euclidian distance
@@ -1401,7 +1401,7 @@ class MixtureAgent(Agent):
 
     def __init__(self, maze, loc=None, beta=1, xi=0, gamma=0, delta=0,
                  epsilon=0, zeta=0, pi=0, nsteps=2, centrality='edge_betweenness',
-                 penalty_criterium='node'):
+                 penalty_criterium='node', heading=None, distribution='cos'):
         super(MixtureAgent, self).__init__(loc=loc, beta=beta, xi=xi, penalty_criterium=penalty_criterium)
 
         self.maze = maze
@@ -1417,30 +1417,29 @@ class MixtureAgent(Agent):
                                       # until centrality.setter
 
         if gamma:
-            self.heuristic_agent = HeuristicAgent(loc=loc)
+            self.heuristic_agent = HeuristicAgent(loc=loc, xi=0)
         else:
             self.heuristic_agent = None
 
         if delta:
-            self.omniscient_agent = OmniscientAgent(maze, loc=loc)
+            self.omniscient_agent = OmniscientAgent(maze, loc=loc, xi=0)
         else:
             self.omniscient_agent = None
 
         if epsilon:
-            self.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc)
+            self.nsteps_agent = NStepsAgent(maze, nsteps, loc=loc, xi=0)
         else:
             self.nsteps_agent = None
 
         if zeta:
             self.centrality_agent = CentralityAgent(maze,
                                                     centrality=centrality,
-                                                    loc=loc)
+                                                    loc=loc, xi=0)
         else:
             self.centrality_agent = None
 
         if pi:
-            # HACK: we have to assume some orientation for the first step
-            self.forward_agent = ForwardAgent(loc=loc, heading='^')
+            self.forward_agent = ForwardAgent(loc=loc, heading=heading, distribution=distribution, xi=0)
         else:
             self.forward_agent = None
 
