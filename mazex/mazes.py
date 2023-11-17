@@ -10,7 +10,8 @@ from mazex.exceptions import *
 from mazex.utils import copydoc, to_peano_coords, sdd_path, euclidian_distance
 import mazex.analysis
 
-#TODO: save centrality measures as attributes of edges and nodes
+# TODO: save centrality measures as attributes of edges and nodes
+
 
 def add_reverse_direction_edge_names(edge_centrality_dic):
     """Since different edge centrality calculation algorithms name edges
@@ -21,9 +22,11 @@ def add_reverse_direction_edge_names(edge_centrality_dic):
         new_dic[(n2, n1)] = edge_centrality_dic[((n1, n2))]
     return new_dic
 
+
 @lru_cache(maxsize=128)
 def cached_betweenness_centrality(maze):
     return nx.algorithms.betweenness_centrality(maze)
+
 
 @lru_cache(maxsize=128)
 def cached_edge_betweenness_centrality(maze):
@@ -31,32 +34,37 @@ def cached_edge_betweenness_centrality(maze):
     edge_centralities_dic_complete = add_reverse_direction_edge_names(ec)
     return edge_centralities_dic_complete
 
+
 @lru_cache(maxsize=128)
 def cached_closeness_centrality(maze):
     return nx.algorithms.closeness_centrality(maze)
+
 
 @lru_cache(maxsize=128)
 def communicability_betweenness_centrality(maze):
     return nx.algorithms.communicability_betweenness_centrality(maze)
 
+
 @lru_cache(maxsize=128)
 def cached_current_flow_betweenness_centrality(maze):
-    #NOTE: HACK - we have to create a Graph from maze or else networkx
+    # NOTE: HACK - we have to create a Graph from maze or else networkx
     # complains about not getting argument 'size'
     return nx.centrality.current_flow_betweenness_centrality(nx.Graph(maze))
 
+
 @lru_cache(maxsize=128)
 def cached_edge_current_flow_betweenness_centrality(maze):
-    #NOTE: HACK - we have to create a Graph from maze or else networkx
+    # NOTE: HACK - we have to create a Graph from maze or else networkx
     # complains about not getting argument 'size'
-    ec = nx.centrality.edge_current_flow_betweenness_centrality(nx.Graph(
-    maze))
+    ec = nx.centrality.edge_current_flow_betweenness_centrality(nx.Graph(maze))
     edge_centralities_dic_complete = add_reverse_direction_edge_names(ec)
     return edge_centralities_dic_complete
+
 
 @lru_cache(maxsize=128)
 def cached_degree_centrality(maze):
     return nx.algorithms.degree_centrality(maze)
+
 
 def maze_from_ASCII(maze_str):
     """Generate a maze configuration from text.
@@ -78,12 +86,12 @@ def maze_from_ASCII(maze_str):
     string_lines.reverse()
     line_lengths = [len(line) for line in string_lines]
     set_lengths = set(line_lengths)
-    set_lengths.remove(0) # remove empty lines
+    set_lengths.remove(0)  # remove empty lines
 
-    if  len(set_lengths) > 1:
+    if len(set_lengths) > 1:
         raise InvalidMaze
 
-    maze_size = int((set_lengths.pop()+1)/2)
+    maze_size = int((set_lengths.pop() + 1) / 2)
 
     h_edges = []
     v_edges = []
@@ -92,26 +100,27 @@ def maze_from_ASCII(maze_str):
 
         # horizontal edges
         # this is the relationship between index in the string and maze coordinates
-        h_edges_str_i = [a.start() for a in re.finditer('_', line)]
-        h_edges_i = (np.array(h_edges_str_i)/2) - 0.5
+        h_edges_str_i = [a.start() for a in re.finditer("_", line)]
+        h_edges_i = (np.array(h_edges_str_i) / 2) - 0.5
         h_edges_i = h_edges_i
         for j in h_edges_i:
             j = int(j)
-            h_edges.append(((j,i), (j+1,i)))
+            h_edges.append(((j, i), (j + 1, i)))
 
         # vertical edges
-        v_edges_str_i = [a.start() for a in re.finditer('\|', line)]
-        v_edges_i = np.array(v_edges_str_i)/2
+        v_edges_str_i = [a.start() for a in re.finditer("\|", line)]
+        v_edges_i = np.array(v_edges_str_i) / 2
         v_edges_i = v_edges_i
         for j in v_edges_i:
             j = int(j)
-            v_edges.append(((j,i), (j,i+1)))
+            v_edges.append(((j, i), (j, i + 1)))
 
     maze = SquareMaze(maze_size)
     maze.add_edges_from(h_edges)
     maze.add_edges_from(v_edges)
 
     return maze
+
 
 @lru_cache(maxsize=128)
 def nodes_reachable_n_steps(maze, node, n):
@@ -131,8 +140,9 @@ def nodes_reachable_n_steps(maze, node, n):
     path_lengths = nx.single_source_shortest_path_length(maze, node, cutoff=n)
     valid_lengths = range(n, -1, -2)
 
-    endpoints = [node for node, length in path_lengths.items() if length in
-            valid_lengths]
+    endpoints = [
+        node for node, length in path_lengths.items() if length in valid_lengths
+    ]
     # now we prepare a dictionary with the midpoints crossed and their
     #  respective distances from starting point. for that we just need to
     #  remove the entries in path_lengths that correspond to the endpoints
@@ -140,17 +150,19 @@ def nodes_reachable_n_steps(maze, node, n):
     #  modifying the dictionary during the iteration results in problems
     for node, distance in copy.deepcopy(path_lengths).items():
         if distance == n:
-            path_lengths.pop(node); # semi colon suppresses output of item
+            path_lengths.pop(node)
+            # semi colon suppresses output of item
 
     midpoints = path_lengths
 
     return endpoints, midpoints
 
+
 @functools.lru_cache(1024)
 def least_sdd_path_steps_matrix(maze, gamma, m_over_n, peano_order=False):
     "Returns matrix with least SDD for all start, goal pairs for a given maze."
     n_nodes = len(maze.nodes())
-    erl_steps_matrix = np.full((n_nodes, n_nodes), np.nan, dtype='float')
+    erl_steps_matrix = np.full((n_nodes, n_nodes), np.nan, dtype="float")
 
     nodes = list(maze.nodes())
     if peano_order:
@@ -165,25 +177,34 @@ def least_sdd_path_steps_matrix(maze, gamma, m_over_n, peano_order=False):
                 erl_steps_matrix[iv, iw] = 0
             else:
                 all_simple_paths = list(nx.algorithms.all_simple_paths(maze, v, w))
-                all_simple_paths_sdd = np.array([sdd_path(p, m_over_n, gamma) for p in all_simple_paths])
+                all_simple_paths_sdd = np.array(
+                    [sdd_path(p, m_over_n, gamma) for p in all_simple_paths]
+                )
                 # we find all the paths where SDD is minimal, in case there is
                 # more than one where that is the case
-                least_sdd_paths_i = np.where(all_simple_paths_sdd == all_simple_paths_sdd.min())[0]
+                least_sdd_paths_i = np.where(
+                    all_simple_paths_sdd == all_simple_paths_sdd.min()
+                )[0]
                 least_sdd_paths = [all_simple_paths[i] for i in least_sdd_paths_i]
                 # we need to subract 1 because the paths include the start and
                 # end node and we are interested in the number of nodes
                 # traversed
-                least_sdd_paths_lengths = [len(p)-1 for p in least_sdd_paths]
+                least_sdd_paths_lengths = [len(p) - 1 for p in least_sdd_paths]
                 erl_steps_matrix[iv, iw] = np.average(least_sdd_paths_lengths)
     return erl_steps_matrix
 
+
 @functools.lru_cache(1024)
 def Lrw(maze):
-    return np.identity(36) - (np.linalg.inv(maze.degree_matrix) @ nx.adjacency_matrix(maze))
+    return np.identity(36) - (
+        np.linalg.inv(maze.degree_matrix) @ nx.adjacency_matrix(maze)
+    )
+
 
 @functools.lru_cache(1024)
 def Pdiff(maze):
     return np.linalg.inv(maze.degree_matrix) @ nx.adjacency_matrix(maze)
+
 
 @functools.lru_cache(1024)
 def DiffR(maze, gamma):
@@ -191,8 +212,8 @@ def DiffR(maze, gamma):
 
 
 class SquareMaze(nx.classes.graph.Graph):
-    """Generic class of for square mazes.
-    """
+    """Generic class of for square mazes."""
+
     def __init__(self, maze_size=None, name=None):
         """Generates a square maze of given maze_size and no connections.
         Total number of nodes will maze_size**2.
@@ -223,8 +244,7 @@ class SquareMaze(nx.classes.graph.Graph):
         self._optimal_choice_dic = None
         self._euclidean_distances_matrix = None
 
-        self.nodes_reachable_n_steps = partial(nodes_reachable_n_steps,
-                                               self)
+        self.nodes_reachable_n_steps = partial(nodes_reachable_n_steps, self)
 
     @property
     def betweenness_centrality(self):
@@ -260,8 +280,7 @@ class SquareMaze(nx.classes.graph.Graph):
     @property
     @lru_cache(maxsize=128)
     def dead_end_centrality(self):
-        '''It is not a real centrality.
-        '''
+        """It is not a real centrality."""
         dead_end_centrality_dic = {}
         for node, degree in self.degree():
             if degree == 1:
@@ -281,10 +300,10 @@ class SquareMaze(nx.classes.graph.Graph):
     @property
     @lru_cache(maxsize=128)
     def fiedler_vector_centrality(self):
-        '''It is not a real centrality either. It simply is the value of the
+        """It is not a real centrality either. It simply is the value of the
         eigenvector corresponding to the second smallest eigenvalue of the
         normalized Graph Laplacian.
-        '''
+        """
         """
         # this return a matrix. need to conver it to array
         normed_laplacian = nx.normalized_laplacian_matrix(self)
@@ -317,7 +336,7 @@ class SquareMaze(nx.classes.graph.Graph):
         # way can we be certain of the order of nodes in the fiedler vector
         G = nx.algebraicconnectivity._preprocess_graph(self, weight=None)
 
-        find_fiedler = nx.algebraicconnectivity._get_fiedler_func('tracemin')
+        find_fiedler = nx.algebraicconnectivity._get_fiedler_func("tracemin")
 
         fiedler_vector_centrality_dic = {}
 
@@ -346,10 +365,10 @@ class SquareMaze(nx.classes.graph.Graph):
     @property
     @lru_cache(maxsize=128)
     def normalized_fiedler_vector_centrality(self):
-        '''It is not a real centrality either. It simply is the value of the
+        """It is not a real centrality either. It simply is the value of the
         eigenvector corresponding to the second smallest eigenvalue of the
         normalized Graph Laplacian.
-        '''
+        """
         """
         # this return a matrix. need to conver it to array
         normed_laplacian = nx.normalized_laplacian_matrix(self)
@@ -382,7 +401,7 @@ class SquareMaze(nx.classes.graph.Graph):
         # way can we be certain of the order of nodes in the fiedler vector
         G = nx.algebraicconnectivity._preprocess_graph(self, weight=None)
 
-        find_fiedler = nx.algebraicconnectivity._get_fiedler_func('tracemin')
+        find_fiedler = nx.algebraicconnectivity._get_fiedler_func("tracemin")
 
         fiedler_vector_centrality_dic = {}
 
@@ -392,8 +411,7 @@ class SquareMaze(nx.classes.graph.Graph):
                 L = nx.laplacian_matrix(G, component)
                 fiedler = find_fiedler(L, None, True, 1e-8)[1]
                 for x, c, u in sorted(zip(fiedler, range(size), component)):
-                    fiedler_vector_centrality_dic[u] = x/(np.sqrt(
-                        self.degree[u]))
+                    fiedler_vector_centrality_dic[u] = x / (np.sqrt(self.degree[u]))
 
         return fiedler_vector_centrality_dic
 
@@ -423,17 +441,16 @@ class SquareMaze(nx.classes.graph.Graph):
     @property
     @lru_cache(maxsize=128)
     def real_degree_centrality(self):
-        '''It is not a real centrality.
-        '''
+        """It is not a real centrality."""
         return self.degree()
 
-    #TODO: move this to networkx
+    # TODO: move this to networkx
     @property
     def degree_matrix(self):
         degree_matrix = np.zeros((self.maze_size**2, self.maze_size**2))
 
         for i, (nd) in enumerate(self.degree()):
-            degree_matrix[i,i] = nd[1]
+            degree_matrix[i, i] = nd[1]
 
         return degree_matrix
 
@@ -447,7 +464,7 @@ class SquareMaze(nx.classes.graph.Graph):
             for i, n1 in enumerate(list(self.nodes())):
                 for j, n2 in enumerate(list(self.nodes())):
                     if i != j:
-                        dm[i,j] = euclidian_distance(n1, n2)
+                        dm[i, j] = euclidian_distance(n1, n2)
 
             self._euclidean_distances_matrix = dm
             self._has_changed_since_euclidean_matrix = False
@@ -461,22 +478,25 @@ class SquareMaze(nx.classes.graph.Graph):
             # for some reason the NetworkX algorithm produces a numpy matrix
             # instead of an array, so we np.array it
             self._distances_matrix = np.asarray(
-                    nx.algorithms.floyd_warshall_numpy(self))
+                nx.algorithms.floyd_warshall_numpy(self)
+            )
             self._has_changed_since_matrix = False
 
         return self._distances_matrix
 
     def least_sdd_matrix(self):
-        #FIXME: this should take different argument values for m_over_n and gamma
+        # FIXME: this should take different argument values for m_over_n and gamma
         # If the graph has changed since last calculation of the matrix:
         if self._has_changed_since_least_sdd:
             # for some reason the NetworkX algorithm produces a numpy matrix
             # instead of an array, so we np.array it
-            self._least_sdd_matrix = least_sdd_path_steps_matrix(self, gamma=1, m_over_n=1, peano_order=False)
+            self._least_sdd_matrix = least_sdd_path_steps_matrix(
+                self, gamma=1, m_over_n=1, peano_order=False
+            )
             self._has_changed_since_least_sdd = False
 
         return self._least_sdd_matrix
-    
+
     @cached_property
     def normalized_fiedler_vector(self):
         return nx.fiedler_vector(self, normalized=True)
@@ -505,7 +525,6 @@ class SquareMaze(nx.classes.graph.Graph):
     @property
     def optimal_choice_dic(self):
         if self._has_changed_since_optimal_choice_dic:
-
             # If the graph has changed since last calculation of the dictionary:
             optimal_choice_dic = {}
             for loc in self.nodes():
@@ -513,7 +532,10 @@ class SquareMaze(nx.classes.graph.Graph):
                 for goal in self.nodes():
                     optimal_choice = []
                     for s_prime in self.neighbors(loc):
-                        if self.distances_dictionary[s_prime][goal] < self.distances_dictionary[loc][goal]:
+                        if (
+                            self.distances_dictionary[s_prime][goal]
+                            < self.distances_dictionary[loc][goal]
+                        ):
                             optimal_choice.append(s_prime)
                     optimal_choice_dic[loc][goal] = optimal_choice
 
@@ -537,11 +559,11 @@ class SquareMaze(nx.classes.graph.Graph):
                 nodes_peano_sorted[i] = list(self.nodes())[idx_nodes_peano.index(d)]
 
             self._distances_matrix_peano = np.asarray(
-                    nx.algorithms.floyd_warshall_numpy(self, nodelist=nodes_peano_sorted))
+                nx.algorithms.floyd_warshall_numpy(self, nodelist=nodes_peano_sorted)
+            )
             self._has_changed_since_matrix_peano = False
 
         return self._distances_matrix_peano
-
 
     @property
     def distances_dictionary(self):
@@ -560,8 +582,8 @@ class SquareMaze(nx.classes.graph.Graph):
             maze_dists = np.unique(self.distances_matrix)
             mapping_dict = {}
 
-            for goal in self.node:
-                for n in self.node:
+            for goal in self.nodes:
+                for n in self.nodes:
                     dist_coord = mazex.utils.to_dist_coord(n, self, goal)
 
                     try:
@@ -594,17 +616,16 @@ class SquareMaze(nx.classes.graph.Graph):
 
     @property
     def pos(self):
-        return nx.get_node_attributes(self, name='pos')
+        return nx.get_node_attributes(self, name="pos")
 
     @property
     def possible_edges(self):
-        """List all possible connections for given maze.
-        """
+        """List all possible connections for given maze."""
         possible_edges = []
 
         for n in self.nodes():
             for nbr in self.adjacent_neighbors(n):
-                if nbr[0]>n[0] or nbr[1]>n[1]:
+                if nbr[0] > n[0] or nbr[1] > n[1]:
                     possible_edges.append((n, nbr))
         # This is optional but makes the output pretier
         possible_edges.sort()
@@ -622,13 +643,13 @@ class SquareMaze(nx.classes.graph.Graph):
             try:
                 absent_edges.remove(e)
             except ValueError:
-                absent_edges.remove((e[1],e[0]))
+                absent_edges.remove((e[1], e[0]))
 
         return absent_edges
 
     @property
     def n_possible_edges(self):
-        return 2*((self.maze_size**2)-self.maze_size)
+        return 2 * ((self.maze_size**2) - self.maze_size)
 
     def adjacent_neighbors(self, n):
         """Returns a list of nodes located in the immediate physical
@@ -644,9 +665,13 @@ class SquareMaze(nx.classes.graph.Graph):
         nlist : list
             A list of nodes physically adjacent to n
         """
-        adj_list = ((n[0]-1, n[1]), (n[0], n[1]-1), (n[0]+1, n[1]),
-                (n[0], n[1]+1))
-        adj_neighbors = []  
+        adj_list = (
+            (n[0] - 1, n[1]),
+            (n[0], n[1] - 1),
+            (n[0] + 1, n[1]),
+            (n[0], n[1] + 1),
+        )
+        adj_neighbors = []
 
         for n in adj_list:
             if n in self.nodes():
@@ -688,7 +713,7 @@ class SquareMaze(nx.classes.graph.Graph):
                 yield goal
 
     def randomgoals_alltrials(self, n):
-        #FIXME: Doesn't work!
+        # FIXME: Doesn't work!
         """Retrieve a generator of a node sequence where nodes have been
         randomly sampled ensuring no repetition of trial types (start, goal)
         in every cycle of (maze_size**2)*(maze_size**2 - 1) elements.
@@ -702,7 +727,7 @@ class SquareMaze(nx.classes.graph.Graph):
         n_retrieved = 0
         last_retrieved = None
 
-        cycle_length = (self.maze_size**2)*((self.maze_size**2)-1)
+        cycle_length = (self.maze_size**2) * ((self.maze_size**2) - 1)
 
         trial_types = {}
         for node in self.nodes():
@@ -722,12 +747,13 @@ class SquareMaze(nx.classes.graph.Graph):
                 goal = random.choice(available_first_in_cycle_goals)
                 last_retrieved = goal
 
-            elif not (n_retrieved+1) % cycle_length == 0:
+            elif not (n_retrieved + 1) % cycle_length == 0:
                 # number of goals left for last retrieved
                 n_left_last = len(trial_type_buffer[last_retrieved])
 
-                goal = trial_type_buffer[last_retrieved].pop(random.randint(
-                    0, n_left_last -1))
+                goal = trial_type_buffer[last_retrieved].pop(
+                    random.randint(0, n_left_last - 1)
+                )
 
                 if len(trial_type_buffer[goal]) == 0:
                     # it's a 'dead end' and should be saved for the very end
@@ -780,7 +806,8 @@ class SquareMaze(nx.classes.graph.Graph):
     @staticmethod
     def add_nodes_from(self):
         raise NodeModification
-    #TODO:
+
+    # TODO:
     """
     @classmethod
     def remove_node(self):
@@ -803,9 +830,10 @@ class SquareMaze(nx.classes.graph.Graph):
         raise NotSupported
     """
 
+
 class RandomSquareMaze(SquareMaze):
-    """Generator of SuqareMaze with random connections.
-    """
+    """Generator of SuqareMaze with random connections."""
+
     def __new__(self, maze_size, n_connections):
         """Generates a SquareMaze with random connectivity of
         given connectedness.
@@ -820,11 +848,12 @@ class RandomSquareMaze(SquareMaze):
         """
         maze = SquareMaze(maze_size)
 
-        edges_to_add = random.sample(maze.possible_edges, n_connections) 
+        edges_to_add = random.sample(maze.possible_edges, n_connections)
 
         maze.add_edges_from(edges_to_add)
 
         return maze
+
 
 class RandomButConnectedSquareMaze(SquareMaze):
     """Generator for a random maze where all nodes are connected.
@@ -837,10 +866,11 @@ class RandomButConnectedSquareMaze(SquareMaze):
     connectedness : float [0,1]
         Fraction of all possible connections that actually exist.
     """
+
     def __new__(self, maze_size, n_connections):
         """Generates a SquareMaze with random connectivity of
         given connectedness.
-        
+
         Note: This method is not very smart and could be easily
         optimized.
 
@@ -852,26 +882,25 @@ class RandomButConnectedSquareMaze(SquareMaze):
         n_connections : int [(maze_size**2)-1, 2*((maze_size**2)-maze_size)]
             Number of connections
         """
-        if n_connections < (maze_size**2)-1 or n_connections > 2*(
-                (maze_size**2)-maze_size):
+        if n_connections < (maze_size**2) - 1 or n_connections > 2 * (
+            (maze_size**2) - maze_size
+        ):
             raise NumberEdgesException
 
         maze = SquareMaze(maze_size)
 
         maze.add_edges_from(maze.possible_edges)
-        
-        edges_to_remove = random.sample(list(maze.edges()),
-                maze.n_possible_edges-n_connections)
+
+        edges_to_remove = random.sample(
+            list(maze.edges()), maze.n_possible_edges - n_connections
+        )
 
         maze.remove_edges_from(edges_to_remove)
 
         while not nx.is_connected(maze):
-            connection_to_remove = random.choice(list(
-                    maze.edges()))
-            connection_to_add = random.choice(
-                    maze.absent_edges)
+            connection_to_remove = random.choice(list(maze.edges()))
+            connection_to_add = random.choice(maze.absent_edges)
             maze.remove_edge(*connection_to_remove)
             maze.add_edge(*connection_to_add)
 
         return maze
-
