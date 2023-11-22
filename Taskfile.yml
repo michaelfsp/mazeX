@@ -1,0 +1,18 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      # - git clone https://github.com/schmoelder/python-diskcache ~/src/python-diskcache/
+      # - cd ~/src/python-diskcache/
+      # - git checkout support_dill
+      # - conda develop ~/src/python-diskcache
+      - git clone https://github.com/schmoelder/python-diskcache
+      - cd python-diskcache && git checkout support_dill
+      # - cd ..
+      - conda develop python-diskcache
+      - conda develop /home/michael/git/mazeX
+      - conda develop /home/michael/src/pyControl/tools/
+      - conda develop /mnt/dataz/michael/git-annex/client/data/src/data/
+      - conda develop /opt/Inscopix\ Data\ Processing\ 1.6.0/Inscopix\ Data\ Processing.linux/Contents/API/Python/
+
