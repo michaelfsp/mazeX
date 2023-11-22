@@ -1,4 +1,4 @@
-name: m311
+name: m311_test
 channels:
 - conda-forge
 dependencies:
@@ -52,11 +52,11 @@ dependencies:
 - cma=3.3.0=pyha21a80b_0
 - colorama=0.4.6=pyhd8ed1ab_0
 - comm=0.1.4=pyhd8ed1ab_0
-- conda=23.7.2=py311h38be061_0
-- conda-build=3.26.0=py311h38be061_1
-- conda-index=0.2.3=pyhd8ed1ab_0
-- conda-package-handling=2.2.0=pyh38be061_0
-- conda-package-streaming=0.9.0=pyhd8ed1ab_0
+- conda
+- conda-build
+- conda-index
+- conda-package-handling
+- conda-package-streaming
 - contourpy=1.1.0=py311h9547e67_0
 - corner=2.2.2=pyhd8ed1ab_0
 - cryptography=41.0.2=py311h63ff55d_0
@@ -400,4 +400,25 @@ dependencies:
 - zlib=1.2.13=hd590300_5
 - zstandard=0.19.0=py311haa97af0_2
 - zstd=1.5.2=hfc55251_7
-
+- pip:
+  - aiosignal==1.3.1
+  - certifi==2023.7.22
+  - descartes==1.1.0
+  - frozenlist==1.4.0
+  - glob2==0.7
+  - grpcio==1.56.2
+  - jsonpointer==2.0
+  - KDEpy==1.1.5
+  - llvmlite==0.40.1
+  - msgpack==1.0.5
+  - munkres==1.1.4
+  - numdifftools==0.9.41
+  - ply==3.11
+  - protobuf==4.23.4
+  - pyarrow==12.0.1
+  - PyQt5==5.15.9
+  - PyQt5-sip==12.12.2
+  - ray==2.6.3
+  - svgpath2mpl==0.2.1
+  - webencodings==0.5.1
+  - zstandard==0.19.0

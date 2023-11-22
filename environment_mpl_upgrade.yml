@@ -1,0 +1,55 @@
+name: m38top
+channels:
+  - defaults
+  - conda-forge
+  - fastai
+dependencies:
+  - descartes
+  - diskcache
+  - ffmpeg
+  - h5py
+  - hdf5
+  - intel-openmp
+  - ipdb
+  - ipykernel=5
+  - ipyparallel
+  - ipython=7
+  - jedi
+  - joblib=0.17
+  - jupyterlab
+  - lame
+  - matplotlib
+  - mkl
+  - numba
+  - numexpr
+  - numpy
+  - pandas
+  - pip
+  - pip-autoremove
+  - pyqt
+  - python=3.8
+  - qt
+  - salib
+  - scikit-learn
+  - scipy
+  - seaborn
+  - shapely=1.7
+  - statsmodels
+  - tk
+  - tqdm
+  - x264
+  - xarray
+  - yaml
+  - pip:
+      - elephant
+      - jupyterlab-git
+      - jupyterlab-markup
+      - jupyterlab-vim
+      - kdepy
+      - nbdime
+      - networkx
+      - pyyaml
+      - quantities
+      - ray
+      - svgpath2mpl<1
+prefix: /home/michael/miniconda3/envs/m38
