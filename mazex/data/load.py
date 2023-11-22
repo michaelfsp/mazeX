@@ -113,7 +113,11 @@ def load_session(
     ]
 
     session = Session(
-        date=date, subject=mouse, experiment_day=experiment_day, maze_day=maze_day
+        maze=maze,
+        date=date,
+        subject=mouse,
+        experiment_day=experiment_day,
+        maze_day=maze_day,
     )
 
     # iterate over trials

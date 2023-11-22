@@ -236,7 +236,9 @@ class Trial:
 
 
 class Session:
-    def __init__(self, date=None, subject=None, experiment_day=None, maze_day=None):
+    def __init__(
+        self, maze, date=None, subject=None, experiment_day=None, maze_day=None
+    ):
         """Session initiation method.
 
         Parameters:
@@ -247,6 +249,7 @@ class Session:
         trials : list
             List of trials to be presented to the Agent
         """
+        self.maze = maze
         self.trials = []
         self._current_trial_index = None
         self._current_trial_index_manually_set = False
@@ -301,23 +304,6 @@ class Session:
         t_start = self.trials[0].t_start
 
         return t_last_reward - t_start
-
-    @property
-    #    @cache
-    # TODO: turn trials to a property that flags it has changed in a hidden var
-    # so that we can cache .maze
-    # then do networkx.utils.misc.graphs_equal(list(set(self.maze))) to  check whether
-    # we have the same graph as different instances
-    def maze(self):
-        """If all steps have the same maze, return that maze, else return a
-        list of mazes. This might not be after some refactoring to be done in
-        a future incarnation.
-        """
-        mazes = [s.maze for s in self.trials]
-        if check_elements_equal(mazes):
-            return mazes[0]
-        else:
-            return mazes
 
     def steps(self):
         for t in self.trials:
