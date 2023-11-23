@@ -3,13 +3,7 @@ version: '3'
 tasks:
   default:
     cmds:
-      # - git clone https://github.com/schmoelder/python-diskcache ~/src/python-diskcache/
-      # - cd ~/src/python-diskcache/
-      # - git checkout support_dill
-      # - conda develop ~/src/python-diskcache
-      - git clone https://github.com/schmoelder/python-diskcache
-      - cd python-diskcache && git checkout support_dill
-      # - cd ..
+      - git clone https://github.com/michaelfsp/python-diskcache && cd python-diskcache && git checkout support_cloudpickle
       - conda develop python-diskcache
       - conda develop /home/michael/git/mazeX
       - conda develop /home/michael/src/pyControl/tools/

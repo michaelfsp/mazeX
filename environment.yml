@@ -2,6 +2,7 @@ name: m311
 channels:
 - conda-forge
 dependencies:
+- cloudpickle
 - conda-build
 - cudatoolkit
 - cudnn
