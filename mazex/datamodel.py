@@ -326,8 +326,16 @@ class Session:
 
     def choice_steps(self):
         for t in self.trials:
-            for s in t.steps[:-1]:
-                yield s
+            len_trial = len(t.steps)
+            for i, s in enumerate(t.steps):
+                if i + 1 < len_trial:
+                    # for all steps before last step
+                    yield s
+                elif i + 1 == len_trial and s.loc != t.goal:
+                    # for when the last step for some odd reason is not at the goal we still yield it
+                    yield s
+                else:
+                    pass
 
     @property
     def trial(self):
