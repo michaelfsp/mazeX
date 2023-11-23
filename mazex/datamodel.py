@@ -324,6 +324,11 @@ class Session:
             for s in t.steps:
                 yield s
 
+    def choice_steps(self):
+        for t in self.trials:
+            for s in t.steps[:-1]:
+                yield s
+
     @property
     def trial(self):
         return self.trials[self.current_trial_index]
