@@ -676,22 +676,13 @@ def compute_features(steps_df):
     ):
         trial_first_idx = trial_df.index[0]
         for index, row in trial_df.iterrows():
+            idx_chosen_node = row["available_nodes"].index(row["choice"])
             # we check if the chosen edge was already crossed in this direction
-
-            # the logic might seem inverted (checking elementwise if the elements of the list of dir_edges_chosen during current trial is in the list of length 1 with the choice and testing if there is any hit) but it is correct
-            if (
-                trial_df.loc[trial_first_idx : index - 1, "dir_edge_chosen"]
-                .isin([row["choice"]])
-                .any()
-            ):
-                lst_chosen_dir_edge_visited.append(1)
-            else:
-                lst_chosen_dir_edge_visited.append(-1)
-
-            # we do the same for all available edges
             available_dir_edge_visited = []
             for node in row["available_nodes"]:
                 available_edge = (row["location"], node)
+
+                # the logic might seem inverted (checking elementwise if the elements of the list of dir_edges_chosen during current trial is in the list of length 1 with the choice and testing if there is any hit) but it is correct
                 if (
                     trial_df.loc[trial_first_idx : index - 1, "dir_edge_chosen"]
                     .isin([available_edge])
@@ -702,18 +693,11 @@ def compute_features(steps_df):
                     available_dir_edge_visited.append(-1)
             lst_available_dir_edge_visited.append(available_dir_edge_visited)
 
-            # and now we compute the same for nodes
-            # first the chosen node
-            if (
-                trial_df.loc[trial_first_idx : index - 1, "location"]
-                .isin([row["choice"]])
-                .any()
-            ):
-                lst_chosen_node_visited.append(1)
-            else:
-                lst_chosen_node_visited.append(-1)
+            lst_chosen_dir_edge_visited.append(
+                available_dir_edge_visited[idx_chosen_node]
+            )
 
-            # now all the available nodes
+            # now the same for all the available nodes
             available_node_visited = []
             for node in row["available_nodes"]:
                 if (
@@ -725,6 +709,8 @@ def compute_features(steps_df):
                 else:
                     available_node_visited.append(-1)
             lst_available_node_visited.append(available_node_visited)
+
+            lst_chosen_node_visited.append(available_node_visited[idx_chosen_node])
 
     steps_df_with_features["chosen_dir_edge_visited"] = lst_chosen_dir_edge_visited
     steps_df_with_features[
