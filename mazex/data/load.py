@@ -671,6 +671,12 @@ def compute_features(steps_df):
     lst_available_dir_edge_visited = []
     lst_chosen_node_visited = []
     lst_available_node_visited = []
+
+    # lst_chosen_dir_edge_visited_lag2 = []
+    # lst_available_dir_edge_visited_lag2 = []
+    lst_chosen_node_visited_lag2 = []
+    lst_available_node_visited_lag2 = []
+
     for group_name, trial_df in steps_df_with_features.groupby(
         ["maze_day", "session_trial_count", "subject", "maze_name"]
     ):
@@ -679,6 +685,7 @@ def compute_features(steps_df):
             idx_chosen_node = row["available_nodes"].index(row["choice"])
             # we check if the chosen edge was already crossed in this direction
             available_dir_edge_visited = []
+            available_dir_edge_visited_lag2 = []
             for node in row["available_nodes"]:
                 available_edge = (row["location"], node)
 
@@ -691,14 +698,30 @@ def compute_features(steps_df):
                     available_dir_edge_visited.append(1)
                 else:
                     available_dir_edge_visited.append(-1)
-            lst_available_dir_edge_visited.append(available_dir_edge_visited)
 
+                # # now the same for a lag=2, which means we exclude the last chosen "dir_edge"
+                #
+                # if (
+                #     trial_df.loc[trial_first_idx : index - 2, "dir_edge_chosen"]
+                #     .isin([available_edge])
+                #     .any()
+                # ):
+                #     available_dir_edge_visited_lag2.append(1)
+                # else:
+                #     available_dir_edge_visited_lag2.append(-1)
+
+            lst_available_dir_edge_visited.append(available_dir_edge_visited)
+            # lst_available_dir_edge_visited_lag2.append(available_dir_edge_visited_lag2)
             lst_chosen_dir_edge_visited.append(
                 available_dir_edge_visited[idx_chosen_node]
             )
+            # lst_chosen_dir_edge_visited_lag2.append(
+            #     available_dir_edge_visited_lag2[idx_chosen_node]
+            # )
 
             # now the same for all the available nodes
             available_node_visited = []
+            available_node_visited_lag2 = []
             for node in row["available_nodes"]:
                 if (
                     trial_df.loc[trial_first_idx : index - 1, "location"]
@@ -708,9 +731,24 @@ def compute_features(steps_df):
                     available_node_visited.append(1)
                 else:
                     available_node_visited.append(-1)
-            lst_available_node_visited.append(available_node_visited)
 
+                # now the same for a lag=2, which means we exclude the node where the agent just came from because it is indissociable from the nobackward
+                if (
+                    trial_df.loc[trial_first_idx : index - 2, "location"]
+                    .isin([node])
+                    .any()
+                ):
+                    available_node_visited_lag2.append(1)
+                else:
+                    available_node_visited_lag2.append(-1)
+
+            lst_available_node_visited.append(available_node_visited)
             lst_chosen_node_visited.append(available_node_visited[idx_chosen_node])
+
+            lst_available_node_visited_lag2.append(available_node_visited_lag2)
+            lst_chosen_node_visited_lag2.append(
+                available_node_visited_lag2[idx_chosen_node]
+            )
 
     steps_df_with_features["chosen_dir_edge_visited"] = lst_chosen_dir_edge_visited
     steps_df_with_features[
@@ -718,6 +756,10 @@ def compute_features(steps_df):
     ] = lst_available_dir_edge_visited
     steps_df_with_features["chosen_node_visited"] = lst_chosen_node_visited
     steps_df_with_features["available_node_visited"] = lst_available_node_visited
+    steps_df_with_features["chosen_node_visited_lag2"] = lst_chosen_node_visited_lag2
+    steps_df_with_features[
+        "available_node_visited_lag2"
+    ] = lst_available_node_visited_lag2
 
     # we first copy the session_trial_count and only then add the number of trials of past sessions to get the global trial count for a given maze
     steps_df_with_features.loc[:, "maze_trial_count"] = steps_df_with_features[
