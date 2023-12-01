@@ -353,6 +353,22 @@ class MixtureLikelihood(Likelihood):
             )
             self.forward_values = np.cos(np.array(all_angle_to_heading_padded))
 
+            angle_to_heading_array = session_df.angle_to_heading.to_numpy()
+
+            self.nobackward_chosen_values = np.where(
+                angle_to_heading_array == np.pi, -1, 1
+            )
+
+            # we set the values smaller than np.pi to 1 and keep np.pi and np.nan as they are
+            self.nobackward_values = np.where(
+                all_angle_to_heading_padded < np.pi, 1, all_angle_to_heading_padded
+            )
+
+            # we set np.pi to -1
+            self.nobackward_values = np.where(
+                self.nobackward_values == np.pi, -1, self.nobackward_values
+            )
+
             if penalty_criterium == "node":
                 self.constant_penalty_chosen_values = np.array(
                     session_df.chosen_node_visited
@@ -560,6 +576,16 @@ class MixtureLikelihood(Likelihood):
             subtract_mean=subtract_mean,
         )
 
+    def gdphipsi_nll(self, params_array, subtract_mean=True):
+        gamma, delta, phi, psi = params_array
+        return self.vect_nll(
+            gamma=gamma,
+            delta=delta,
+            phi=phi,
+            psi=psi,
+            subtract_mean=subtract_mean,
+        )
+
     def gzx_nll(self, params_array, subtract_mean=True):
         gamma, zeta, xi = params_array
         delta = 0
@@ -622,6 +648,7 @@ class MixtureLikelihood(Likelihood):
         epsilon=0,
         zeta=0,
         pi=0,
+        phi=0,
         psi=0,
         xi=0,
         subtract_mean=True,
@@ -635,6 +662,7 @@ class MixtureLikelihood(Likelihood):
             sccv = self.centrality_chosen_values
             spcv = self.penalty_chosen_values
             spicv = self.forward_chosen_values
+            sphicv = self.nobackward_chosen_values
             spsicv = self.constant_penalty_chosen_values
 
             self.comb_chosen_values = ne.evaluate(
@@ -643,6 +671,7 @@ class MixtureLikelihood(Likelihood):
                     + epsilon * sncv\
                     + zeta * sccv\
                     + pi * spicv\
+                    + phi * sphicv\
                     - psi * spsicv\
                     - xi * spcv)"
             )
@@ -653,6 +682,7 @@ class MixtureLikelihood(Likelihood):
             scv = self.centrality_values
             spv = self.penalty_values
             spiv = self.forward_values
+            sphiv = self.nobackward_values
             spsiv = self.constant_penalty_values
 
             self.comb_values = ne.evaluate(
@@ -661,6 +691,7 @@ class MixtureLikelihood(Likelihood):
                     + epsilon * snv\
                     + zeta * scv\
                     + pi * spiv\
+                    + phi * sphiv\
                     - psi * spsiv\
                     - xi * spv)"
             )
@@ -671,6 +702,7 @@ class MixtureLikelihood(Likelihood):
                 + epsilon * self.nsteps_chosen_values
                 + zeta * self.centrality_chosen_values
                 + pi * self.forward_chosen_values
+                + phi * self.nobackward_chosen_values
                 - psi * self.constant_penalty_chosen_values
                 - xi * self.penalty_chosen_values
             )
@@ -681,6 +713,7 @@ class MixtureLikelihood(Likelihood):
                 + epsilon * self.nsteps_values
                 + zeta * self.centrality_values
                 + pi * self.forward_values
+                + phi * self.nobackward_values
                 - psi * self.constant_penalty_values
                 - xi * self.penalty_values
             )
