@@ -616,7 +616,16 @@ class MixtureLikelihood(Likelihood):
         )
 
     def vect_nll(
-        self, gamma, delta, epsilon, zeta, pi, psi, xi, subtract_mean=True, numexpr=True
+        self,
+        gamma=0,
+        delta=0,
+        epsilon=0,
+        zeta=0,
+        pi=0,
+        psi=0,
+        xi=0,
+        subtract_mean=True,
+        numexpr=True,
     ):
         # this is essentially a vectorized softmax with beta = 1
         if numexpr:
