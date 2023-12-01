@@ -318,6 +318,13 @@ class MixtureLikelihood(Likelihood):
         super(MixtureLikelihood, self).__init__(session)
         init_loc = session.trials[0].steps[0].loc
         init_heading = session.trials[0].steps[0].heading
+
+        # HACK: this if should be removed
+        if penalty_criterium in ("node, edge_unidir"):
+            penalty_criterium_agent = penalty_criterium
+        else:
+            penalty_criterium_agent = "node"
+
         self.agent = MixtureAgent(
             maze=self.session.maze,
             beta=1,
@@ -329,7 +336,7 @@ class MixtureLikelihood(Likelihood):
             pi=1,
             nsteps=nsteps,
             centrality=centrality,
-            penalty_criterium=penalty_criterium,
+            penalty_criterium=penalty_criterium_agent,
             loc=init_loc,
             heading=init_heading,
         )
@@ -383,6 +390,14 @@ class MixtureLikelihood(Likelihood):
                 )
                 self.constant_penalty_values = np.array(
                     pad_with_nan(session_df.available_dir_edge_visited)
+                )
+
+            if penalty_criterium == "node_lag2":
+                self.constant_penalty_chosen_values = np.array(
+                    session_df.chosen_node_visited_lag2
+                )
+                self.constant_penalty_values = np.array(
+                    pad_with_nan(session_df.available_node_visited_lag2)
                 )
 
             self.omniscient_chosen_values = -np.array(session_df.geodesic_delta)
