@@ -41,13 +41,16 @@ def angle_between_nodes(loc, node1, node2):
     goal : node or turple
         The node of the ,y coordinates of the goal location.
     """
-    node1_vec = np.array(node1) - np.array(loc)
-    node2_vec = np.array(node2) - np.array(loc)
+    if loc == node1 or loc == node2:
+        return np.pi
+    else:
+        node1_vec = np.array(node1) - np.array(loc)
+        node2_vec = np.array(node2) - np.array(loc)
 
-    return np.arccos(
-        np.dot(node1_vec, node2_vec)
-        / (np.linalg.norm(node1_vec) * np.linalg.norm(node2_vec))
-    )
+        return np.arccos(
+            np.dot(node1_vec, node2_vec)
+            / (np.linalg.norm(node1_vec) * np.linalg.norm(node2_vec))
+        )
 
 
 @lru_cache(maxsize=65536)
