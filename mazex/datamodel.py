@@ -120,7 +120,7 @@ class Trial:
         goal,
         max_steps=0,
         goal_reached=True,
-        delay_period=0,
+        delay_period=0.0,
         shortened=False,
     ):
         if isinstance(maze, SquareMaze):
@@ -140,11 +140,10 @@ class Trial:
     def duration(self):
         return self.t_stop - self.t_start
 
-    # FIXME: this property shouldn't have the same name as the method
-    @property
-    def excess_steps(self):
-        # we discount 1 because both start and goal are included in self.steps
-        return int(len(self.steps) - 1 - self.shortest_path_length)
+    # @property
+    # def excess_steps(self):
+    #     # we discount 1 because both start and goal are included in self.steps
+    #     return int(len(self.steps) - 1 - self.shortest_path_length)
 
     def excess_sdd(self, m_over_n=1, gamma=1):
         # FIXME: gamma is not being used to compute SDD!!!
