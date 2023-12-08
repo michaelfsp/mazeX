@@ -268,6 +268,38 @@ def load_session(
     return session
 
 
+# def load_steps(
+#     background_file,
+#     background_PNG,
+#     arduino_file_path,
+#     bonsai_metadata_file_path,
+#     dlc_coords_file_path,
+#     maze,
+#     date=None,
+#     mouse=None,
+#     experiment_day=None,
+#     maze_day=None,
+#     fps=60,
+# ):
+#     session = load_session(
+#         background_file=background_file,
+#         background_PNG=background_PNG,
+#         arduino_file_path=arduino_file_path,
+#         bonsai_metadata_file_path=bonsai_metadata_file_path,
+#         dlc_coords_file_path=dlc_coords_file_path,
+#         maze=maze,
+#         date=date,
+#         mouse=mouse,
+#         experiment_day=experiment_day,
+#         maze_day=maze_day,
+#         fps=fps,
+#     )
+#
+#     steps = load_steps_multi([session])
+#
+#     return steps
+#
+#
 # -----------------Load steps from sessions of multiple subjects---------------
 def load_steps_multi(sessions):
     """Multisession Multisubject."""
@@ -308,13 +340,16 @@ def load_steps_multi(sessions):
                     -1 if node in optimal_choice else 1 for node in s.available_nodes
                 ]
 
+                next_step = t.steps[i_s + 1]
+
                 data.append(
                     [
                         date_time,
                         session.experiment_day,
                         session.maze_day,
                         session.subject,
-                        s.time,
+                        np.float64(s.time),
+                        np.float64(next_step.time),
                         session.maze.name,
                         s.loc,
                         s.trial.goal,
@@ -330,6 +365,7 @@ def load_steps_multi(sessions):
                         choice_was_optimal,
                         geodesic_delta,
                         all_geodesic_deltas,
+                        np.float64(t.delay_period),
                     ]
                 )
 
@@ -343,6 +379,7 @@ def load_steps_multi(sessions):
             "maze_day",
             "subject",
             "time",
+            "time_next_step",
             "maze_name",
             "location",
             "goal",
@@ -358,6 +395,7 @@ def load_steps_multi(sessions):
             "choice_was_optimal",
             "geodesic_delta",
             "all_geodesic_deltas",
+            "trial_delay_period",
         ],
     )
 
@@ -820,3 +858,78 @@ def compute_features(steps_df):
         ] += past_steps_to_add_to_this_session
 
     return steps_df_with_features
+
+
+def datetime_to_list(dt):
+    year, month, day, *_ = dt.timetuple()
+    time_list = [str(year).zfill(4), str(month).zfill(2), str(day).zfill(2)]
+    return time_list
+
+
+def infer_previous_loc_from_loc_heading(loc, heading):
+    if heading == "o":
+        return None
+    elif heading == ">":
+        return (loc[0] - 1, loc[1])
+    elif heading == "<":
+        return (loc[0] + 1, loc[1])
+    elif heading == "^":
+        return (loc[0], loc[1] - 1)
+    elif heading == "v":
+        return (loc[0], loc[1] + 1)
+
+
+def load_session_from_steps_df(steps_df, mazes_dic, check_consistency=False):
+    # load mandatory metadata for Session
+    date = datetime_to_list(steps_df.date.unique()[0])
+    subject = steps_df.subject.unique()[0]
+    experiment_day = int(steps_df.experiment_day.unique()[0])
+    maze_day = int(steps_df.maze_day.unique()[0])
+
+    session = Session(
+        date=date, subject=subject, experiment_day=experiment_day, maze_day=maze_day
+    )
+
+    # load additional metadata
+    maze_name = steps_df.maze_name.unique()[0]
+
+    for trial_number, trial_df in steps_df.groupby("session_trial_count"):
+        # TODO: add delay_period attribute
+        goal = trial_df.goal.unique()[0]
+
+        trial = Trial(maze=mazes_dic[maze_name], goal=goal)
+        trial.delay_period = trial_df.trial_delay_period.unique()[0]
+
+        previous_step = None
+        for ind, row in trial_df.iterrows():
+            step = Step(
+                loc=row.location,
+                trial=trial,
+                time=np.float64(row.time),
+                previous=previous_step,
+                previous_loc=infer_previous_loc_from_loc_heading(
+                    row.location, row.heading
+                ),
+            )
+
+            trial.steps.append(step)
+
+            previous_step = step
+
+        # add the very last step of the trial
+        # row is going to be the last row of the DataFrame containing only the steps of current trial
+        # and ind will be its index
+        last_step_row = trial_df.iloc[-1]
+        last_step = Step(
+            loc=last_step_row.choice,
+            trial=trial,
+            time=np.float64(last_step_row.time_next_step),
+            previous=previous_step,
+            previous_loc=last_step_row.location,
+        )
+
+        trial.steps.append(last_step)
+
+        session.trials.append(trial)
+
+    return session
