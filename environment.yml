@@ -45,7 +45,7 @@ dependencies:
 - scikit-learn
 - scikit-optimize
 - scipy
-- seaborn
+- seaborn=0.12.2
 - shapely[version='<2']
 - statsmodels
 - tk
@@ -53,6 +53,6 @@ dependencies:
 - x264
 - yaml
 - pip:
-  - KDEpy
-  - ray
-  - svgpath2mpl<1
+    - KDEpy
+    - ray
+    - svgpath2mpl<1

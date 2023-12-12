@@ -4,9 +4,11 @@ tasks:
   default:
     cmds:
       - git clone https://github.com/michaelfsp/python-diskcache && cd python-diskcache && git checkout support_cloudpickle
+      - micromamba activate m311
       - conda develop python-diskcache
       - conda develop /home/michael/git/mazeX
       - conda develop /home/michael/src/pyControl/tools/
       - conda develop /mnt/dataz/michael/git-annex/client/data/src/data/
       - conda develop /opt/Inscopix\ Data\ Processing\ 1.6.0/Inscopix\ Data\ Processing.linux/Contents/API/Python/
+      - micromamba install --no-deps statannotations
 

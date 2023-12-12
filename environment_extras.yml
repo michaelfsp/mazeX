@@ -1,0 +1,60 @@
+name: m311extras
+channels:
+- conda-forge
+dependencies:
+- cloudpickle
+- conda-build
+- cudatoolkit
+- cudnn
+- deepdiff
+- descartes
+- ffmpeg
+- go-task
+- h5py
+- hdf5
+- ipdb
+- ipykernel
+- ipyparallel
+- ipython
+- jedi
+- joblib
+- jupyterlab
+- jupyterlab_vim
+- jupytext
+- lame
+- lua
+- luarocks
+- markdown-it-py
+- markupsafe
+- matplotlib
+- mkl
+- networkx
+- numba
+- numexpr
+- numpy
+- pandas
+- pandoc
+- pandocfilters
+- pillow
+- pingouin
+- pip
+- pip-autoremove
+- pyarrow
+- pybads
+- python
+- pyvbmc
+- salib
+- scikit-learn
+- scikit-optimize
+- scipy
+- seaborn=0.12.2
+- shapely[version='<2']
+- statsmodels
+- tk
+- tqdm
+- x264
+- yaml
+- pip:
+    - KDEpy
+    - ray
+    - svgpath2mpl<1
