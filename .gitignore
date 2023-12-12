@@ -3,3 +3,4 @@
 cachedir/
 **/.ipynb_checkpoints
 *.orig
+datamodel_files/libs
