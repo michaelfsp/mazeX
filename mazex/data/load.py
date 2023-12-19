@@ -16,6 +16,7 @@ from mazex.utils import (
     angle_between_nodes,
     euclidian_distance,
     manhattan_distance,
+    maze_loc_choice_to_cardinal,
 )
 
 
@@ -355,6 +356,9 @@ def load_steps_multi(sessions):
                         s.trial.goal,
                         available_nodes,
                         available_nodes[s.choice],
+                        maze_loc_choice_to_cardinal(
+                            session.maze, s.loc, available_nodes[s.choice]
+                        ),
                         optimal_choice,
                         s.heading,
                         i_s,
@@ -385,6 +389,7 @@ def load_steps_multi(sessions):
             "goal",
             "available_nodes",
             "choice",
+            "cardinal_choice",
             "optimal_choice",
             "heading",
             "trial_step_count",
@@ -397,6 +402,13 @@ def load_steps_multi(sessions):
             "all_geodesic_deltas",
             "trial_delay_period",
         ],
+    ).astype(
+        {
+            "maze_name": "string",
+            "subject": "string",
+            "cardinal_choice": "string",
+            "heading": "string",
+        }
     )
 
 

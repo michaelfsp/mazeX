@@ -6,6 +6,7 @@ import numpy as np
 import math
 import networkx as nx
 from mazex.exceptions import *
+import pandas as pd
 
 import copy
 import mazex as mx
@@ -982,18 +983,94 @@ def sdd_path(path, m_over_n=1, gamma=1, s_T=None):
     return sdd
 
 
-def pad_with_nan(lst, max_len=None):
+def pad_with_nan(lst, max_len=None, use_pandas=False):
     """Pad list of lists with nans so that that every row has same length.
 
     Parameters:
         max_len: length of the longest row. if not specified it will be computed. pre-specifying will make it faster
     """
-    if not max_len:
-        # Find the maximum length
-        max_len = max(len(sublist) for sublist in lst)
+    if not use_pandas:
+        if not max_len:
+            # Find the maximum length
+            max_len = max(len(sublist) for sublist in lst)
 
-    # Pad each sublist with NaN to make them all of the same length
-    padded_list = [sublist + [np.nan] * (max_len - len(sublist)) for sublist in lst]
+        # Pad each sublist with NaN to make them all of the same length
+        padded_list = [sublist + [np.nan] * (max_len - len(sublist)) for sublist in lst]
 
-    # Convert to numpy array
-    return np.array(padded_list)
+        # Convert to numpy array
+        return np.array(padded_list)
+
+    else:
+        if isinstance(lst, pd.core.series.Series):
+            lst = lst.to_list()
+        return pd.DataFrame(lst).to_numpy()
+
+
+def list_to_cardinal_columns(df, column, mazes_dict, new_column_name=None):
+    if not new_column_name:
+        new_column_name = column
+    column_tuples = [
+        (new_column_name, "W"),
+        (new_column_name, "S"),
+        (new_column_name, "N"),
+        (new_column_name, "E"),
+    ]
+    columns_index = pd.MultiIndex.from_tuples(column_tuples)
+
+    cardinal_dicts = {"W": [], "S": [], "N": [], "E": []}
+    for i, row in df.iterrows():
+        cardinal_neighbors_dict = maze_loc_to_cardinal_dict(
+            mazes_dict[row.maze_name], row.location
+        )
+        for card_dir in ["W", "S", "N", "E"]:
+            # import ipdb
+            #
+            # ipdb.set_trace()
+            cardinal_neighbor = cardinal_neighbors_dict[card_dir]
+            if cardinal_neighbor:
+                cardinal_idx = row.available_nodes.index(cardinal_neighbor)
+                cardinal_dicts[card_dir].append(row[column][cardinal_idx])
+            else:
+                cardinal_dicts[card_dir].append(np.nan)
+
+    df_cardinal_columns = pd.DataFrame(data=cardinal_dicts, index=df.index)
+    df_cardinal_columns.columns = columns_index
+    return df_cardinal_columns
+
+
+def list_to_columns(list_series, columns=None):
+    """Converts a list of lists to a pandas DataFrame"""
+    # Convert each list to a Series, then stack into a DataFrame
+    return pd.DataFrame(list_series.tolist(), index=list_series.index, columns=columns)
+
+
+def maze_loc_to_cardinal_dict(maze, loc):
+    possible_cardinals = {
+        "W": (loc[0] - 1, loc[1]),
+        "S": (loc[0], loc[1] - 1),
+        "N": (loc[0], loc[1] + 1),
+        "E": (loc[0] + 1, loc[1]),
+    }
+
+    cardinal_dict = {}
+    for k, v in possible_cardinals.items():
+        if (loc, v) in maze.edges:
+            cardinal_dict[k] = v
+        else:
+            cardinal_dict[k] = None
+
+    return cardinal_dict
+
+
+def maze_loc_choice_to_cardinal(maze, loc, choice):
+    if (loc, choice) in maze.edges():
+        if loc[1] == choice[1] and loc[0] - 1 == choice[0]:
+            return "W"
+        elif loc[1] - 1 == choice[1] and loc[0] == choice[0]:
+            return "S"
+        elif loc[1] + 1 == choice[1] and loc[0] == choice[0]:
+            return "N"
+        elif loc[1] == choice[1] and loc[0] + 1 == choice[0]:
+            return "E"
+    else:
+        return None
