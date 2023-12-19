@@ -487,11 +487,19 @@ class MixtureLikelihood(Likelihood):
                 self.constant_penalty_values,
             ) = self.agent.evaluate_penalties_session(session)
 
+            self.constant_penalty_chosen_values = (
+                2 * self.constant_penalty_chosen_values
+            ) - 1
+            self.constant_penalty_values = (2 * self.constant_penalty_values) - 1
+
             self.agent.penalty_type = "exponential"
             (
                 self.penalty_chosen_values,
                 self.penalty_values,
             ) = self.agent.evaluate_penalties_session(session)
+
+            self.penalty_chosen_values = (2 * self.penalty_chosen_values) - 1
+            self.penalty_values = (2 * self.penalty_values) - 1
 
     # Deprecated!
     def slow_nll(self, params_array):
