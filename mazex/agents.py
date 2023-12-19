@@ -663,7 +663,7 @@ class Agent:
         self.xi = xi
         self.penalty_type = penalty_type
         self.penalty_criterium = penalty_criterium
-        if self.penalty_criterium not in ('node', 'edge_unidir'):
+        if self.penalty_criterium not in ('node', 'node_lag2', 'edge_unidir'):
             raise NotSupported
 
         self.heading = heading
@@ -815,16 +815,26 @@ class Agent:
         -xi (a "reward") whereas for visited nodes it is +xi (negative, 
         as penalties get subtracted from values
         """
-        penalties = -np.ones(len(nodeslist)) * self.xi
+        penalties = np.zeros(len(nodeslist))
 
         for i,n in enumerate(nodeslist):
             if self.penalty_criterium == 'edge_unidir':
                 if (self.loc, n) in self.edge_visit_cache:
-                    penalties[i] = self.xi
+                    penalties[i] = 1.
 
             elif self.penalty_criterium == 'node':
                 if n in self.node_visit_cache:
-                    penalties[i] = self.xi
+                    penalties[i] = 1.
+            
+            elif self.penalty_criterium == 'node_lag2':
+                # The node_visit_cache already includes the current location
+                # if we want to ignore the step the agent already came from
+                # we need to discard the last two cache entries
+                if n in list(self.node_visit_cache.keys())[:-2]:
+                    penalties[i] = 1.
+
+
+        penalties *= self.xi
 
         return penalties
 
@@ -859,6 +869,17 @@ class Agent:
                     step_count_last_visit.append(
                             self.node_visit_cache[n])
                     i_visited.append(i)
+        
+        elif self.penalty_criterium == 'node_lag2':
+            i_visited = []
+            step_count_last_visit = []
+
+            for i, n in enumerate(nodeslist):
+                if i > 0:
+                    if n in list(self.node_visit_cache.keys())[:-2]:
+                        step_count_last_visit.append(
+                                self.node_visit_cache[n])
+                        i_visited.append(i)
 
         #by sorting on -step_count_last_visit we get the reverse order, i.e.,
         # the indices for sorting by decreasing value
