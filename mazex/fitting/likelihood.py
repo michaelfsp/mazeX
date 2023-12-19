@@ -1,11 +1,25 @@
 import numpy as np
 from mazex.agents import HeuristicAgent, MixtureAgent
 from mazex.data.load import load_steps_multi, compute_features
-from mazex.utils import pad_with_nan
+from mazex.utils import (
+    pad_with_nan,
+    list_to_cardinal_columns,
+    maze_loc_to_cardinal_dict,
+)
 
 import math
 import numba
 import numexpr as ne
+
+import pandas as pd
+
+from functools import partial
+
+
+def BIC(n_params, total_choices, nll_opt):
+    """Compute the Bayesian Information Criterion"""
+    BIC = n_params * np.log(total_choices) - 2 * np.log(nll_opt)
+    return BIC
 
 
 # @jit(nopython=True, nogil=True)
@@ -320,7 +334,7 @@ class MixtureLikelihood(Likelihood):
         init_heading = session.trials[0].steps[0].heading
 
         # HACK: this if should be removed
-        if penalty_criterium in ("node, edge_unidir"):
+        if penalty_criterium in ("node, edge_unidir", "node_lag2"):
             penalty_criterium_agent = penalty_criterium
         else:
             penalty_criterium_agent = "node"
@@ -480,6 +494,20 @@ class MixtureLikelihood(Likelihood):
                 self.forward_chosen_values,
                 self.forward_values,
             ) = forwardv
+
+            self.nobackward_chosen_values = np.where(
+                self.forward_chosen_values == np.cos(np.pi), -1, 1
+            )
+
+            # we set the values smaller than np.pi to 1 and keep np.pi and np.nan as they are
+            self.nobackward_values = np.where(
+                self.forward_values > np.cos(np.pi), 1, self.forward_values
+            )
+
+            # we set np.pi to -1
+            self.nobackward_values = np.where(
+                self.forward_values == np.cos(np.pi), -1, self.nobackward_values
+            )
 
             self.agent.penalty_type = "constant"
             (
@@ -794,3 +822,184 @@ class HeuristicLikelihood(Likelihood):
     def neg_log_likelihood_beta_xi(self, beta_xi):
         beta, xi = beta_xi
         return super(HeuristicLikelihood, self).neg_log_likelihood((beta, 1, xi))
+
+
+def vnav_vals(session_df, mazes_dict, func=np.cos):
+    vnav_chosen_vals = pd.Series(
+        func(np.array(session_df.angle_to_goal)), index=session_df.index, name="vnav"
+    )
+
+    vnav_vals = list_to_cardinal_columns(
+        session_df, "all_angle_to_goal", mazes_dict, new_column_name="vnav"
+    )
+    vnav_vals = func(vnav_vals)
+
+    return (vnav_chosen_vals, vnav_vals)
+
+
+def antibackward_vals(session_df, mazes_dict):
+    antibackward_chosen_vals = pd.Series(
+        np.where(session_df.angle_to_heading == np.pi, -1.0, 1.0),
+        index=session_df.index,
+        name="antibackward",
+    )
+
+    antibackward_vals = list_to_cardinal_columns(
+        session_df, "all_angle_to_heading", mazes_dict, new_column_name="antibackward"
+    )
+
+    # when angle is != np.pi we set it to 1 (no need to turn around)
+    antibackward_vals.where(antibackward_vals == np.pi, 1.0, inplace=True)
+    # when angle is np.pi we set it to -1 (turn around)
+    antibackward_vals.mask(antibackward_vals == np.pi, -1.0, inplace=True)
+
+    return (antibackward_chosen_vals, antibackward_vals)
+
+
+def visited_node_lag2_vals(session_df, mazes_dict):
+    """Warning: it is the symmetrical of what i had done before. This is to be added and not subtracted as a penalty. I.e., actual penalties are now negative values"""
+
+    visited_node_lag2_chosen_vals = pd.Series(
+        -session_df.chosen_node_visited_lag2,
+        index=session_df.index,
+        name="visited_node_lag2",
+    )
+
+    visited_node_lag2_vals = -list_to_cardinal_columns(
+        session_df,
+        "available_node_visited_lag2",
+        mazes_dict,
+        new_column_name="visited_node_lag2",
+    )
+
+    return (visited_node_lag2_chosen_vals, visited_node_lag2_vals)
+
+
+def optimal_vals(session_df, mazes_dict):
+    chosen_vals = pd.Series(
+        -session_df.geodesic_delta, index=session_df.index, name="optimal"
+    )
+
+    vals = -list_to_cardinal_columns(
+        session_df, "all_geodesic_deltas", mazes_dict, new_column_name="optimal"
+    )
+
+    return (chosen_vals, vals)
+
+
+def renormalize_geodesic_deltas(geodelta_array):
+    if type(geodelta_array) is not np.ndarray:
+        geodelta_array = np.array(geodelta_array)
+    idxs_available_choices = np.nonzero(~np.isnan(geodelta_array))[0].tolist()
+    # if all non nan values are the same or there is only one nan value
+    if np.nanstd(geodelta_array) == 0:
+        normalized_deltas = np.full(4, np.nan)
+        if np.any(geodelta_array[idxs_available_choices] > 0):
+            normalized_deltas[idxs_available_choices] = -1
+        elif np.any(geodelta_array[idxs_available_choices] == 0):
+            normalized_deltas[idxs_available_choices] = 0
+        elif np.any(geodelta_array[idxs_available_choices] < 0):
+            normalized_deltas[idxs_available_choices] = +1
+    else:
+        # we make the worst option, i.e. the one resulting in the highest increase of geodesic distance, 0.0
+        geodelta_array -= np.nanmax(geodelta_array)
+        # we make the best option, i.e. the one resulting in the highest decrease of distance, 1.0
+        geodelta_array /= np.nanmin(geodelta_array)
+        # we shift and scale
+        normalized_deltas = 2 * (geodelta_array - 0.5)
+
+    return normalized_deltas.tolist()
+
+
+def prior_maze_vals(session_df, mazes_dict, prior_dict):
+    chosen_vals = []
+    vals = {"W": [], "S": [], "N": [], "E": []}
+    for i, row in session_df.iterrows():
+        prior_maze = prior_dict[row.maze_name]
+        current_maze = mazes_dict[row.maze_name]
+
+        cardinal_dict = maze_loc_to_cardinal_dict(current_maze, row.location)
+
+        prior_geodesic_deltas = []
+        for node_choice in cardinal_dict.values():
+            if node_choice:
+                prior_geodesic_deltas.append(
+                    prior_maze.distances_dictionary[node_choice][row.goal]
+                    - prior_maze.distances_dictionary[row.location][row.goal]
+                )
+            else:
+                prior_geodesic_deltas.append(np.nan)
+
+        normalized_prior_deltas = renormalize_geodesic_deltas(prior_geodesic_deltas)
+
+        for i, cardinal_dir in enumerate(cardinal_dict.keys()):
+            vals[cardinal_dir].append(normalized_prior_deltas[i])
+
+        # chosen_vals.append(
+        #     prior_maze.distances_dictionary[row.choice][row.goal]
+        #     - prior_maze.distances_dictionary[row.location][row.goal]
+        # )
+
+        chosen_vals.append(vals[row.cardinal_choice][-1])
+
+    chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="prior_maze")
+    vals = pd.DataFrame(vals, index=session_df.index)
+
+    column_tuples = [
+        ("prior_maze", "W"),
+        ("prior_maze", "S"),
+        ("prior_maze", "N"),
+        ("prior_maze", "E"),
+    ]
+    columns_index = pd.MultiIndex.from_tuples(column_tuples)
+    vals.columns = columns_index
+
+    return (chosen_vals, vals)
+
+
+# class DFLikelihood(object):
+#     def __init__(self, df):
+#         self.df = df
+#
+#     def nll_func(self, features_list):
+
+
+def nll_func_generator(
+    df, features_list, mazes_dict, prior_dict=None, vnav_func=np.cos
+):
+    """Returns a function that inputs feature coefficients and outputs NLL"""
+    df = compute_features(df)
+    feature_func_dict = {
+        "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=vnav_func),
+        "antibackward": partial(antibackward_vals, mazes_dict=mazes_dict),
+        "visited_node_lag2": partial(visited_node_lag2_vals, mazes_dict=mazes_dict),
+        "optimal": partial(optimal_vals, mazes_dict=mazes_dict),
+        "prior_maze": partial(
+            prior_maze_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
+        ),
+    }
+    chosen_vals = []
+    vals = []
+
+    for feature in features_list:
+        cvs, vs = feature_func_dict[feature](df)
+        chosen_vals.append(cvs)
+        vals.append(vs)
+
+    chosen_vals = np.array(chosen_vals).T
+    vals = np.array(vals).T
+
+    def nll_func(params_array, chosen_vals, vals):
+        # chosen_vals *= params_array
+        # chosen_vals = chosen_vals.sum(axis=-1)
+        chosen_vals_comb = (params_array * chosen_vals).sum(axis=-1)
+        # vals *= params_array
+        # vals = vals.sum(axis=-1)
+        # vals = vals.T
+        vals_comb = (params_array * vals).sum(axis=-1).T
+
+        logprobs = logsoftmax_chosen_values(chosen_vals_comb, vals_comb)
+
+        return -np.sum(logprobs)
+
+    return partial(nll_func, chosen_vals=chosen_vals, vals=vals)
