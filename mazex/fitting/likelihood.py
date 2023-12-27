@@ -1,6 +1,10 @@
 import numpy as np
 from mazex.agents import HeuristicAgent, MixtureAgent
-from mazex.data.load import load_steps_multi, compute_features
+from mazex.data.load import (
+    load_steps_multi,
+    compute_features,
+    load_session_from_steps_df,
+)
 from mazex.utils import (
     pad_with_nan,
     list_to_cardinal_columns,
@@ -435,6 +439,9 @@ class MixtureLikelihood(Likelihood):
                 self.penalty_chosen_values,
                 self.penalty_values,
             ) = self.agent.evaluate_penalties_session(session)
+
+            self.penalty_chosen_values = (2 * self.penalty_chosen_values) - 1
+            self.penalty_values = (2 * self.penalty_values) - 1
 
         else:
             #            (
@@ -875,6 +882,30 @@ def visited_node_lag2_vals(session_df, mazes_dict):
     return (visited_node_lag2_chosen_vals, visited_node_lag2_vals)
 
 
+def visited_node_exp_vals(session_df, mazes_dict):
+    """Warning: it is the symmetrical of what i had done before. This is to be added and not subtracted as a penalty. I.e., actual penalties are now negative values"""
+
+    session_from_df = load_session_from_steps_df(session_df, mazes_dict)
+
+    like = MixtureLikelihood(
+        session_from_df, penalty_criterium="node", pandas_interface=True
+    )
+
+    visited_node_exp_chosen_vals = pd.Series(
+        -like.penalty_chosen_values, index=session_df.index, name="visited_node_exp"
+    )
+
+    session_df["available_node_visited_exp"] = (-like.penalty_values).tolist()
+    visited_node_exp_vals = list_to_cardinal_columns(
+        session_df,
+        "available_node_visited_exp",
+        mazes_dict,
+        new_column_name="visited_node_exp",
+    )
+
+    return (visited_node_exp_chosen_vals, visited_node_exp_vals)
+
+
 def optimal_vals(session_df, mazes_dict):
     chosen_vals = pd.Series(
         -session_df.geodesic_delta, index=session_df.index, name="optimal"
@@ -973,6 +1004,7 @@ def nll_func_generator(
         "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=vnav_func),
         "antibackward": partial(antibackward_vals, mazes_dict=mazes_dict),
         "visited_node_lag2": partial(visited_node_lag2_vals, mazes_dict=mazes_dict),
+        "visited_node_exp": partial(visited_node_exp_vals, mazes_dict=mazes_dict),
         "optimal": partial(optimal_vals, mazes_dict=mazes_dict),
         "prior_maze": partial(
             prior_maze_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
