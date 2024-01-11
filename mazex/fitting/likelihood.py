@@ -22,7 +22,7 @@ from functools import partial
 
 def BIC(n_params, total_choices, nll_opt):
     """Compute the Bayesian Information Criterion"""
-    BIC = n_params * np.log(total_choices) - 2 * np.log(nll_opt)
+    BIC = n_params * np.log(total_choices) - 2 * (-nll_opt)
     return BIC
 
 
