@@ -832,6 +832,13 @@ class HeuristicLikelihood(Likelihood):
 
 
 def vnav_vals(session_df, mazes_dict, func=np.cos):
+    if func is None:
+
+        def renormalize_angles(angle):
+            return (2.0 * (-angle / np.pi)) + 1.0
+
+        func = renormalize_angles
+
     vnav_chosen_vals = pd.Series(
         func(np.array(session_df.angle_to_goal)), index=session_df.index, name="vnav"
     )
@@ -918,6 +925,18 @@ def optimal_vals(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def euclidean_vals(session_df, mazes_dict):
+    chosen_vals = pd.Series(
+        -session_df.euclidean_delta, index=session_df.index, name="euclidean"
+    )
+
+    vals = -list_to_cardinal_columns(
+        session_df, "all_euclidean_delta", mazes_dict, new_column_name="euclidean"
+    )
+
+    return (chosen_vals, vals)
+
+
 def renormalize_geodesic_deltas(geodelta_array):
     if type(geodelta_array) is not np.ndarray:
         geodelta_array = np.array(geodelta_array)
@@ -988,15 +1007,141 @@ def prior_maze_vals(session_df, mazes_dict, prior_dict):
     return (chosen_vals, vals)
 
 
-# class DFLikelihood(object):
-#     def __init__(self, df):
-#         self.df = df
+def prior_maze_overlap_vals(session_df, mazes_dict, prior_dict):
+    chosen_vals = []
+    vals = {"W": [], "S": [], "N": [], "E": []}
+    for i, row in session_df.iterrows():
+        prior_maze = prior_dict[row.maze_name]
+        current_maze = mazes_dict[row.maze_name]
+
+        cardinal_dict = maze_loc_to_cardinal_dict(current_maze, row.location)
+
+        prior_geodesic_deltas = []
+        for node_choice in cardinal_dict.values():
+            if node_choice:
+                prior_maze_geodesic_delta = (
+                    prior_maze.distances_dictionary[node_choice][row.goal]
+                    - prior_maze.distances_dictionary[row.location][row.goal]
+                )
+                if abs(prior_maze_geodesic_delta) == 1:
+                    prior_geodesic_deltas.append(
+                        prior_maze.distances_dictionary[node_choice][row.goal]
+                        - prior_maze.distances_dictionary[row.location][row.goal]
+                    )
+                else:
+                    prior_geodesic_deltas.append(0)
+            else:
+                prior_geodesic_deltas.append(np.nan)
+
+        # In the case of this variation of prior_maze componente, this step of renormalization
+        # is only here to invert the value of this feature, compared to the geodesic delta, i.e.,
+        # when the delta is negative the evaluation as per the feature is negative
+        # in this case it's just 0 (for no overlap), -1 mapped to +1, and +1 mapped to -1
+        normalized_prior_deltas = renormalize_geodesic_deltas(prior_geodesic_deltas)
+
+        for i, cardinal_dir in enumerate(cardinal_dict.keys()):
+            vals[cardinal_dir].append(normalized_prior_deltas[i])
+
+        # chosen_vals.append(
+        #     prior_maze.distances_dictionary[row.choice][row.goal]
+        #     - prior_maze.distances_dictionary[row.location][row.goal]
+        # )
+
+        chosen_vals.append(vals[row.cardinal_choice][-1])
+
+    chosen_vals = pd.Series(
+        chosen_vals, index=session_df.index, name="prior_maze_overlap"
+    )
+    vals = pd.DataFrame(vals, index=session_df.index)
+
+    column_tuples = [
+        ("prior_maze_overlap", "W"),
+        ("prior_maze_overlap", "S"),
+        ("prior_maze_overlap", "N"),
+        ("prior_maze_overlap", "E"),
+    ]
+    columns_index = pd.MultiIndex.from_tuples(column_tuples)
+    vals.columns = columns_index
+
+    return (chosen_vals, vals)
+
+
+def betweenness_vals(session_df, mazes_dict):
+    chosen_vals = []
+
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="betweenness"
+    )
+
+    maze_name = session_df.maze_name.unique().tolist()[0]
+    maze = mazes_dict[maze_name]
+
+    def loc_to_betweenness_scaled(loc):
+        if loc is np.nan:
+            return np.nan
+        else:
+            min_betweenness = min(list(maze.betweenness_centrality.values()))
+            max_betweenness = max(list(maze.betweenness_centrality.values()))
+            loc_betweenness = maze.betweenness_centrality[loc]
+            # we bring it to scale of [0, 1]
+            scaled_betweenness = loc_betweenness - min_betweenness
+            scaled_betweenness = scaled_betweenness / (
+                max_betweenness - min_betweenness
+            )
+            # we bring it to scale [-1, 1]
+            scaled_betweenness = (scaled_betweenness * 2) - 1
+
+            return scaled_betweenness
+
+    vals = vals.map(loc_to_betweenness_scaled)
+
+    for i, row in session_df.iterrows():
+        chosen_vals.append(vals.loc[i, ("betweenness", row.cardinal_choice)])
+
+    chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="betweenness")
+
+    return (chosen_vals, vals)
+
+
+# def betweenness_vals(session_df, mazes_dict):
+#     chosen_vals = []
 #
-#     def nll_func(self, features_list):
+#     vals = list_to_cardinal_columns(
+#         session_df, "available_nodes", mazes_dict, new_column_name="betweenness"
+#     )
+#
+#     maze_name = session_df.maze_name.unique().tolist()[0]
+#     maze = mazes_dict[maze_name]
+#
+#     def loc_to_betweenness_scaled(loc):
+#         if loc is np.nan:
+#             return np.nan
+#         else:
+#             min_betweenness = min(list(maze.betweenness_centrality.values()))
+#             max_betweenness = max(list(maze.betweenness_centrality.values()))
+#             loc_betweenness = maze.betweenness_centrality[loc]
+#             # we bring it to scale of [0, 1]
+#             scaled_betweenness = loc_betweenness - min_betweenness
+#             scaled_betweenness = scaled_betweenness / (
+#                 max_betweenness - min_betweenness
+#             )
+#             # we bring it to scale [-1, 1]
+#             scaled_betweenness = (scaled_betweenness * 2) - 1
+#
+#             return
+#
+#     vals = vals.map(loc_to_betweenness_scaled)
+#
+#     for i, row in session_df.iterrows():
+#         chosen_vals.append(vals.loc[i, ("betweenness", row.cardinal_choice)])
+#
+#     chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="betweenness")
+#
+#     return (chosen_vals, vals)
 
 
 def nll_func_generator(
-    df, features_list, mazes_dict, prior_dict=None, vnav_func=np.cos
+    df, features_list, mazes_dict, prior_dict=None, vnav_func=np.cos, standardize=True
 ):
     """Returns a function that inputs feature coefficients and outputs NLL"""
     df = compute_features(df)
@@ -1009,6 +1154,12 @@ def nll_func_generator(
         "prior_maze": partial(
             prior_maze_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
         ),
+        "prior_maze_overlap": partial(
+            prior_maze_overlap_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
+        ),
+        "betweenness": partial(betweenness_vals, mazes_dict=mazes_dict),
+        "euclidean": partial(euclidean_vals, mazes_dict=mazes_dict),
+        "vnav_linear": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
     }
     chosen_vals = []
     vals = []
@@ -1020,6 +1171,16 @@ def nll_func_generator(
 
     chosen_vals = np.array(chosen_vals).T
     vals = np.array(vals).T
+
+    if standardize:
+        feature_means = np.nanmean(vals, axis=(0, 1))
+        feature_stds = np.nanstd(vals, axis=(0, 1))
+
+        chosen_vals = chosen_vals - feature_means
+        chosen_vals = chosen_vals / feature_stds
+
+        vals = vals - feature_means
+        vals = vals / feature_stds
 
     def nll_func(params_array, chosen_vals, vals):
         # chosen_vals *= params_array
