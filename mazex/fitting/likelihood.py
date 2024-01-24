@@ -976,6 +976,43 @@ def euclidean_vals(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def get_chosen_vals_from_vals(vals, session_df, label):
+    chosen_vals = []
+    for (i, df_row), (j, vals_row) in zip(session_df.iterrows(), vals.iterrows()):
+        # vals is a MultiIndex so we need feature_name and cardinal direction as indices
+        chosen_vals.append(vals_row.loc[label, df_row.cardinal_choice])
+
+    chosen_vals = pd.Series(chosen_vals, index=session_df.index, name=f"{label}")
+    return chosen_vals
+
+
+def thigmotaxis_vals(session_df, mazes_dict):
+    # chosen_vals = pd.Series(
+    #     -session_df.choice, index=session_df.index, name="thigmotaxis"
+    # )
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="thigmotaxis"
+    )
+
+    def thigmotaxis(location):
+        # pd.isna doesn't fail when it is a tuple, unlike np.isnan
+        if pd.isna(location):
+            return np.nan
+        else:
+            if location[0] in [0, 5] or location[1] in [0, 5]:
+                # it's a border
+                val = 1.0
+            else:
+                val = -1.0
+            return val
+
+    vals = vals.map(thigmotaxis)
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="thigmotaxis")
+
+    return (chosen_vals, vals)
+
+
 def renormalize_geodesic_deltas(geodelta_array):
     if type(geodelta_array) is not np.ndarray:
         geodelta_array = np.array(geodelta_array)
@@ -1201,43 +1238,6 @@ def betweenness_vals(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
-# def betweenness_vals(session_df, mazes_dict):
-#     chosen_vals = []
-#
-#     vals = list_to_cardinal_columns(
-#         session_df, "available_nodes", mazes_dict, new_column_name="betweenness"
-#     )
-#
-#     maze_name = session_df.maze_name.unique().tolist()[0]
-#     maze = mazes_dict[maze_name]
-#
-#     def loc_to_betweenness_scaled(loc):
-#         if loc is np.nan:
-#             return np.nan
-#         else:
-#             min_betweenness = min(list(maze.betweenness_centrality.values()))
-#             max_betweenness = max(list(maze.betweenness_centrality.values()))
-#             loc_betweenness = maze.betweenness_centrality[loc]
-#             # we bring it to scale of [0, 1]
-#             scaled_betweenness = loc_betweenness - min_betweenness
-#             scaled_betweenness = scaled_betweenness / (
-#                 max_betweenness - min_betweenness
-#             )
-#             # we bring it to scale [-1, 1]
-#             scaled_betweenness = (scaled_betweenness * 2) - 1
-#
-#             return
-#
-#     vals = vals.map(loc_to_betweenness_scaled)
-#
-#     for i, row in session_df.iterrows():
-#         chosen_vals.append(vals.loc[i, ("betweenness", row.cardinal_choice)])
-#
-#     chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="betweenness")
-#
-#     return (chosen_vals, vals)
-
-
 def nll_func_generator(
     df, features_list, mazes_dict, prior_dict=None, vnav_func=np.cos, standardize=True
 ):
@@ -1262,6 +1262,7 @@ def nll_func_generator(
         "euclidean": partial(euclidean_vals, mazes_dict=mazes_dict),
         "vnav_linear": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
         "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
+        "thigmotaxis": partial(thigmotaxis_vals, mazes_dict=mazes_dict),
     }
     chosen_vals = []
     vals = []
