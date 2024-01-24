@@ -852,22 +852,61 @@ def vnav_vals(session_df, mazes_dict, func=np.cos):
 
 
 def antibackward_vals(session_df, mazes_dict):
-    antibackward_chosen_vals = pd.Series(
-        np.where(session_df.angle_to_heading == np.pi, -1.0, 1.0),
-        index=session_df.index,
-        name="antibackward",
-    )
-
+    # antibackward_chosen_vals = pd.Series(
+    #     np.where(session_df.angle_to_heading == np.pi, -1.0, 1.0),
+    #     index=session_df.index,
+    #     name="antibackward",
+    # )
+    #
     antibackward_vals = list_to_cardinal_columns(
         session_df, "all_angle_to_heading", mazes_dict, new_column_name="antibackward"
     )
 
-    # when angle is != np.pi we set it to 1 (no need to turn around)
-    antibackward_vals.where(antibackward_vals == np.pi, 1.0, inplace=True)
     # when angle is np.pi we set it to -1 (turn around)
-    antibackward_vals.mask(antibackward_vals == np.pi, -1.0, inplace=True)
+    antibackward_vals[antibackward_vals == np.pi] = -1.0
+    # when angle is != np.pi we set it to 1 (no need to turn around)
+    antibackward_vals[antibackward_vals >= 0] = 1.0
+
+    chosen_vals = []
+    for i, row in session_df.iterrows():
+        chosen_vals.append(
+            antibackward_vals.loc[i, ("antibackward", row.cardinal_choice)]
+        )
+
+    antibackward_chosen_vals = pd.Series(
+        chosen_vals, index=session_df.index, name="antibackward"
+    )
 
     return (antibackward_chosen_vals, antibackward_vals)
+
+
+def antiturn_vals(session_df, mazes_dict):
+    # antiturn_chosen_vals = pd.Series(
+    #     np.where(session_df.angle_to_heading == np.pi / 2, -1.0, 1.0),
+    #     index=session_df.index,
+    #     name="antiturn",
+    # )
+    antiturn_vals = list_to_cardinal_columns(
+        session_df, "all_angle_to_heading", mazes_dict, new_column_name="antiturn"
+    )
+
+    antiturn_vals[antiturn_vals == np.pi / 2] = -1.0
+    # when angle is != np.pi we set it to 1 (no need to turn around)
+    antiturn_vals[antiturn_vals >= 0] = 1.0
+    # # when angle is != np.pi we set it to 1 (no need to turn around)
+    # antiturn_vals.where(antiturn_vals == np.pi / 2, -1.0, inplace=True)
+    # # when angle is np.pi we set it to -1 (turn around)
+    # antiturn_vals.mask(antiturn_vals == np.pi / 2, 1.0, inplace=True)
+
+    chosen_vals = []
+    for i, row in session_df.iterrows():
+        chosen_vals.append(antiturn_vals.loc[i, ("antiturn", row.cardinal_choice)])
+
+    antiturn_chosen_vals = pd.Series(
+        chosen_vals, index=session_df.index, name="antiturn"
+    )
+
+    return (antiturn_chosen_vals, antiturn_vals)
 
 
 def visited_node_lag2_vals(session_df, mazes_dict):
@@ -1066,6 +1105,65 @@ def prior_maze_overlap_vals(session_df, mazes_dict, prior_dict):
     return (chosen_vals, vals)
 
 
+def prior_maze_overlap_vals(session_df, mazes_dict, prior_dict):
+    chosen_vals = []
+    vals = {"W": [], "S": [], "N": [], "E": []}
+    for i, row in session_df.iterrows():
+        prior_maze = prior_dict[row.maze_name]
+        current_maze = mazes_dict[row.maze_name]
+
+        cardinal_dict = maze_loc_to_cardinal_dict(current_maze, row.location)
+
+        prior_geodesic_deltas = []
+        for node_choice in cardinal_dict.values():
+            if node_choice:
+                prior_maze_geodesic_delta = (
+                    prior_maze.distances_dictionary[node_choice][row.goal]
+                    - prior_maze.distances_dictionary[row.location][row.goal]
+                )
+                if abs(prior_maze_geodesic_delta) == 1:
+                    prior_geodesic_deltas.append(
+                        prior_maze.distances_dictionary[node_choice][row.goal]
+                        - prior_maze.distances_dictionary[row.location][row.goal]
+                    )
+                else:
+                    prior_geodesic_deltas.append(0)
+            else:
+                prior_geodesic_deltas.append(np.nan)
+
+        # In the case of this variation of prior_maze componente, this step of renormalization
+        # is only here to invert the value of this feature, compared to the geodesic delta, i.e.,
+        # when the delta is negative the evaluation as per the feature is negative
+        # in this case it's just 0 (for no overlap), -1 mapped to +1, and +1 mapped to -1
+        normalized_prior_deltas = renormalize_geodesic_deltas(prior_geodesic_deltas)
+
+        for i, cardinal_dir in enumerate(cardinal_dict.keys()):
+            vals[cardinal_dir].append(normalized_prior_deltas[i])
+
+        # chosen_vals.append(
+        #     prior_maze.distances_dictionary[row.choice][row.goal]
+        #     - prior_maze.distances_dictionary[row.location][row.goal]
+        # )
+
+        chosen_vals.append(vals[row.cardinal_choice][-1])
+
+    chosen_vals = pd.Series(
+        chosen_vals, index=session_df.index, name="prior_maze_overlap"
+    )
+    vals = pd.DataFrame(vals, index=session_df.index)
+
+    column_tuples = [
+        ("prior_maze_overlap", "W"),
+        ("prior_maze_overlap", "S"),
+        ("prior_maze_overlap", "N"),
+        ("prior_maze_overlap", "E"),
+    ]
+    columns_index = pd.MultiIndex.from_tuples(column_tuples)
+    vals.columns = columns_index
+
+    return (chosen_vals, vals)
+
+
 def betweenness_vals(session_df, mazes_dict):
     chosen_vals = []
 
@@ -1144,7 +1242,10 @@ def nll_func_generator(
     df, features_list, mazes_dict, prior_dict=None, vnav_func=np.cos, standardize=True
 ):
     """Returns a function that inputs feature coefficients and outputs NLL"""
-    df = compute_features(df)
+    # df = compute_features(df)
+    # remove steps where heading is unknown
+    # df = df[df["heading"] != "o"]
+
     feature_func_dict = {
         "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=vnav_func),
         "antibackward": partial(antibackward_vals, mazes_dict=mazes_dict),
@@ -1160,6 +1261,7 @@ def nll_func_generator(
         "betweenness": partial(betweenness_vals, mazes_dict=mazes_dict),
         "euclidean": partial(euclidean_vals, mazes_dict=mazes_dict),
         "vnav_linear": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
+        "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
     }
     chosen_vals = []
     vals = []
