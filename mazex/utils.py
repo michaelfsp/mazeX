@@ -1023,9 +1023,6 @@ def list_to_cardinal_columns(df, column, mazes_dict, new_column_name=None):
             mazes_dict[row.maze_name], row.location
         )
         for card_dir in ["W", "S", "N", "E"]:
-            # import ipdb
-            #
-            # ipdb.set_trace()
             cardinal_neighbor = cardinal_neighbors_dict[card_dir]
             if cardinal_neighbor:
                 cardinal_idx = row.available_nodes.index(cardinal_neighbor)

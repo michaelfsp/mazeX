@@ -987,9 +987,6 @@ def get_chosen_vals_from_vals(vals, session_df, label):
 
 
 def thigmotaxis_vals(session_df, mazes_dict):
-    # chosen_vals = pd.Series(
-    #     -session_df.choice, index=session_df.index, name="thigmotaxis"
-    # )
     vals = list_to_cardinal_columns(
         session_df, "available_nodes", mazes_dict, new_column_name="thigmotaxis"
     )
@@ -1238,8 +1235,66 @@ def betweenness_vals(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def loc_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="loc_count"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.loc_count.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="loc_count")
+
+    return (chosen_vals, vals)
+
+
+def loc_goal_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="loc_goal_count"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.loc_goal_count.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="loc_goal_count")
+
+    return (chosen_vals, vals)
+
+
+def goal_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="goal_count"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.goal_count.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="goal_count")
+
+    return (chosen_vals, vals)
+
+
+def maze_step_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="maze_step_count"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.maze_step_count.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="maze_step_count")
+
+    return (chosen_vals, vals)
+
+
 def nll_func_generator(
-    df, features_list, mazes_dict, prior_dict=None, vnav_func=np.cos, standardize=True
+    df,
+    features_list,
+    mazes_dict,
+    interaction_features_list=None,
+    prior_dict=None,
+    vnav_func=np.cos,
+    standardize=True,
 ):
     """Returns a function that inputs feature coefficients and outputs NLL"""
     # df = compute_features(df)
@@ -1263,14 +1318,26 @@ def nll_func_generator(
         "vnav_linear": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
         "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
         "thigmotaxis": partial(thigmotaxis_vals, mazes_dict=mazes_dict),
+        "loc_count": partial(loc_count_multiplier, mazes_dict=mazes_dict),
+        "loc_goal_count": partial(loc_goal_count_multiplier, mazes_dict=mazes_dict),
+        "goal_count": partial(goal_count_multiplier, mazes_dict=mazes_dict),
+        "maze_step_count": partial(maze_step_count_multiplier, mazes_dict=mazes_dict),
     }
     chosen_vals = []
     vals = []
 
     for feature in features_list:
         cvs, vs = feature_func_dict[feature](df)
-        chosen_vals.append(cvs)
-        vals.append(vs)
+        chosen_vals.append(cvs.to_numpy("float"))
+        vals.append(vs.to_numpy("float"))
+
+    if interaction_features_list is not None:
+        for interaction_feature in interaction_features_list:
+            feat1, feat2 = interaction_feature.split("&")
+            cvs1, vs1 = feature_func_dict[feat1](df)
+            cvs2, vs2 = feature_func_dict[feat2](df)
+            chosen_vals.append(cvs1.to_numpy("float") * cvs2.to_numpy("float"))
+            vals.append(vs1.to_numpy("float") * vs2.to_numpy("float"))
 
     chosen_vals = np.array(chosen_vals).T
     vals = np.array(vals).T
@@ -1284,6 +1351,8 @@ def nll_func_generator(
 
         vals = vals - feature_means
         vals = vals / feature_stds
+
+    # breakpoint()
 
     def nll_func(params_array, chosen_vals, vals):
         # chosen_vals *= params_array
