@@ -1287,22 +1287,10 @@ def maze_step_count_multiplier(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
-def nll_func_generator(
-    df,
-    features_list,
-    mazes_dict,
-    interaction_features_list=None,
-    prior_dict=None,
-    vnav_func=np.cos,
-    standardize=True,
-):
-    """Returns a function that inputs feature coefficients and outputs NLL"""
-    # df = compute_features(df)
-    # remove steps where heading is unknown
-    # df = df[df["heading"] != "o"]
-
+def vals_retriever(df, feature, mazes_dict, prior_dict):
+    # TODO: Make this function able to retrieve interaction features
     feature_func_dict = {
-        "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=vnav_func),
+        "vnav_cos": partial(vnav_vals, mazes_dict=mazes_dict, func=np.cos),
         "antibackward": partial(antibackward_vals, mazes_dict=mazes_dict),
         "visited_node_lag2": partial(visited_node_lag2_vals, mazes_dict=mazes_dict),
         "visited_node_exp": partial(visited_node_exp_vals, mazes_dict=mazes_dict),
@@ -1315,7 +1303,7 @@ def nll_func_generator(
         ),
         "betweenness": partial(betweenness_vals, mazes_dict=mazes_dict),
         "euclidean": partial(euclidean_vals, mazes_dict=mazes_dict),
-        "vnav_linear": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
+        "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
         "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
         "thigmotaxis": partial(thigmotaxis_vals, mazes_dict=mazes_dict),
         "loc_count": partial(loc_count_multiplier, mazes_dict=mazes_dict),
@@ -1323,48 +1311,152 @@ def nll_func_generator(
         "goal_count": partial(goal_count_multiplier, mazes_dict=mazes_dict),
         "maze_step_count": partial(maze_step_count_multiplier, mazes_dict=mazes_dict),
     }
+    if "&" in feature:
+        # it's an interaction feature
+        feat1, feat2 = feature.split("&")
+        cvs1, vs1 = vals_retriever(df, feat1, mazes_dict, prior_dict)
+        cvs2, vs2 = vals_retriever(df, feat2, mazes_dict, prior_dict)
+        chosen_vals = cvs1.to_numpy("float") * cvs2.to_numpy("float")
+        vals = vs1.to_numpy("float") * vs2.to_numpy("float")
+
+        column_tuples = [
+            (feature, "W"),
+            (feature, "S"),
+            (feature, "N"),
+            (feature, "E"),
+        ]
+        columns_index = pd.MultiIndex.from_tuples(column_tuples)
+        chosen_vals = pd.Series(data=chosen_vals, index=df.index, name=feature)
+        vals = pd.DataFrame(data=vals, index=df.index, columns=columns_index)
+
+    else:
+        chosen_vals, vals = feature_func_dict[feature](df)
+
+    return (chosen_vals, vals)
+
+
+def nll_func(params_array, chosen_vals, vals):
+    chosen_vals_comb = (params_array * chosen_vals).sum(axis=-1)
+    vals_comb = (params_array * vals).sum(axis=-1).T
+    logprobs = logsoftmax_chosen_values(chosen_vals_comb, vals_comb)
+
+    return -np.sum(logprobs)
+
+
+def single_day_nll_func_generator(
+    df,
+    features_list,
+    mazes_dict,
+    prior_dict=None,
+    standardize=False,
+    feature_means=None,
+    feature_stds=None,
+):
     chosen_vals = []
     vals = []
 
     for feature in features_list:
-        cvs, vs = feature_func_dict[feature](df)
+        cvs, vs = vals_retriever(df, feature, mazes_dict, prior_dict)
         chosen_vals.append(cvs.to_numpy("float"))
         vals.append(vs.to_numpy("float"))
-
-    if interaction_features_list is not None:
-        for interaction_feature in interaction_features_list:
-            feat1, feat2 = interaction_feature.split("&")
-            cvs1, vs1 = feature_func_dict[feat1](df)
-            cvs2, vs2 = feature_func_dict[feat2](df)
-            chosen_vals.append(cvs1.to_numpy("float") * cvs2.to_numpy("float"))
-            vals.append(vs1.to_numpy("float") * vs2.to_numpy("float"))
 
     chosen_vals = np.array(chosen_vals).T
     vals = np.array(vals).T
 
     if standardize:
-        feature_means = np.nanmean(vals, axis=(0, 1))
-        feature_stds = np.nanstd(vals, axis=(0, 1))
+        if feature_means is None:
+            feature_means = np.nanmean(vals, axis=(0, 1))
+        if feature_stds is None:
+            feature_stds = np.nanstd(vals, axis=(0, 1))
 
         chosen_vals = chosen_vals - feature_means
         chosen_vals = chosen_vals / feature_stds
 
         vals = vals - feature_means
         vals = vals / feature_stds
-
-    # breakpoint()
-
-    def nll_func(params_array, chosen_vals, vals):
-        # chosen_vals *= params_array
-        # chosen_vals = chosen_vals.sum(axis=-1)
-        chosen_vals_comb = (params_array * chosen_vals).sum(axis=-1)
-        # vals *= params_array
-        # vals = vals.sum(axis=-1)
-        # vals = vals.T
-        vals_comb = (params_array * vals).sum(axis=-1).T
-
-        logprobs = logsoftmax_chosen_values(chosen_vals_comb, vals_comb)
-
-        return -np.sum(logprobs)
-
     return partial(nll_func, chosen_vals=chosen_vals, vals=vals)
+
+
+def nll_func_generator(
+    df,
+    private_features_list,  # includes both with and without interaction
+    mazes_dict,
+    shared_features_list=None,
+    prior_dict=None,
+    standardize=True,
+):
+    """Returns a function that inputs feature coefficients and outputs NLL"""
+    if shared_features_list is None:
+        nll_func = single_day_nll_func_generator(
+            df=df,
+            features_list=private_features_list,
+            mazes_dict=mazes_dict,
+            prior_dict=prior_dict,
+            standardize=standardize,
+        )
+        return nll_func
+
+    else:
+        private_and_shared_features_list = private_features_list + shared_features_list
+        n_days = len(df.maze_day.unique())
+        n_private_features = len(private_features_list)
+
+        nll_funcs = []
+
+        # We calculate the mean and SD for the shared features
+        shared_feature_means = []
+        shared_feature_stds = []
+        for shared_feature in shared_features_list:
+            cvs, vs = vals_retriever(df, shared_feature, mazes_dict, prior_dict)
+            shared_feature_means.append(np.nanmean(vs))
+            shared_feature_stds.append(np.nanstd(vs))
+
+        for day in df.maze_day.unique():
+            day_df = df[df["maze_day"] == day].copy()
+
+            private_feature_means = []
+            private_feature_stds = []
+            for private_feature in private_features_list:
+                cvs, vs = vals_retriever(df, private_feature, mazes_dict, prior_dict)
+                private_feature_means.append(np.nanmean(vs))
+                private_feature_stds.append(np.nanstd(vs))
+
+            private_and_shared_feature_means = np.array(
+                private_feature_means + shared_feature_means
+            )
+            private_and_shared_feature_stds = np.array(
+                private_feature_stds + shared_feature_stds
+            )
+
+            nll_funcs.append(
+                single_day_nll_func_generator(
+                    df=day_df,
+                    features_list=private_and_shared_features_list,
+                    mazes_dict=mazes_dict,
+                    prior_dict=prior_dict,
+                    standardize=True,
+                    feature_means=private_and_shared_feature_means,
+                    feature_stds=private_and_shared_feature_stds,
+                )
+            )
+
+        def shared_nll_func(params_array):
+            # the private params are sorted as (day1_feature1, day1_feature2, day1_feature3, day2_feature1, day2_feature2, day2_feature3, day3_feature1, ...)
+            private_params_array = params_array[0 : n_private_features * n_days]
+            # the last params in the array are the ones shared across days
+            shared_params_array = params_array[n_private_features * n_days :]
+
+            global_nll = 0.0
+
+            for i in range(n_days):
+                first_day_param_index = i * n_private_features
+                day_private_params = private_params_array[
+                    first_day_param_index : first_day_param_index + n_private_features
+                ]
+                day_private_and_shared_params = np.concatenate(
+                    (day_private_params, shared_params_array)
+                )
+                global_nll += nll_funcs[i](day_private_and_shared_params)
+            return global_nll
+
+        return (shared_nll_func, nll_funcs)
