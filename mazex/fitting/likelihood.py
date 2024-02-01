@@ -19,6 +19,8 @@ import pandas as pd
 
 from functools import partial
 
+idx = pd.IndexSlice
+
 
 def BIC(n_params, total_choices, nll_opt):
     """Compute the Bayesian Information Criterion"""
@@ -1297,30 +1299,57 @@ def single_day_nll_func_generator(
     standardize=False,
     feature_means=None,
     feature_stds=None,
+    debug=False,
 ):
+    chosen_vals_array = []
+    vals_array = []
     chosen_vals = []
     vals = []
 
     for feature in features_list:
         cvs, vs = vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata)
-        chosen_vals.append(cvs.to_numpy("float"))
-        vals.append(vs.to_numpy("float"))
+        chosen_vals_array.append(cvs.to_numpy("float"))
+        vals_array.append(vs.to_numpy("float"))
+        chosen_vals.append(cvs)
+        vals.append(vs)
 
-    chosen_vals = np.array(chosen_vals).T
-    vals = np.array(vals).T
+    chosen_vals_array = np.array(chosen_vals_array).T
+    vals_array = np.array(vals_array).T
 
     if standardize:
         if feature_means is None:
-            feature_means = np.nanmean(vals, axis=(0, 1))
+            feature_means = np.nanmean(vals_array, axis=(0, 1))
         if feature_stds is None:
-            feature_stds = np.nanstd(vals, axis=(0, 1))
+            feature_stds = np.nanstd(vals_array, axis=(0, 1))
 
-        chosen_vals = chosen_vals - feature_means
-        chosen_vals = chosen_vals / feature_stds
+        chosen_vals_array = chosen_vals_array - feature_means
+        chosen_vals_array = chosen_vals_array / feature_stds
 
-        vals = vals - feature_means
-        vals = vals / feature_stds
-    return partial(nll_func, chosen_vals=chosen_vals, vals=vals)
+        vals_array = vals_array - feature_means
+        vals_array = vals_array / feature_stds
+    if debug:
+        # we use the dataframe created by pd.concat just to have the right index and labels in place but then substitute the values by those which are used for  nll_func such that we have the exact same values, with normalization, etc. as it went into the optimization
+        chosen_vals = pd.concat(chosen_vals, axis=1)
+        chosen_vals[:] = chosen_vals_array
+
+        vals = pd.concat(vals, axis=1)
+        flabel_list = vals.columns.get_level_values(0).unique()
+        for i, flabel in enumerate(flabel_list):
+            vals.loc[:, idx[flabel, :]] = vals_array[:, :, i].T
+
+        chosen_vals["maze_name"] = df.maze_name.unique()[0]
+        chosen_vals["maze_day"] = df.maze_day.unique()[0]
+        chosen_vals["subject"] = df.subject.unique()[0]
+        vals["maze_name"] = df.maze_name.unique()[0]
+        vals["maze_day"] = df.maze_day.unique()[0]
+        vals["subject"] = df.subject.unique()[0]
+        return (
+            partial(nll_func, chosen_vals=chosen_vals_array, vals=vals_array),
+            chosen_vals,
+            vals,
+        )
+    else:
+        return partial(nll_func, chosen_vals=chosen_vals_array, vals=vals_array)
 
 
 def nll_func_generator(
@@ -1331,54 +1360,64 @@ def nll_func_generator(
     prior_dict=None,
     history_metadata=None,
     standardize=True,
-    shared_feature_standardization_method="shared",
+    shared_feature_global_standardization=True,
+    debug=False,
 ):
     """Returns a function that inputs feature coefficients and outputs NLL"""
     if shared_features_list is None:
-        nll_func = single_day_nll_func_generator(
+        generated_nll_func = single_day_nll_func_generator(
             df=df,
             features_list=private_features_list,
             mazes_dict=mazes_dict,
             prior_dict=prior_dict,
             history_metadata=None,
             standardize=standardize,
+            debug=debug,
         )
-        return nll_func
+        if debug:
+            nll_func, chosen_vals, vals = generated_nll_func
+            return (nll_func, chosen_vals, vals)
+        else:
+            nll_func = generated_nll_func
+            return nll_func
 
     else:
         n_days = len(df.maze_day.unique())
         assert n_days >= 9
+        assert df.subject.nunique() == 1
         private_and_shared_features_list = private_features_list + shared_features_list
         n_private_features = len(private_features_list)
 
         nll_funcs = []
+        chosen_vals = []
+        vals = []
 
         # We calculate the mean and SD for the shared features
         shared_feature_means = []
         shared_feature_stds = []
         for shared_feature in shared_features_list:
-            cvs, vs = vals_retriever(
+            scvs, svs = vals_retriever(
                 df, shared_feature, mazes_dict, prior_dict, history_metadata
             )
-            shared_feature_means.append(np.nanmean(vs))
-            shared_feature_stds.append(np.nanstd(vs))
+            shared_feature_means.append(np.nanmean(svs))
+            shared_feature_stds.append(np.nanstd(svs))
 
         for day in df.maze_day.unique():
             day_df = df[df["maze_day"] == day].copy()
 
-            if shared_feature_standardization_method == "shared":
+            if shared_feature_global_standardization:
                 private_feature_means = []
                 private_feature_stds = []
                 for private_feature in private_features_list:
-                    cvs, vs = vals_retriever(
+                    pcvs, pvs = vals_retriever(
                         day_df,
                         private_feature,
                         mazes_dict,
                         prior_dict,
                         history_metadata,
                     )
-                    private_feature_means.append(np.nanmean(vs))
-                    private_feature_stds.append(np.nanstd(vs))
+                    private_feature_means.append(np.nanmean(pvs))
+                    private_feature_stds.append(np.nanstd(pvs))
 
                 private_and_shared_feature_means = np.array(
                     private_feature_means + shared_feature_means
@@ -1390,18 +1429,27 @@ def nll_func_generator(
                 private_and_shared_feature_means = None
                 private_and_shared_feature_stds = None
 
-            nll_funcs.append(
-                single_day_nll_func_generator(
-                    df=day_df,
-                    features_list=private_and_shared_features_list,
-                    mazes_dict=mazes_dict,
-                    prior_dict=prior_dict,
-                    history_metadata=history_metadata,
-                    standardize=True,
-                    feature_means=private_and_shared_feature_means,
-                    feature_stds=private_and_shared_feature_stds,
-                )
+            # print(private_and_shared_feature_means)
+
+            generated_nll_func = single_day_nll_func_generator(
+                df=day_df,
+                features_list=private_and_shared_features_list,
+                mazes_dict=mazes_dict,
+                prior_dict=prior_dict,
+                history_metadata=history_metadata,
+                standardize=True,
+                feature_means=private_and_shared_feature_means,
+                feature_stds=private_and_shared_feature_stds,
+                debug=debug,
             )
+            if debug:
+                nll_func, cvs, vs = generated_nll_func
+                chosen_vals.append(cvs)
+                vals.append(vs)
+            else:
+                nll_func = generated_nll_func
+
+            nll_funcs.append(nll_func)
 
         def shared_nll_func(params_array):
             # the private params are sorted as (day1_feature1, day1_feature2, day1_feature3, day2_feature1, day2_feature2, day2_feature3, day3_feature1, ...)
@@ -1422,4 +1470,7 @@ def nll_func_generator(
                 global_nll += nll_funcs[i](day_private_and_shared_params)
             return global_nll
 
-        return (shared_nll_func, nll_funcs)
+        if debug:
+            return (shared_nll_func, nll_funcs, chosen_vals, vals)
+        else:
+            return (shared_nll_func, nll_funcs)
