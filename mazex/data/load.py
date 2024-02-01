@@ -641,7 +641,7 @@ row_computations_vec = np.vectorize(
 )
 
 
-def compute_features(steps_df):
+def compute_state_features(steps_df):
     """Computes statistical features over steps
 
     Inputs:
@@ -680,7 +680,7 @@ def compute_features(steps_df):
     lst_all_angle_to_goal = [row.tolist() for row in lst_all_angle_to_goal]
     lst_all_angle_to_heading = [row.tolist() for row in lst_all_angle_to_heading]
 
-    steps_df_with_features = steps_df
+    steps_df_with_features = steps_df  # .copy()
 
     steps_df_with_features["manhattan_delta"] = lst_manhattan_delta
     steps_df_with_features["euclidean_delta"] = lst_euclidean_delta
@@ -694,19 +694,83 @@ def compute_features(steps_df):
     steps_df_with_features["all_angle_to_goal"] = lst_all_angle_to_goal
     steps_df_with_features["all_angle_to_heading"] = lst_all_angle_to_heading
 
+    return steps_df_with_features
+
+
+def compute_maze_path_features(maze_steps_df):
     # Now we compute features that need global information, i.e., information from
     # other steps in the session, other sessions, etc.
-
-    steps_df_with_features["loc_count"] = steps_df.groupby(
+    steps_df = maze_steps_df.copy()
+    steps_df["maze_loc_count"] = steps_df.groupby(
         ["location", "subject", "maze_name"]
     ).cumcount()
-    steps_df_with_features["loc_goal_count"] = steps_df.groupby(
+    steps_df["maze_loc_goal_count"] = steps_df.groupby(
         ["location", "goal", "subject", "maze_name"]
     ).cumcount()
-    steps_df_with_features["goal_count"] = steps_df.groupby(
+    steps_df["maze_goal_count"] = steps_df.groupby(
         ["goal", "subject", "maze_name"]
     ).cumcount()
-    steps_df_with_features["trial_loc_count"] = steps_df.groupby(
+
+    # we first copy the session_trial_count and only then add the number of trials of past sessions to get the global trial count for a given maze
+    steps_df.loc[:, "maze_trial_count"] = steps_df["session_trial_count"]
+    subject_maze_trial_counts_per_session = (
+        steps_df.groupby(["subject", "maze_name", "maze_day"])[
+            "session_trial_count"
+        ].max()
+        + 1
+    )
+
+    for subject_maze_session in subject_maze_trial_counts_per_session.index:
+        subject, maze_name, maze_day = subject_maze_session
+        n_trials_per_session = subject_maze_trial_counts_per_session[
+            (subject, maze_name)
+        ]
+        sum_trials_up_to_this_session = n_trials_per_session.cumsum()
+        past_trials_to_add_to_each_session = (
+            sum_trials_up_to_this_session - n_trials_per_session
+        )
+        past_trials_to_add_to_this_session = past_trials_to_add_to_each_session[
+            maze_day
+        ]
+
+        steps_df.loc[
+            (steps_df["subject"] == subject)
+            & (steps_df["maze_name"] == maze_name)
+            & (steps_df["maze_day"] == maze_day),
+            "maze_trial_count",
+        ] += past_trials_to_add_to_this_session
+
+    # we do the same for the step count
+    steps_df.loc[:, "maze_step_count"] = steps_df["session_step_count"]
+    subject_maze_step_counts_per_session = (
+        steps_df.groupby(["subject", "maze_name", "maze_day"])[
+            "session_step_count"
+        ].max()
+        + 1
+    )
+
+    for subject_maze_session in subject_maze_step_counts_per_session.index:
+        subject, maze_name, maze_day = subject_maze_session
+        n_steps_per_session = subject_maze_step_counts_per_session[(subject, maze_name)]
+        sum_steps_up_to_this_session = n_steps_per_session.cumsum()
+        past_steps_to_add_to_each_session = (
+            sum_steps_up_to_this_session - n_steps_per_session
+        )
+        past_steps_to_add_to_this_session = past_steps_to_add_to_each_session[maze_day]
+
+        steps_df.loc[
+            (steps_df["subject"] == subject)
+            & (steps_df["maze_name"] == maze_name)
+            & (steps_df["maze_day"] == maze_day),
+            "maze_step_count",
+        ] += past_steps_to_add_to_this_session
+
+    return steps_df
+
+
+def compute_trial_path_features(steps_df):
+    steps_df = steps_df  # .copy()
+    steps_df["trial_loc_count"] = steps_df.groupby(
         ["location", "maze_day", "session_trial_count", "subject", "maze_name"]
     ).cumcount()
 
@@ -715,7 +779,7 @@ def compute_features(steps_df):
     for index, row in steps_df.iterrows():
         lst_dir_edge_chosen.append((row["location"], row["choice"]))
 
-    steps_df_with_features["dir_edge_chosen"] = lst_dir_edge_chosen
+    steps_df["dir_edge_chosen"] = lst_dir_edge_chosen
 
     lst_chosen_dir_edge_visited = []
     lst_available_dir_edge_visited = []
@@ -727,7 +791,7 @@ def compute_features(steps_df):
     lst_chosen_node_visited_lag2 = []
     lst_available_node_visited_lag2 = []
 
-    for group_name, trial_df in steps_df_with_features.groupby(
+    for group_name, trial_df in steps_df.groupby(
         ["maze_day", "session_trial_count", "subject", "maze_name"]
     ):
         trial_first_idx = trial_df.index[0]
@@ -800,76 +864,25 @@ def compute_features(steps_df):
                 available_node_visited_lag2[idx_chosen_node]
             )
 
-    steps_df_with_features["chosen_dir_edge_visited"] = lst_chosen_dir_edge_visited
-    steps_df_with_features[
-        "available_dir_edge_visited"
-    ] = lst_available_dir_edge_visited
-    steps_df_with_features["chosen_node_visited"] = lst_chosen_node_visited
-    steps_df_with_features["available_node_visited"] = lst_available_node_visited
-    steps_df_with_features["chosen_node_visited_lag2"] = lst_chosen_node_visited_lag2
-    steps_df_with_features[
-        "available_node_visited_lag2"
-    ] = lst_available_node_visited_lag2
+    steps_df["chosen_dir_edge_visited"] = lst_chosen_dir_edge_visited
+    steps_df["available_dir_edge_visited"] = lst_available_dir_edge_visited
+    steps_df["chosen_node_visited"] = lst_chosen_node_visited
+    steps_df["available_node_visited"] = lst_available_node_visited
+    steps_df["chosen_node_visited_lag2"] = lst_chosen_node_visited_lag2
+    steps_df["available_node_visited_lag2"] = lst_available_node_visited_lag2
 
-    # we first copy the session_trial_count and only then add the number of trials of past sessions to get the global trial count for a given maze
-    steps_df_with_features.loc[:, "maze_trial_count"] = steps_df_with_features[
-        "session_trial_count"
-    ]
-    subject_maze_trial_counts_per_session = (
-        steps_df_with_features.groupby(["subject", "maze_name", "maze_day"])[
-            "session_trial_count"
-        ].max()
-        + 1
-    )
+    return steps_df
 
-    for subject_maze_session in subject_maze_trial_counts_per_session.index:
-        subject, maze_name, maze_day = subject_maze_session
-        n_trials_per_session = subject_maze_trial_counts_per_session[
-            (subject, maze_name)
-        ]
-        sum_trials_up_to_this_session = n_trials_per_session.cumsum()
-        past_trials_to_add_to_each_session = (
-            sum_trials_up_to_this_session - n_trials_per_session
-        )
-        past_trials_to_add_to_this_session = past_trials_to_add_to_each_session[
-            maze_day
-        ]
 
-        steps_df_with_features.loc[
-            (steps_df_with_features["subject"] == subject)
-            & (steps_df_with_features["maze_name"] == maze_name)
-            & (steps_df_with_features["maze_day"] == maze_day),
-            "maze_trial_count",
-        ] += past_trials_to_add_to_this_session
-
-    # we do the same for the step count
-    steps_df_with_features.loc[:, "maze_step_count"] = steps_df_with_features[
-        "session_step_count"
-    ]
-    subject_maze_step_counts_per_session = (
-        steps_df_with_features.groupby(["subject", "maze_name", "maze_day"])[
-            "session_step_count"
-        ].max()
-        + 1
-    )
-
-    for subject_maze_session in subject_maze_step_counts_per_session.index:
-        subject, maze_name, maze_day = subject_maze_session
-        n_steps_per_session = subject_maze_step_counts_per_session[(subject, maze_name)]
-        sum_steps_up_to_this_session = n_steps_per_session.cumsum()
-        past_steps_to_add_to_each_session = (
-            sum_steps_up_to_this_session - n_steps_per_session
-        )
-        past_steps_to_add_to_this_session = past_steps_to_add_to_each_session[maze_day]
-
-        steps_df_with_features.loc[
-            (steps_df_with_features["subject"] == subject)
-            & (steps_df_with_features["maze_name"] == maze_name)
-            & (steps_df_with_features["maze_day"] == maze_day),
-            "maze_step_count",
-        ] += past_steps_to_add_to_this_session
-
-    return steps_df_with_features
+def compute_features(steps_df):
+    steps_df = steps_df.copy()
+    steps_df = compute_state_features(steps_df)
+    steps_df = compute_trial_path_features(steps_df)
+    # steps_df_with_maze_path_features = compute_maze_path_features(
+    #     steps_df_with_state_features
+    # )
+    # trial path features only need to have data from the whole trial but not from previous trials
+    return steps_df
 
 
 def datetime_to_list(dt):

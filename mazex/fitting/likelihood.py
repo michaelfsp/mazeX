@@ -1139,65 +1139,6 @@ def prior_maze_overlap_vals(session_df, mazes_dict, prior_dict):
     return (chosen_vals, vals)
 
 
-def prior_maze_overlap_vals(session_df, mazes_dict, prior_dict):
-    chosen_vals = []
-    vals = {"W": [], "S": [], "N": [], "E": []}
-    for i, row in session_df.iterrows():
-        prior_maze = prior_dict[row.maze_name]
-        current_maze = mazes_dict[row.maze_name]
-
-        cardinal_dict = maze_loc_to_cardinal_dict(current_maze, row.location)
-
-        prior_geodesic_deltas = []
-        for node_choice in cardinal_dict.values():
-            if node_choice:
-                prior_maze_geodesic_delta = (
-                    prior_maze.distances_dictionary[node_choice][row.goal]
-                    - prior_maze.distances_dictionary[row.location][row.goal]
-                )
-                if abs(prior_maze_geodesic_delta) == 1:
-                    prior_geodesic_deltas.append(
-                        prior_maze.distances_dictionary[node_choice][row.goal]
-                        - prior_maze.distances_dictionary[row.location][row.goal]
-                    )
-                else:
-                    prior_geodesic_deltas.append(0)
-            else:
-                prior_geodesic_deltas.append(np.nan)
-
-        # In the case of this variation of prior_maze componente, this step of renormalization
-        # is only here to invert the value of this feature, compared to the geodesic delta, i.e.,
-        # when the delta is negative the evaluation as per the feature is negative
-        # in this case it's just 0 (for no overlap), -1 mapped to +1, and +1 mapped to -1
-        normalized_prior_deltas = renormalize_geodesic_deltas(prior_geodesic_deltas)
-
-        for i, cardinal_dir in enumerate(cardinal_dict.keys()):
-            vals[cardinal_dir].append(normalized_prior_deltas[i])
-
-        # chosen_vals.append(
-        #     prior_maze.distances_dictionary[row.choice][row.goal]
-        #     - prior_maze.distances_dictionary[row.location][row.goal]
-        # )
-
-        chosen_vals.append(vals[row.cardinal_choice][-1])
-
-    chosen_vals = pd.Series(
-        chosen_vals, index=session_df.index, name="prior_maze_overlap"
-    )
-    vals = pd.DataFrame(vals, index=session_df.index)
-
-    column_tuples = [
-        ("prior_maze_overlap", "W"),
-        ("prior_maze_overlap", "S"),
-        ("prior_maze_overlap", "N"),
-        ("prior_maze_overlap", "E"),
-    ]
-    columns_index = pd.MultiIndex.from_tuples(column_tuples)
-    vals.columns = columns_index
-
-    return (chosen_vals, vals)
-
-
 def betweenness_vals(session_df, mazes_dict):
     chosen_vals = []
 
@@ -1235,41 +1176,43 @@ def betweenness_vals(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
-def loc_count_multiplier(session_df, mazes_dict):
+def maze_loc_count_multiplier(session_df, mazes_dict):
     vals = list_to_cardinal_columns(
-        session_df, "available_nodes", mazes_dict, new_column_name="loc_count"
+        session_df, "available_nodes", mazes_dict, new_column_name="maze_loc_count"
     )
     vals[~pd.isna(vals)] = 1.0
 
-    vals = session_df.loc_count.to_numpy("float")[:, np.newaxis] * vals
+    vals = session_df.maze_loc_count.to_numpy("float")[:, np.newaxis] * vals
 
-    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="loc_count")
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="maze_loc_count")
 
     return (chosen_vals, vals)
 
 
-def loc_goal_count_multiplier(session_df, mazes_dict):
+def maze_loc_goal_count_multiplier(session_df, mazes_dict):
     vals = list_to_cardinal_columns(
-        session_df, "available_nodes", mazes_dict, new_column_name="loc_goal_count"
+        session_df, "available_nodes", mazes_dict, new_column_name="maze_loc_goal_count"
     )
     vals[~pd.isna(vals)] = 1.0
 
-    vals = session_df.loc_goal_count.to_numpy("float")[:, np.newaxis] * vals
+    vals = session_df.maze_loc_goal_count.to_numpy("float")[:, np.newaxis] * vals
 
-    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="loc_goal_count")
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="maze_loc_goal_count"
+    )
 
     return (chosen_vals, vals)
 
 
-def goal_count_multiplier(session_df, mazes_dict):
+def maze_goal_count_multiplier(session_df, mazes_dict):
     vals = list_to_cardinal_columns(
-        session_df, "available_nodes", mazes_dict, new_column_name="goal_count"
+        session_df, "available_nodes", mazes_dict, new_column_name="maze_goal_count"
     )
     vals[~pd.isna(vals)] = 1.0
 
-    vals = session_df.goal_count.to_numpy("float")[:, np.newaxis] * vals
+    vals = session_df.maze_goal_count.to_numpy("float")[:, np.newaxis] * vals
 
-    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="goal_count")
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="maze_goal_count")
 
     return (chosen_vals, vals)
 
@@ -1287,7 +1230,7 @@ def maze_step_count_multiplier(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
-def vals_retriever(df, feature, mazes_dict, prior_dict):
+def vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata=None):
     # TODO: Make this function able to retrieve interaction features
     feature_func_dict = {
         "vnav_cos": partial(vnav_vals, mazes_dict=mazes_dict, func=np.cos),
@@ -1306,16 +1249,18 @@ def vals_retriever(df, feature, mazes_dict, prior_dict):
         "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
         "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
         "thigmotaxis": partial(thigmotaxis_vals, mazes_dict=mazes_dict),
-        "loc_count": partial(loc_count_multiplier, mazes_dict=mazes_dict),
-        "loc_goal_count": partial(loc_goal_count_multiplier, mazes_dict=mazes_dict),
-        "goal_count": partial(goal_count_multiplier, mazes_dict=mazes_dict),
+        "maze_loc_count": partial(maze_loc_count_multiplier, mazes_dict=mazes_dict),
+        "maze_loc_goal_count": partial(
+            maze_loc_goal_count_multiplier, mazes_dict=mazes_dict
+        ),
+        "maze_goal_count": partial(maze_goal_count_multiplier, mazes_dict=mazes_dict),
         "maze_step_count": partial(maze_step_count_multiplier, mazes_dict=mazes_dict),
     }
     if "&" in feature:
         # it's an interaction feature
         feat1, feat2 = feature.split("&")
-        cvs1, vs1 = vals_retriever(df, feat1, mazes_dict, prior_dict)
-        cvs2, vs2 = vals_retriever(df, feat2, mazes_dict, prior_dict)
+        cvs1, vs1 = vals_retriever(df, feat1, mazes_dict, prior_dict, history_metadata)
+        cvs2, vs2 = vals_retriever(df, feat2, mazes_dict, prior_dict, history_metadata)
         chosen_vals = cvs1.to_numpy("float") * cvs2.to_numpy("float")
         vals = vs1.to_numpy("float") * vs2.to_numpy("float")
 
@@ -1348,6 +1293,7 @@ def single_day_nll_func_generator(
     features_list,
     mazes_dict,
     prior_dict=None,
+    history_metadata=None,
     standardize=False,
     feature_means=None,
     feature_stds=None,
@@ -1356,7 +1302,7 @@ def single_day_nll_func_generator(
     vals = []
 
     for feature in features_list:
-        cvs, vs = vals_retriever(df, feature, mazes_dict, prior_dict)
+        cvs, vs = vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata)
         chosen_vals.append(cvs.to_numpy("float"))
         vals.append(vs.to_numpy("float"))
 
@@ -1383,7 +1329,9 @@ def nll_func_generator(
     mazes_dict,
     shared_features_list=None,
     prior_dict=None,
+    history_metadata=None,
     standardize=True,
+    shared_feature_standardization_method="shared",
 ):
     """Returns a function that inputs feature coefficients and outputs NLL"""
     if shared_features_list is None:
@@ -1392,13 +1340,15 @@ def nll_func_generator(
             features_list=private_features_list,
             mazes_dict=mazes_dict,
             prior_dict=prior_dict,
+            history_metadata=None,
             standardize=standardize,
         )
         return nll_func
 
     else:
-        private_and_shared_features_list = private_features_list + shared_features_list
         n_days = len(df.maze_day.unique())
+        assert n_days >= 9
+        private_and_shared_features_list = private_features_list + shared_features_list
         n_private_features = len(private_features_list)
 
         nll_funcs = []
@@ -1407,26 +1357,38 @@ def nll_func_generator(
         shared_feature_means = []
         shared_feature_stds = []
         for shared_feature in shared_features_list:
-            cvs, vs = vals_retriever(df, shared_feature, mazes_dict, prior_dict)
+            cvs, vs = vals_retriever(
+                df, shared_feature, mazes_dict, prior_dict, history_metadata
+            )
             shared_feature_means.append(np.nanmean(vs))
             shared_feature_stds.append(np.nanstd(vs))
 
         for day in df.maze_day.unique():
             day_df = df[df["maze_day"] == day].copy()
 
-            private_feature_means = []
-            private_feature_stds = []
-            for private_feature in private_features_list:
-                cvs, vs = vals_retriever(df, private_feature, mazes_dict, prior_dict)
-                private_feature_means.append(np.nanmean(vs))
-                private_feature_stds.append(np.nanstd(vs))
+            if shared_feature_standardization_method == "shared":
+                private_feature_means = []
+                private_feature_stds = []
+                for private_feature in private_features_list:
+                    cvs, vs = vals_retriever(
+                        day_df,
+                        private_feature,
+                        mazes_dict,
+                        prior_dict,
+                        history_metadata,
+                    )
+                    private_feature_means.append(np.nanmean(vs))
+                    private_feature_stds.append(np.nanstd(vs))
 
-            private_and_shared_feature_means = np.array(
-                private_feature_means + shared_feature_means
-            )
-            private_and_shared_feature_stds = np.array(
-                private_feature_stds + shared_feature_stds
-            )
+                private_and_shared_feature_means = np.array(
+                    private_feature_means + shared_feature_means
+                )
+                private_and_shared_feature_stds = np.array(
+                    private_feature_stds + shared_feature_stds
+                )
+            else:
+                private_and_shared_feature_means = None
+                private_and_shared_feature_stds = None
 
             nll_funcs.append(
                 single_day_nll_func_generator(
@@ -1434,6 +1396,7 @@ def nll_func_generator(
                     features_list=private_and_shared_features_list,
                     mazes_dict=mazes_dict,
                     prior_dict=prior_dict,
+                    history_metadata=history_metadata,
                     standardize=True,
                     feature_means=private_and_shared_feature_means,
                     feature_stds=private_and_shared_feature_stds,
