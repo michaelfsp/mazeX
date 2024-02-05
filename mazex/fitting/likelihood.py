@@ -1232,6 +1232,36 @@ def maze_step_count_multiplier(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def session_step_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="session_step_count"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.session_step_count.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="session_step_count"
+    )
+
+    return (chosen_vals, vals)
+
+
+def session_trial_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="session_trial_count"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.session_trial_count.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="session_trial_count"
+    )
+
+    return (chosen_vals, vals)
+
+
 def vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata=None):
     # TODO: Make this function able to retrieve interaction features
     feature_func_dict = {
@@ -1257,6 +1287,12 @@ def vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata=None):
         ),
         "maze_goal_count": partial(maze_goal_count_multiplier, mazes_dict=mazes_dict),
         "maze_step_count": partial(maze_step_count_multiplier, mazes_dict=mazes_dict),
+        "session_step_count": partial(
+            session_step_count_multiplier, mazes_dict=mazes_dict
+        ),
+        "session_trial_count": partial(
+            session_trial_count_multiplier, mazes_dict=mazes_dict
+        ),
     }
     if "&" in feature:
         # it's an interaction feature
@@ -1401,6 +1437,12 @@ def nll_func_generator(
             )
             shared_feature_means.append(np.nanmean(svs))
             shared_feature_stds.append(np.nanstd(svs))
+            # print(
+            #     f"{df.maze_name.unique()[0]}\t{shared_feature}: {np.nanmean(svs, axis=0)}"
+            # )
+            # print(
+            #     f"{df.maze_name.unique()[0]}\t{shared_feature}: {np.nanstd(svs, axis=0)}"
+            # )
 
         for day in df.maze_day.unique():
             day_df = df[df["maze_day"] == day].copy()
@@ -1418,6 +1460,12 @@ def nll_func_generator(
                     )
                     private_feature_means.append(np.nanmean(pvs))
                     private_feature_stds.append(np.nanstd(pvs))
+                    # print(
+                    #     f"{df.maze_name.unique()[0]}\t{private_feature}: {np.nanmean(pvs, axis=0)}"
+                    # )
+                    # print(
+                    #     f"{df.maze_name.unique()[0]}\t{private_feature}: {np.nanstd(pvs, axis=0)}"
+                    # )
 
                 private_and_shared_feature_means = np.array(
                     private_feature_means + shared_feature_means
