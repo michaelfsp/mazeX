@@ -911,6 +911,88 @@ def antiturn_vals(session_df, mazes_dict):
     return (antiturn_chosen_vals, antiturn_vals)
 
 
+def antiL_vals(session_df, mazes_dict):
+    # antiturn_chosen_vals = pd.Series(
+    #     np.where(session_df.angle_to_heading == np.pi / 2, -1.0, 1.0),
+    #     index=session_df.index,
+    #     name="antiturn",
+    # )
+    antiL_vals = list_to_cardinal_columns(
+        session_df, "all_angle_to_heading", mazes_dict, new_column_name="antiL"
+    )
+
+    antiL_vals[antiL_vals == np.pi / 2] = -1.0
+    # when angle is != np.pi we set it to 1 (no need to turn around)
+    antiL_vals[antiL_vals >= 0] = 1.0
+    # # when angle is != np.pi we set it to 1 (no need to turn around)
+    # antiturn_vals.where(antiturn_vals == np.pi / 2, -1.0, inplace=True)
+    # # when angle is np.pi we set it to -1 (turn around)
+    # antiturn_vals.mask(antiturn_vals == np.pi / 2, 1.0, inplace=True)
+
+    for i in range(len(antiL_vals)):
+        row = antiL_vals.iloc[i, :]
+        if any(row == -1):
+            heading = session_df.iloc[i, :]["heading"]
+            dfloc = row.name
+            if heading == "v":
+                antiL_vals.loc[dfloc, ("antiL", "W")] *= -1.0
+            elif heading == "<":
+                antiL_vals.loc[dfloc, ("antiL", "N")] *= -1.0
+            elif heading == "^":
+                antiL_vals.loc[dfloc, ("antiL", "E")] *= -1.0
+            if heading == ">":
+                antiL_vals.loc[dfloc, ("antiL", "S")] *= -1.0
+
+    chosen_vals = []
+    for i, row in session_df.iterrows():
+        chosen_vals.append(antiL_vals.loc[i, ("antiL", row.cardinal_choice)])
+
+    antiL_chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="antiL")
+
+    return (antiL_chosen_vals, antiL_vals)
+
+
+def antiR_vals(session_df, mazes_dict):
+    # antiturn_chosen_vals = pd.Series(
+    #     np.where(session_df.angle_to_heading == np.pi / 2, -1.0, 1.0),
+    #     index=session_df.index,
+    #     name="antiturn",
+    # )
+    antiR_vals = list_to_cardinal_columns(
+        session_df, "all_angle_to_heading", mazes_dict, new_column_name="antiR"
+    )
+
+    antiR_vals[antiR_vals == np.pi / 2] = -1.0
+    # when angle is != np.pi we set it to 1 (no need to turn around)
+    antiR_vals[antiR_vals >= 0] = 1.0
+    # # when angle is != np.pi we set it to 1 (no need to turn around)
+    # antiturn_vals.where(antiturn_vals == np.pi / 2, -1.0, inplace=True)
+    # # when angle is np.pi we set it to -1 (turn around)
+    # antiturn_vals.mask(antiturn_vals == np.pi / 2, 1.0, inplace=True)
+
+    for i in range(len(antiR_vals)):
+        row = antiR_vals.iloc[i, :]
+        if any(row == -1):
+            heading = session_df.iloc[i, :]["heading"]
+            dfloc = row.name
+            if heading == "v":
+                antiR_vals.loc[dfloc, ("antiR", "E")] *= -1.0
+            elif heading == "<":
+                antiR_vals.loc[dfloc, ("antiR", "S")] *= -1.0
+            elif heading == "^":
+                antiR_vals.loc[dfloc, ("antiR", "W")] *= -1.0
+            if heading == ">":
+                antiR_vals.loc[dfloc, ("antiR", "N")] *= -1.0
+
+    chosen_vals = []
+    for i, row in session_df.iterrows():
+        chosen_vals.append(antiR_vals.loc[i, ("antiR", row.cardinal_choice)])
+
+    antiR_chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="antiR")
+
+    return (antiR_chosen_vals, antiR_vals)
+
+
 def visited_node_lag2_vals(session_df, mazes_dict):
     """Warning: it is the symmetrical of what i had done before. This is to be added and not subtracted as a penalty. I.e., actual penalties are now negative values"""
 
@@ -1262,6 +1344,66 @@ def session_trial_count_multiplier(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def bias_W(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="bias_W"
+    )
+    vals.loc[pd.notna(vals.loc[:, ("bias_W", "W")]), ("bias_W", "W")] = 1.0
+    for other_dir in ("N", "S", "E"):
+        vals.loc[
+            pd.notna(vals.loc[:, ("bias_W", other_dir)]), ("bias_W", other_dir)
+        ] = 0.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_W")
+
+    return (chosen_vals, vals)
+
+
+def bias_N(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="bias_N"
+    )
+    vals.loc[pd.notna(vals.loc[:, ("bias_N", "N")]), ("bias_N", "N")] = 1.0
+    for other_dir in ("W", "S", "E"):
+        vals.loc[
+            pd.notna(vals.loc[:, ("bias_N", other_dir)]), ("bias_N", other_dir)
+        ] = 0.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_N")
+
+    return (chosen_vals, vals)
+
+
+def bias_E(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="bias_E"
+    )
+    vals.loc[pd.notna(vals.loc[:, ("bias_E", "E")]), ("bias_E", "E")] = 1.0
+    for other_dir in ("N", "S", "W"):
+        vals.loc[
+            pd.notna(vals.loc[:, ("bias_E", other_dir)]), ("bias_E", other_dir)
+        ] = 0.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_E")
+
+    return (chosen_vals, vals)
+
+
+def bias_S(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="bias_S"
+    )
+    vals.loc[pd.notna(vals.loc[:, ("bias_S", "S")]), ("bias_S", "S")] = 1.0
+    for other_dir in ("N", "E", "W"):
+        vals.loc[
+            pd.notna(vals.loc[:, ("bias_S", other_dir)]), ("bias_S", other_dir)
+        ] = 0.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_S")
+
+    return (chosen_vals, vals)
+
+
 def vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata=None):
     # TODO: Make this function able to retrieve interaction features
     feature_func_dict = {
@@ -1293,6 +1435,12 @@ def vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata=None):
         "session_trial_count": partial(
             session_trial_count_multiplier, mazes_dict=mazes_dict
         ),
+        "bias_W": partial(bias_W, mazes_dict=mazes_dict),
+        "bias_N": partial(bias_N, mazes_dict=mazes_dict),
+        "bias_E": partial(bias_E, mazes_dict=mazes_dict),
+        "bias_S": partial(bias_S, mazes_dict=mazes_dict),
+        "antiR": partial(antiR_vals, mazes_dict=mazes_dict),
+        "antiL": partial(antiL_vals, mazes_dict=mazes_dict),
     }
     if "&" in feature:
         # it's an interaction feature
@@ -1485,7 +1633,7 @@ def nll_func_generator(
                 mazes_dict=mazes_dict,
                 prior_dict=prior_dict,
                 history_metadata=history_metadata,
-                standardize=True,
+                standardize=standardize,
                 feature_means=private_and_shared_feature_means,
                 feature_stds=private_and_shared_feature_stds,
                 debug=debug,
