@@ -1404,7 +1404,7 @@ def bias_S(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
-def vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata=None):
+def vals_retriever(df, feature, mazes_dict, prior_dict):
     # TODO: Make this function able to retrieve interaction features
     feature_func_dict = {
         "vnav_cos": partial(vnav_vals, mazes_dict=mazes_dict, func=np.cos),
@@ -1445,8 +1445,8 @@ def vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata=None):
     if "&" in feature:
         # it's an interaction feature
         feat1, feat2 = feature.split("&")
-        cvs1, vs1 = vals_retriever(df, feat1, mazes_dict, prior_dict, history_metadata)
-        cvs2, vs2 = vals_retriever(df, feat2, mazes_dict, prior_dict, history_metadata)
+        cvs1, vs1 = vals_retriever(df, feat1, mazes_dict, prior_dict)
+        cvs2, vs2 = vals_retriever(df, feat2, mazes_dict, prior_dict)
         chosen_vals = cvs1.to_numpy("float") * cvs2.to_numpy("float")
         vals = vs1.to_numpy("float") * vs2.to_numpy("float")
 
@@ -1474,12 +1474,19 @@ def nll_func(params_array, chosen_vals, vals):
     return -np.sum(logprobs)
 
 
+def step_LPT_func(params_array, chosen_vals, vals):
+    chosen_vals_comb = (params_array * chosen_vals).sum(axis=-1)
+    vals_comb = (params_array * vals).sum(axis=-1).T
+    logprobs = logsoftmax_chosen_values(chosen_vals_comb, vals_comb)
+
+    return -np.sum(logprobs)
+
+
 def single_day_nll_func_generator(
     df,
     features_list,
     mazes_dict,
     prior_dict=None,
-    history_metadata=None,
     standardize=False,
     feature_means=None,
     feature_stds=None,
@@ -1490,8 +1497,12 @@ def single_day_nll_func_generator(
     chosen_vals = []
     vals = []
 
+    single_day_out = {}
+
     for feature in features_list:
-        cvs, vs = vals_retriever(df, feature, mazes_dict, prior_dict, history_metadata)
+        cvs, vs = vals_retriever(
+            df=df, feature=feature, mazes_dict=mazes_dict, prior_dict=prior_dict
+        )
         chosen_vals_array.append(cvs.to_numpy("float"))
         vals_array.append(vs.to_numpy("float"))
         chosen_vals.append(cvs)
@@ -1527,13 +1538,14 @@ def single_day_nll_func_generator(
         vals["maze_name"] = df.maze_name.unique()[0]
         vals["maze_day"] = df.maze_day.unique()[0]
         vals["subject"] = df.subject.unique()[0]
-        return (
-            partial(nll_func, chosen_vals=chosen_vals_array, vals=vals_array),
-            chosen_vals,
-            vals,
-        )
-    else:
-        return partial(nll_func, chosen_vals=chosen_vals_array, vals=vals_array)
+
+        single_day_out["chosen_vals"] = chosen_vals
+        single_day_out["vals"] = vals
+
+    single_day_out["nll_func"] = partial(
+        nll_func, chosen_vals=chosen_vals_array, vals=vals_array
+    )
+    return single_day_out
 
 
 def nll_func_generator(
@@ -1542,28 +1554,22 @@ def nll_func_generator(
     mazes_dict,
     shared_features_list=None,
     prior_dict=None,
-    history_metadata=None,
     standardize=True,
     shared_feature_global_standardization=True,
     debug=False,
 ):
     """Returns a function that inputs feature coefficients and outputs NLL"""
+    output = {}
     if shared_features_list is None:
-        generated_nll_func = single_day_nll_func_generator(
+        output = single_day_nll_func_generator(
             df=df,
             features_list=private_features_list,
             mazes_dict=mazes_dict,
             prior_dict=prior_dict,
-            history_metadata=None,
             standardize=standardize,
             debug=debug,
         )
-        if debug:
-            nll_func, chosen_vals, vals = generated_nll_func
-            return (nll_func, chosen_vals, vals)
-        else:
-            nll_func = generated_nll_func
-            return nll_func
+        return output
 
     else:
         n_days = len(df.maze_day.unique())
@@ -1580,9 +1586,7 @@ def nll_func_generator(
         shared_feature_means = []
         shared_feature_stds = []
         for shared_feature in shared_features_list:
-            scvs, svs = vals_retriever(
-                df, shared_feature, mazes_dict, prior_dict, history_metadata
-            )
+            scvs, svs = vals_retriever(df, shared_feature, mazes_dict, prior_dict)
             shared_feature_means.append(np.nanmean(svs))
             shared_feature_stds.append(np.nanstd(svs))
             # print(
@@ -1604,7 +1608,6 @@ def nll_func_generator(
                         private_feature,
                         mazes_dict,
                         prior_dict,
-                        history_metadata,
                     )
                     private_feature_means.append(np.nanmean(pvs))
                     private_feature_stds.append(np.nanstd(pvs))
@@ -1627,23 +1630,20 @@ def nll_func_generator(
 
             # print(private_and_shared_feature_means)
 
-            generated_nll_func = single_day_nll_func_generator(
+            output = single_day_nll_func_generator(
                 df=day_df,
                 features_list=private_and_shared_features_list,
                 mazes_dict=mazes_dict,
                 prior_dict=prior_dict,
-                history_metadata=history_metadata,
                 standardize=standardize,
                 feature_means=private_and_shared_feature_means,
                 feature_stds=private_and_shared_feature_stds,
                 debug=debug,
             )
+            nll_func = output["nll_func"]
             if debug:
-                nll_func, cvs, vs = generated_nll_func
-                chosen_vals.append(cvs)
-                vals.append(vs)
-            else:
-                nll_func = generated_nll_func
+                chosen_vals.append(output["chosen_vals"])
+                vals.append(output["vals"])
 
             nll_funcs.append(nll_func)
 
@@ -1667,6 +1667,15 @@ def nll_func_generator(
             return global_nll
 
         if debug:
-            return (shared_nll_func, nll_funcs, chosen_vals, vals)
+            (
+                output["shared_nll_func"],
+                output["nll_funcs"],
+                output["chosen_vals"],
+                output["vals"],
+            ) = (shared_nll_func, nll_funcs, chosen_vals, vals)
         else:
-            return (shared_nll_func, nll_funcs)
+            output["shared_nll_func"], output["nll_funcs"] = (
+                shared_nll_func,
+                nll_funcs,
+            )
+        return output
