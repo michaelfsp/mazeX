@@ -190,7 +190,7 @@ def average_step_likelihood(nll, n_choice_steps):
     is at the trial's last step, usually at the goal location, i.e. This
     corresponds to the total number of decisions made in a session.
     """
-    avg_step_nll = nll / n_choice_steps
+    avg_step_nll = nll / float(n_choice_steps)
     avg_step_ll = -avg_step_nll
     return np.exp(avg_step_ll)
 
@@ -1000,7 +1000,7 @@ def visited_node_lag2_vals(session_df, mazes_dict):
         -session_df.chosen_node_visited_lag2,
         index=session_df.index,
         name="visited_node_lag2",
-    )
+    ).astype("float")
 
     visited_node_lag2_vals = -list_to_cardinal_columns(
         session_df,
@@ -1008,6 +1008,8 @@ def visited_node_lag2_vals(session_df, mazes_dict):
         mazes_dict,
         new_column_name="visited_node_lag2",
     )
+
+    visited_node_lag2_vals = visited_node_lag2_vals.astype("float")
 
     return (visited_node_lag2_chosen_vals, visited_node_lag2_vals)
 
@@ -1039,11 +1041,12 @@ def visited_node_exp_vals(session_df, mazes_dict):
 def optimal_vals(session_df, mazes_dict):
     chosen_vals = pd.Series(
         -session_df.geodesic_delta, index=session_df.index, name="optimal"
-    )
+    ).astype("float")
 
     vals = -list_to_cardinal_columns(
         session_df, "all_geodesic_deltas", mazes_dict, new_column_name="optimal"
     )
+    vals = vals.astype("float")
 
     return (chosen_vals, vals)
 
@@ -1474,12 +1477,12 @@ def nll_func(params_array, chosen_vals, vals):
     return -np.sum(logprobs)
 
 
-def step_LPT_func(params_array, chosen_vals, vals):
+def step_like_func(params_array, chosen_vals, vals):
     chosen_vals_comb = (params_array * chosen_vals).sum(axis=-1)
     vals_comb = (params_array * vals).sum(axis=-1).T
     logprobs = logsoftmax_chosen_values(chosen_vals_comb, vals_comb)
 
-    return -np.sum(logprobs)
+    return np.exp(logprobs)
 
 
 def single_day_nll_func_generator(
@@ -1524,6 +1527,7 @@ def single_day_nll_func_generator(
         vals_array = vals_array / feature_stds
     if debug:
         # we use the dataframe created by pd.concat just to have the right index and labels in place but then substitute the values by those which are used for  nll_func such that we have the exact same values, with normalization, etc. as it went into the optimization
+        # breakpoint()
         chosen_vals = pd.concat(chosen_vals, axis=1)
         chosen_vals[:] = chosen_vals_array
 
@@ -1545,6 +1549,9 @@ def single_day_nll_func_generator(
     single_day_out["nll_func"] = partial(
         nll_func, chosen_vals=chosen_vals_array, vals=vals_array
     )
+    single_day_out["step_like_func"] = partial(
+        step_like_func, chosen_vals=chosen_vals_array, vals=vals_array
+    )
     return single_day_out
 
 
@@ -1559,7 +1566,6 @@ def nll_func_generator(
     debug=False,
 ):
     """Returns a function that inputs feature coefficients and outputs NLL"""
-    output = {}
     if shared_features_list is None:
         output = single_day_nll_func_generator(
             df=df,
@@ -1569,9 +1575,9 @@ def nll_func_generator(
             standardize=standardize,
             debug=debug,
         )
-        return output
 
     else:
+        output = {}
         n_days = len(df.maze_day.unique())
         assert n_days >= 9
         assert df.subject.nunique() == 1
@@ -1579,6 +1585,7 @@ def nll_func_generator(
         n_private_features = len(private_features_list)
 
         nll_funcs = []
+        step_like_funcs = []
         chosen_vals = []
         vals = []
 
@@ -1630,7 +1637,7 @@ def nll_func_generator(
 
             # print(private_and_shared_feature_means)
 
-            output = single_day_nll_func_generator(
+            single_day_output = single_day_nll_func_generator(
                 df=day_df,
                 features_list=private_and_shared_features_list,
                 mazes_dict=mazes_dict,
@@ -1640,12 +1647,14 @@ def nll_func_generator(
                 feature_stds=private_and_shared_feature_stds,
                 debug=debug,
             )
-            nll_func = output["nll_func"]
+            nll_func = single_day_output["nll_func"]
+            step_like_func = single_day_output["step_like_func"]
             if debug:
-                chosen_vals.append(output["chosen_vals"])
-                vals.append(output["vals"])
+                chosen_vals.append(single_day_output["chosen_vals"])
+                vals.append(single_day_output["vals"])
 
             nll_funcs.append(nll_func)
+            step_like_funcs.append(step_like_func)
 
         def shared_nll_func(params_array):
             # the private params are sorted as (day1_feature1, day1_feature2, day1_feature3, day2_feature1, day2_feature2, day2_feature3, day3_feature1, ...)
@@ -1666,16 +1675,34 @@ def nll_func_generator(
                 global_nll += nll_funcs[i](day_private_and_shared_params)
             return global_nll
 
+        def all_days_step_like_func(params_array):
+            # the private params are sorted as (day1_feature1, day1_feature2, day1_feature3, day2_feature1, day2_feature2, day2_feature3, day3_feature1, ...)
+            private_params_array = params_array[0 : n_private_features * n_days]
+            # the last params in the array are the ones shared across days
+            shared_params_array = params_array[n_private_features * n_days :]
+
+            all_days_step_like = []
+            for i in range(n_days):
+                first_day_param_index = i * n_private_features
+                day_private_params = private_params_array[
+                    first_day_param_index : first_day_param_index + n_private_features
+                ]
+                day_private_and_shared_params = np.concatenate(
+                    (day_private_params, shared_params_array)
+                )
+                all_days_step_like.append(
+                    step_like_funcs[i](day_private_and_shared_params).ravel()
+                )
+            return np.concatenate(all_days_step_like)
+
+        output["shared_nll_func"], output["nll_funcs"], output["step_like_func"] = (
+            shared_nll_func,
+            nll_funcs,
+            all_days_step_like_func,
+        )
         if debug:
             (
-                output["shared_nll_func"],
-                output["nll_funcs"],
                 output["chosen_vals"],
                 output["vals"],
-            ) = (shared_nll_func, nll_funcs, chosen_vals, vals)
-        else:
-            output["shared_nll_func"], output["nll_funcs"] = (
-                shared_nll_func,
-                nll_funcs,
-            )
-        return output
+            ) = (chosen_vals, vals)
+    return output
