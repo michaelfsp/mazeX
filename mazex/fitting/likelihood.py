@@ -1263,6 +1263,58 @@ def betweenness_vals(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def degree_vals(session_df, mazes_dict):
+    chosen_vals = []
+
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="degree"
+    )
+
+    maze_name = session_df.maze_name.unique().tolist()[0]
+    maze = mazes_dict[maze_name]
+
+    def loc_to_degree(loc):
+        if loc is np.nan:
+            return np.nan
+        else:
+            # min_betweenness = min(list(maze.betweenness_centrality.values()))
+            # max_betweenness = max(list(maze.betweenness_centrality.values()))
+            # loc_betweenness = maze.betweenness_centrality[loc]
+            # # we bring it to scale of [0, 1]
+            # scaled_betweenness = loc_betweenness - min_betweenness
+            # scaled_betweenness = scaled_betweenness / (
+            #     max_betweenness - min_betweenness
+            # )
+            # # we bring it to scale [-1, 1]
+            # scaled_betweenness = (scaled_betweenness * 2) - 1
+
+            return maze.degree[loc]
+
+    vals = vals.map(loc_to_degree)
+
+    for i, row in session_df.iterrows():
+        chosen_vals.append(vals.loc[i, ("degree", row.cardinal_choice)])
+
+    chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="degree")
+
+    return (chosen_vals, vals)
+
+
+def manhattan_distance_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="manhattan_dist_goal"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.manhattan_dist_goal.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="manhattan_dist_goal"
+    )
+
+    return (chosen_vals, vals)
+
+
 def maze_loc_count_multiplier(session_df, mazes_dict):
     vals = list_to_cardinal_columns(
         session_df, "available_nodes", mazes_dict, new_column_name="maze_loc_count"
@@ -1422,10 +1474,14 @@ def vals_retriever(df, feature, mazes_dict, prior_dict):
             prior_maze_overlap_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
         ),
         "betweenness": partial(betweenness_vals, mazes_dict=mazes_dict),
+        "degree": partial(degree_vals, mazes_dict=mazes_dict),
         "euclidean": partial(euclidean_vals, mazes_dict=mazes_dict),
         "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
         "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
         "thigmotaxis": partial(thigmotaxis_vals, mazes_dict=mazes_dict),
+        "manhattan_dist_goal": partial(
+            manhattan_distance_multiplier, mazes_dict=mazes_dict
+        ),
         "maze_loc_count": partial(maze_loc_count_multiplier, mazes_dict=mazes_dict),
         "maze_loc_goal_count": partial(
             maze_loc_goal_count_multiplier, mazes_dict=mazes_dict

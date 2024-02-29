@@ -310,6 +310,7 @@ def load_steps_multi(sessions):
     for session in tqdm(sessions, position=0, desc="Loading Sessions"):
         maze_distances_dict = session.maze.distances_dictionary
         maze_optimal_choice_dict = session.maze.optimal_choice_dic
+        maze_degree_dict = session.maze.degree
 
         if session.date:
             date_time = pd.to_datetime("{}-{}-{}".format(*session.date))
@@ -341,6 +342,8 @@ def load_steps_multi(sessions):
                     -1 if node in optimal_choice else 1 for node in s.available_nodes
                 ]
 
+                all_degree = [maze_degree_dict[node] for node in s.available_nodes]
+
                 next_step = t.steps[i_s + 1]
 
                 data.append(
@@ -369,6 +372,7 @@ def load_steps_multi(sessions):
                         choice_was_optimal,
                         geodesic_delta,
                         all_geodesic_deltas,
+                        all_degree,
                         np.float64(t.delay_period),
                     ]
                 )
@@ -400,6 +404,7 @@ def load_steps_multi(sessions):
             "choice_was_optimal",
             "geodesic_delta",
             "all_geodesic_deltas",
+            "all_degree",
             "trial_delay_period",
         ],
     ).astype(
