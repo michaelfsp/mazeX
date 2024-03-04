@@ -1315,6 +1315,34 @@ def manhattan_distance_multiplier(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def session_goal_block_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="session_goal_block"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.goal_block.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="session_goal_block"
+    )
+
+    return (chosen_vals, vals)
+
+
+def maze_day_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="maze_day"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.maze_day.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="maze_day")
+
+    return (chosen_vals, vals)
+
+
 def maze_loc_count_multiplier(session_df, mazes_dict):
     vals = list_to_cardinal_columns(
         session_df, "available_nodes", mazes_dict, new_column_name="maze_loc_count"
@@ -1394,6 +1422,27 @@ def session_trial_count_multiplier(session_df, mazes_dict):
 
     chosen_vals = get_chosen_vals_from_vals(
         vals, session_df, label="session_trial_count"
+    )
+
+    return (chosen_vals, vals)
+
+
+def session_log_trial_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df,
+        "available_nodes",
+        mazes_dict,
+        new_column_name="session_log_trial_count",
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.session_trial_count.to_numpy("float")[:, np.newaxis] * vals
+    # we add one so that we can take the log for the very first trial
+    vals[~pd.isna(vals)] += 1.0
+    vals = vals.map(np.log)
+
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="session_log_trial_count"
     )
 
     return (chosen_vals, vals)
@@ -1479,6 +1528,10 @@ def vals_retriever(df, feature, mazes_dict, prior_dict):
         "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
         "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
         "thigmotaxis": partial(thigmotaxis_vals, mazes_dict=mazes_dict),
+        "maze_day": partial(maze_day_multiplier, mazes_dict=mazes_dict),
+        "session_goal_block": partial(
+            session_goal_block_multiplier, mazes_dict=mazes_dict
+        ),
         "manhattan_dist_goal": partial(
             manhattan_distance_multiplier, mazes_dict=mazes_dict
         ),
@@ -1493,6 +1546,9 @@ def vals_retriever(df, feature, mazes_dict, prior_dict):
         ),
         "session_trial_count": partial(
             session_trial_count_multiplier, mazes_dict=mazes_dict
+        ),
+        "session_log_trial_count": partial(
+            session_log_trial_count_multiplier, mazes_dict=mazes_dict
         ),
         "bias_W": partial(bias_W, mazes_dict=mazes_dict),
         "bias_N": partial(bias_N, mazes_dict=mazes_dict),
