@@ -131,7 +131,21 @@ def load_session(
         ]  # this does correspond to previous goal as we start iteration over second element of goals
         previous_goal_t = arduino_data.reward_event_times[i]
 
-        trial = Trial(maze, goal, delay_period=arduino_data.delay_period)
+        # we are starting to iterate over goals[1:] so we need to add 1 to the enumeration counter
+        # make up for the fact that we are starting iteration on the first and not the zeroth goal
+        hardware_trial_count = i + 1
+        block_size = 35
+        goal_block = hardware_trial_count // block_size
+
+        trial = Trial(
+            maze,
+            goal,
+            delay_period=arduino_data.delay_period,
+            # we need to add 1 because we are already ignoring the very first trial in our enumeration
+            # trial_count is already added by 1
+            goal_block=goal_block,
+            hardware_trial_count=hardware_trial_count,
+        )
 
         trial_begin_t_video = aligner.A_to_B(
             previous_goal_t + arduino_data.delay_period
@@ -357,6 +371,8 @@ def load_steps_multi(sessions):
                         session.maze.name,
                         s.loc,
                         s.trial.goal,
+                        s.trial.goal_block,
+                        s.trial.hardware_trial_count,
                         available_nodes,
                         available_nodes[s.choice],
                         maze_loc_choice_to_cardinal(
@@ -391,6 +407,8 @@ def load_steps_multi(sessions):
             "maze_name",
             "location",
             "goal",
+            "goal_block",
+            "hardware_trial_count",
             "available_nodes",
             "choice",
             "cardinal_choice",
@@ -468,6 +486,8 @@ def load_trials_and_steps_multi(sessions):
                         session.maze.name,
                         s.loc,
                         s.trial.goal,
+                        s.trial.goal_block,
+                        s.trial.hardware_trial_count,
                         available_nodes,
                         chosen,
                         optimal_choice,
@@ -494,6 +514,8 @@ def load_trials_and_steps_multi(sessions):
                     session.maze.name,
                     t.steps[0].loc,
                     t.goal,
+                    t.goal_block,
+                    t.hardware_trial_count,
                     i_t,
                     trial_geodesic_distance_goal,
                     t.excess_steps(),
@@ -513,6 +535,8 @@ def load_trials_and_steps_multi(sessions):
             "maze_name",
             "location",
             "goal",
+            "goal_block",
+            "hardware_trial_count",
             "session_trial_count",
             "geodesic_dist_goal",
             "excess_steps",
@@ -531,6 +555,8 @@ def load_trials_and_steps_multi(sessions):
             "maze_name",
             "location",
             "goal",
+            "goal_block",
+            "hardware_trial_count",
             "available_nodes",
             "choice",
             "optimal_choice",
@@ -576,6 +602,8 @@ def load_trials_multi(sessions):
                     session.maze.name,
                     t.steps[0].loc,
                     t.goal,
+                    t.goal_block,
+                    t.hardware_trial_count,
                     i_t,
                     geodesic_distance_goal,
                     t.excess_steps(),
@@ -593,6 +621,8 @@ def load_trials_multi(sessions):
             "maze_name",
             "location",
             "goal",
+            "goal_block",
+            "hardware_trial_count",
             "session_trial_count",
             "geodesic_dist_goal",
             "excess_steps",

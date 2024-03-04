@@ -122,6 +122,8 @@ class Trial:
         goal_reached=True,
         delay_period=0.0,
         shortened=False,
+        goal_block=None,
+        hardware_trial_count=None,
     ):
         if isinstance(maze, SquareMaze):
             self.maze = maze
@@ -133,6 +135,8 @@ class Trial:
         self.goal_reached = goal_reached
         self.delay_period = delay_period
         self.shortened = shortened
+        self.goal_block = goal_block
+        self.hardware_trial_count = hardware_trial_count
 
         self.steps = []
 
