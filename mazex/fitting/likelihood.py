@@ -833,7 +833,7 @@ class HeuristicLikelihood(Likelihood):
         return super(HeuristicLikelihood, self).neg_log_likelihood((beta, 1, xi))
 
 
-def vnav_vals(session_df, mazes_dict, func=np.cos):
+def vnav_vals(session_df, mazes_dict, func=np.cos, naming_suffix=""):
     if func is None:
 
         def renormalize_angles(angle):
@@ -842,11 +842,16 @@ def vnav_vals(session_df, mazes_dict, func=np.cos):
         func = renormalize_angles
 
     vnav_chosen_vals = pd.Series(
-        func(np.array(session_df.angle_to_goal)), index=session_df.index, name="vnav"
+        func(np.array(session_df.angle_to_goal)),
+        index=session_df.index,
+        name="vnav" + naming_suffix,
     )
 
     vnav_vals = list_to_cardinal_columns(
-        session_df, "all_angle_to_goal", mazes_dict, new_column_name="vnav"
+        session_df,
+        "all_angle_to_goal",
+        mazes_dict,
+        new_column_name="vnav" + naming_suffix,
     )
     vnav_vals = func(vnav_vals)
 
@@ -1038,6 +1043,27 @@ def visited_node_exp_vals(session_df, mazes_dict):
     return (visited_node_exp_chosen_vals, visited_node_exp_vals)
 
 
+def visited_dir_edge_lag2_vals(session_df, mazes_dict):
+    """Warning: it is the symmetrical of what i had done before. This is to be added and not subtracted as a penalty. I.e., actual penalties are now negative values"""
+
+    visited_dir_edge_lag2_chosen_vals = pd.Series(
+        -session_df.chosen_dir_edge_visited_lag2,
+        index=session_df.index,
+        name="visited_dir_edge_lag2",
+    ).astype("float")
+
+    visited_dir_edge_lag2_vals = -list_to_cardinal_columns(
+        session_df,
+        "available_dir_edge_visited_lag2",
+        mazes_dict,
+        new_column_name="visited_dir_edge_lag2",
+    )
+
+    visited_dir_edge_lag2_vals = visited_dir_edge_lag2_vals.astype("float")
+
+    return (visited_dir_edge_lag2_chosen_vals, visited_dir_edge_lag2_vals)
+
+
 def optimal_vals(session_df, mazes_dict):
     chosen_vals = pd.Series(
         -session_df.geodesic_delta, index=session_df.index, name="optimal"
@@ -1054,11 +1080,12 @@ def optimal_vals(session_df, mazes_dict):
 def euclidean_vals(session_df, mazes_dict):
     chosen_vals = pd.Series(
         -session_df.euclidean_delta, index=session_df.index, name="euclidean"
-    )
+    ).astype("float")
 
     vals = -list_to_cardinal_columns(
         session_df, "all_euclidean_delta", mazes_dict, new_column_name="euclidean"
     )
+    vals = vals.astype("float")
 
     return (chosen_vals, vals)
 
@@ -1397,6 +1424,19 @@ def maze_step_count_multiplier(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def maze_trial_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="maze_trial_count"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.maze_trial_count.to_numpy("float")[:, np.newaxis] * vals
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="maze_trial_count")
+
+    return (chosen_vals, vals)
+
+
 def session_step_count_multiplier(session_df, mazes_dict):
     vals = list_to_cardinal_columns(
         session_df, "available_nodes", mazes_dict, new_column_name="session_step_count"
@@ -1509,11 +1549,40 @@ def bias_S(session_df, mazes_dict):
 
 
 def vals_retriever(df, feature, mazes_dict, prior_dict):
+    """Retrieves values for a given feature from a DataFrame, potentially incorporating maze-specific data and prior information.
+
+    Handles both single features and interaction features (combinations of two features).
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The input DataFrame.
+    feature : str
+        The name of the feature to retrieve. If the feature name contains '&', it's treated as an interaction feature between the two features separated by '&'.
+    mazes_dict : dict
+        A dictionary containing maze objects as values to the correspondingly named maze keys.
+    prior_dict : dict
+        Same as mazes_dict but for the predecessing maze in the experiment sequence.
+
+    Returns
+    -------
+    chosen_vals : pd.Series
+        A Series containing the chosen values for the feature, indexed by the DataFrame's index.
+    vals : pd.DataFrame
+        A DataFrame containing the values for the feature, indexed by the DataFrame's index and with columns representing different directions (W, S, N, E).
+
+    """
+
     # TODO: Make this function able to retrieve interaction features
     feature_func_dict = {
-        "vnav_cos": partial(vnav_vals, mazes_dict=mazes_dict, func=np.cos),
+        "vnav_cos": partial(
+            vnav_vals, mazes_dict=mazes_dict, func=np.cos, naming_suffix="_cos"
+        ),
         "antibackward": partial(antibackward_vals, mazes_dict=mazes_dict),
         "visited_node_lag2": partial(visited_node_lag2_vals, mazes_dict=mazes_dict),
+        "visited_dir_edge_lag2": partial(
+            visited_dir_edge_lag2_vals, mazes_dict=mazes_dict
+        ),
         "visited_node_exp": partial(visited_node_exp_vals, mazes_dict=mazes_dict),
         "optimal": partial(optimal_vals, mazes_dict=mazes_dict),
         "prior_maze": partial(
@@ -1541,6 +1610,7 @@ def vals_retriever(df, feature, mazes_dict, prior_dict):
         ),
         "maze_goal_count": partial(maze_goal_count_multiplier, mazes_dict=mazes_dict),
         "maze_step_count": partial(maze_step_count_multiplier, mazes_dict=mazes_dict),
+        "maze_trial_count": partial(maze_trial_count_multiplier, mazes_dict=mazes_dict),
         "session_step_count": partial(
             session_step_count_multiplier, mazes_dict=mazes_dict
         ),
