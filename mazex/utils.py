@@ -1,6 +1,7 @@
 """
 Assorted utils.
 """
+
 import functools
 import numpy as np
 import math
@@ -84,6 +85,82 @@ def angle_between_node_and_heading(loc, node1, heading):
         raise InvalidHeading
 
     return angle_between_nodes(loc, node1, heading_node)
+
+
+# Allowed symbols and the compass-style angles (in degrees) we’ll assign them
+#  0°  : pointing up     → "^"
+# +90° : pointing left   → "<"
+# –90° : pointing right  → ">"
+# 180° : pointing down   → "v"
+ANGLE_LOOKUP = {"^": 0.0, "<": 90.0, ">": -90.0, "v": 180.0}
+
+
+def signed_angle(reference: str, other: str) -> float:
+    """
+    Compute the signed angle from `reference` to `other`.
+    Positive  = `other` sits to the *left* of `reference`.
+    Negative  = `other` sits to the *right* of `reference`.
+    ±180° can return as either 180 or -180.
+
+    Parameters
+    ----------
+    reference : one of "^", "<", ">", "v"
+    other     : one of "^", "<", ">", "v"
+
+    Returns
+    -------
+    int : the signed angle in degrees (−180 … +180)
+    """
+    try:
+        ref_deg = ANGLE_LOOKUP[reference]
+        oth_deg = ANGLE_LOOKUP[other]
+    except KeyError as bad:
+        raise ValueError(f"Invalid arrow symbol: {bad.args[0]!r}")
+
+    # raw difference
+    diff = oth_deg - ref_deg
+
+    # wrap into the interval (−180, 180] so that 0 ≤ |diff| ≤ 180
+    if diff > 180.0:
+        diff -= 360.0
+    elif diff <= -180.0:
+        diff += 360.0
+
+    return diff
+
+
+def signed_angle_between_node_and_heading(loc, node1, heading):
+    """Compute the (egocentric) angle between current heading and a given node. The angles returned are signed such that if node1 is to the left (or counterclockwise) to heading, it is positive, and negative if it is to the right (or clockwise) from the heading.
+
+    Parameters:
+    -----------
+    node : node or tuple
+        Node on the maze we want to evaluate the angle of
+
+    loc : node or tuple
+        The current node
+
+    goal : node or turple
+        The node of the ,y coordinates of the goal location.
+    """
+    if heading == "o":
+        # we do not have enough information to calculate an angle
+        return np.nan
+
+    assert loc != node1
+
+    loc_to_node1_delta = (node1[0] - loc[0], node1[1] - loc[1])
+    if loc_to_node1_delta[0] == 0:
+        if loc_to_node1_delta[1] == 1:
+            node_dir = "^"
+        elif loc_to_node1_delta[1] == -1:
+            node_dir = "v"
+    elif loc_to_node1_delta[0] == 1:
+        node_dir = ">"
+    elif loc_to_node1_delta[0] == -1:
+        node_dir = "<"
+
+    return signed_angle(heading, node_dir)
 
 
 @lru_cache(maxsize=128)

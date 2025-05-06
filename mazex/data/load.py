@@ -17,6 +17,7 @@ from mazex.utils import (
     euclidian_distance,
     manhattan_distance,
     maze_loc_choice_to_cardinal,
+    signed_angle_between_node_and_heading,
 )
 
 
@@ -639,6 +640,9 @@ def row_computations(choice, goal, location, heading, available_nodes):
     euclidean_delta = euclidian_distance(choice, goal) - euclidean_dist_to_goal
     angle_to_goal = angle_between_nodes(location, choice, goal)
     angle_to_heading = angle_between_node_and_heading(location, choice, heading)
+    signed_angle_to_heading = signed_angle_between_node_and_heading(
+        location, choice, heading
+    )
 
     all_manhattan_deltas = [
         manhattan_distance(choice, goal) - manhattan_dist_to_goal
@@ -655,12 +659,17 @@ def row_computations(choice, goal, location, heading, available_nodes):
         angle_between_node_and_heading(location, choice, heading)
         for choice in available_nodes
     ]
+    all_signed_angles_to_heading = [
+        signed_angle_between_node_and_heading(location, choice, heading)
+        for choice in available_nodes
+    ]
 
     return (
         manhattan_delta,
         euclidean_delta,
         angle_to_goal,
         angle_to_heading,
+        signed_angle_to_heading,
         n_available_nodes,
         manhattan_dist_to_goal,
         euclidean_dist_to_goal,
@@ -668,6 +677,7 @@ def row_computations(choice, goal, location, heading, available_nodes):
         np.array(all_euclidean_deltas, dtype=object),
         np.array(all_angles_to_goal, dtype=object),
         np.array(all_angles_to_heading, dtype=object),
+        np.array(all_signed_angles_to_heading, dtype=object),
     )
 
 
@@ -700,6 +710,7 @@ def compute_state_features(steps_df):
         lst_euclidean_delta,
         lst_angle_to_goal,
         lst_angle_to_heading,
+        lst_signed_angle_to_heading,
         lst_n_available_nodes,
         lst_manhattan_dist_to_goal,
         lst_euclidean_dist_to_goal,
@@ -707,6 +718,7 @@ def compute_state_features(steps_df):
         lst_all_euclidean_deltas,
         lst_all_angle_to_goal,
         lst_all_angle_to_heading,
+        lst_all_signed_angles_to_heading,
     ) = newfeatures
 
     # the lst_all_* features are, each of them, an array of arrays. we will turn it into a list of lists
@@ -714,6 +726,9 @@ def compute_state_features(steps_df):
     lst_all_euclidean_deltas = [row.tolist() for row in lst_all_euclidean_deltas]
     lst_all_angle_to_goal = [row.tolist() for row in lst_all_angle_to_goal]
     lst_all_angle_to_heading = [row.tolist() for row in lst_all_angle_to_heading]
+    lst_all_signed_angles_to_heading = [
+        row.tolist() for row in lst_all_signed_angles_to_heading
+    ]
 
     steps_df_with_features = steps_df  # .copy()
 
@@ -721,6 +736,7 @@ def compute_state_features(steps_df):
     steps_df_with_features["euclidean_delta"] = lst_euclidean_delta
     steps_df_with_features["angle_to_goal"] = lst_angle_to_goal
     steps_df_with_features["angle_to_heading"] = lst_angle_to_heading
+    steps_df_with_features["signed_angle_to_heading"] = lst_signed_angle_to_heading
     steps_df_with_features["n_available_nodes"] = lst_n_available_nodes
     steps_df_with_features["manhattan_dist_goal"] = lst_manhattan_dist_to_goal
     steps_df_with_features["euclidean_dist_goal"] = lst_euclidean_dist_to_goal
@@ -728,6 +744,9 @@ def compute_state_features(steps_df):
     steps_df_with_features["all_euclidean_delta"] = lst_all_euclidean_deltas
     steps_df_with_features["all_angle_to_goal"] = lst_all_angle_to_goal
     steps_df_with_features["all_angle_to_heading"] = lst_all_angle_to_heading
+    steps_df_with_features["all_signed_angle_to_heading"] = (
+        lst_all_signed_angles_to_heading
+    )
 
     return steps_df_with_features
 
@@ -821,8 +840,8 @@ def compute_trial_path_features(steps_df):
     lst_chosen_node_visited = []
     lst_available_node_visited = []
 
-    # lst_chosen_dir_edge_visited_lag2 = []
-    # lst_available_dir_edge_visited_lag2 = []
+    lst_chosen_dir_edge_visited_lag2 = []
+    lst_available_dir_edge_visited_lag2 = []
     lst_chosen_node_visited_lag2 = []
     lst_available_node_visited_lag2 = []
 
@@ -848,25 +867,25 @@ def compute_trial_path_features(steps_df):
                 else:
                     available_dir_edge_visited.append(-1)
 
-                # # now the same for a lag=2, which means we exclude the last chosen "dir_edge"
-                #
-                # if (
-                #     trial_df.loc[trial_first_idx : index - 2, "dir_edge_chosen"]
-                #     .isin([available_edge])
-                #     .any()
-                # ):
-                #     available_dir_edge_visited_lag2.append(1)
-                # else:
-                #     available_dir_edge_visited_lag2.append(-1)
+                # now the same for a lag=2, which means we exclude the last chosen "dir_edge"
+
+                if (
+                    trial_df.loc[trial_first_idx : index - 2, "dir_edge_chosen"]
+                    .isin([available_edge])
+                    .any()
+                ):
+                    available_dir_edge_visited_lag2.append(1)
+                else:
+                    available_dir_edge_visited_lag2.append(-1)
 
             lst_available_dir_edge_visited.append(available_dir_edge_visited)
-            # lst_available_dir_edge_visited_lag2.append(available_dir_edge_visited_lag2)
+            lst_available_dir_edge_visited_lag2.append(available_dir_edge_visited_lag2)
             lst_chosen_dir_edge_visited.append(
                 available_dir_edge_visited[idx_chosen_node]
             )
-            # lst_chosen_dir_edge_visited_lag2.append(
-            #     available_dir_edge_visited_lag2[idx_chosen_node]
-            # )
+            lst_chosen_dir_edge_visited_lag2.append(
+                available_dir_edge_visited_lag2[idx_chosen_node]
+            )
 
             # now the same for all the available nodes
             available_node_visited = []
@@ -901,6 +920,8 @@ def compute_trial_path_features(steps_df):
 
     steps_df["chosen_dir_edge_visited"] = lst_chosen_dir_edge_visited
     steps_df["available_dir_edge_visited"] = lst_available_dir_edge_visited
+    steps_df["chosen_dir_edge_visited_lag2"] = lst_chosen_dir_edge_visited_lag2
+    steps_df["available_dir_edge_visited_lag2"] = lst_available_dir_edge_visited_lag2
     steps_df["chosen_node_visited"] = lst_chosen_node_visited
     steps_df["available_node_visited"] = lst_available_node_visited
     steps_df["chosen_node_visited_lag2"] = lst_chosen_node_visited_lag2
