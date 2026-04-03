@@ -19,7 +19,7 @@ def add_reverse_direction_edge_names(edge_centrality_dic):
     """
     new_dic = copy.deepcopy(edge_centrality_dic)
     for n1, n2 in edge_centrality_dic.keys():
-        new_dic[(n2, n1)] = edge_centrality_dic[((n1, n2))]
+        new_dic[(n2, n1)] = edge_centrality_dic[(n1, n2)]
     return new_dic
 
 
@@ -62,8 +62,20 @@ def cached_edge_current_flow_betweenness_centrality(maze):
 
 
 @lru_cache(maxsize=128)
+def cached_current_flow_closeness_centrality(maze):
+    # NOTE: HACK - we have to create a Graph from maze or else networkx
+    # complains about not getting argument 'size'
+    return nx.centrality.current_flow_closeness_centrality(nx.Graph(maze))
+
+
+@lru_cache(maxsize=128)
 def cached_degree_centrality(maze):
     return nx.algorithms.degree_centrality(maze)
+
+
+@lru_cache(maxsize=128)
+def cached_harmonic_centrality(maze):
+    return nx.algorithms.harmonic_centrality(maze)
 
 
 def maze_from_ASCII(maze_str):
@@ -271,8 +283,16 @@ class SquareMaze(nx.classes.graph.Graph):
         return cached_edge_current_flow_betweenness_centrality(self)
 
     @property
+    def current_flow_closeness_centrality(self):
+        return cached_current_flow_closeness_centrality(self)
+
+    @property
     def degree_centrality(self):
         return cached_degree_centrality(self)
+
+    @property
+    def harmonic_centrality(self):
+        return cached_harmonic_centrality(self)
 
     # TODO: change names of dead_end and real_degree to something more
     # more senseful since they aren't actual centralities
