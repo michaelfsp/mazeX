@@ -1,23 +1,22 @@
-import numpy as np
-from mazex.agents import HeuristicAgent, MixtureAgent
-from mazex.data.load import (
-    load_steps_multi,
-    compute_features,
-    load_session_from_steps_df,
-)
-from mazex.utils import (
-    pad_with_nan,
-    list_to_cardinal_columns,
-    maze_loc_to_cardinal_dict,
-)
-
 import math
+from functools import partial
+
 import numba
 import numexpr as ne
-
+import numpy as np
 import pandas as pd
 
-from functools import partial
+from mazex.agents import HeuristicAgent, MixtureAgent
+from mazex.data.load import (
+    compute_features,
+    load_session_from_steps_df,
+    load_steps_multi,
+)
+from mazex.utils import (
+    list_to_cardinal_columns,
+    maze_loc_to_cardinal_dict,
+    pad_with_nan,
+)
 
 idx = pd.IndexSlice
 
@@ -833,13 +832,18 @@ class HeuristicLikelihood(Likelihood):
         return super(HeuristicLikelihood, self).neg_log_likelihood((beta, 1, xi))
 
 
-def vnav_vals(session_df, mazes_dict, func=np.cos, naming_suffix=""):
+def vnav_vals(
+    session_df, mazes_dict, func=np.cos, naming_suffix="", min_max_scaled=False
+):
     if func is None:
+        if min_max_scaled is False:
+            # simply return the angle (negative for smaller angles --> higher values)
+            def func(angle):
+                return -angle
+        else:
 
-        def renormalize_angles(angle):
-            return (2.0 * (-angle / np.pi)) + 1.0
-
-        func = renormalize_angles
+            def func(angle):
+                return (2.0 * (-angle / np.pi)) + 1.0
 
     vnav_chosen_vals = pd.Series(
         func(np.array(session_df.angle_to_goal)),
@@ -859,12 +863,6 @@ def vnav_vals(session_df, mazes_dict, func=np.cos, naming_suffix=""):
 
 
 def antibackward_vals(session_df, mazes_dict):
-    # antibackward_chosen_vals = pd.Series(
-    #     np.where(session_df.angle_to_heading == np.pi, -1.0, 1.0),
-    #     index=session_df.index,
-    #     name="antibackward",
-    # )
-    #
     antibackward_vals = list_to_cardinal_columns(
         session_df, "all_angle_to_heading", mazes_dict, new_column_name="antibackward"
     )
@@ -872,7 +870,7 @@ def antibackward_vals(session_df, mazes_dict):
     # when angle is np.pi we set it to -1 (turn around)
     antibackward_vals[antibackward_vals == np.pi] = -1.0
     # when angle is != np.pi we set it to 1 (no need to turn around)
-    antibackward_vals[antibackward_vals >= 0] = 1.0
+    antibackward_vals[antibackward_vals >= 0] = 0.0
 
     chosen_vals = []
     for i, row in session_df.iterrows():
@@ -888,18 +886,13 @@ def antibackward_vals(session_df, mazes_dict):
 
 
 def antiturn_vals(session_df, mazes_dict):
-    # antiturn_chosen_vals = pd.Series(
-    #     np.where(session_df.angle_to_heading == np.pi / 2, -1.0, 1.0),
-    #     index=session_df.index,
-    #     name="antiturn",
-    # )
     antiturn_vals = list_to_cardinal_columns(
         session_df, "all_angle_to_heading", mazes_dict, new_column_name="antiturn"
     )
 
     antiturn_vals[antiturn_vals == np.pi / 2] = -1.0
     # when angle is != np.pi we set it to 1 (no need to turn around)
-    antiturn_vals[antiturn_vals >= 0] = 1.0
+    antiturn_vals[antiturn_vals >= 0] = 0.0
     # # when angle is != np.pi we set it to 1 (no need to turn around)
     # antiturn_vals.where(antiturn_vals == np.pi / 2, -1.0, inplace=True)
     # # when angle is np.pi we set it to -1 (turn around)
@@ -1090,6 +1083,48 @@ def euclidean_vals(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def geodesic_delta_euclidean_vals(session_df, mazes_dict):
+    chosen_vals = pd.Series(
+        -session_df.geodesic_delta - -session_df.euclidean_delta,
+        index=session_df.index,
+        name="geodesic_delta_euclidean",
+    ).astype("float")
+
+    geodesic_vals = -list_to_cardinal_columns(
+        session_df, "all_geodesic_deltas", mazes_dict, new_column_name="optimal"
+    )
+    euclidean_vals = -list_to_cardinal_columns(
+        session_df, "all_euclidean_delta", mazes_dict, new_column_name="euclidean"
+    )
+    vals = geodesic_vals.copy()
+    vals[:] = geodesic_vals.values - euclidean_vals.values
+
+    new_cols = pd.MultiIndex.from_arrays(
+        [
+            ["geodesic_delta_euclidean"] * len(geodesic_vals.columns),
+            geodesic_vals.columns.get_level_values(1),
+        ],
+        names=geodesic_vals.columns.names,
+    )
+    vals.columns = new_cols
+    vals = vals.astype("float")
+
+    return (chosen_vals, vals)
+
+
+def manhattan_vals(session_df, mazes_dict):
+    chosen_vals = pd.Series(
+        -session_df.manhattan_delta, index=session_df.index, name="manhattan"
+    ).astype("float")
+
+    vals = -list_to_cardinal_columns(
+        session_df, "all_manhattan_delta", mazes_dict, new_column_name="manhattan"
+    )
+    vals = vals.astype("float")
+
+    return (chosen_vals, vals)
+
+
 def get_chosen_vals_from_vals(vals, session_df, label):
     chosen_vals = []
     for (i, df_row), (j, vals_row) in zip(session_df.iterrows(), vals.iterrows()):
@@ -1114,7 +1149,7 @@ def thigmotaxis_vals(session_df, mazes_dict):
                 # it's a border
                 val = 1.0
             else:
-                val = -1.0
+                val = 0.0
             return val
 
     vals = vals.map(thigmotaxis)
@@ -1159,7 +1194,9 @@ def prior_maze_vals(session_df, mazes_dict, prior_dict):
 
         prior_geodesic_deltas = []
         for node_choice in cardinal_dict.values():
-            if node_choice:
+            if prior_maze is None:
+                prior_geodesic_deltas.append(0.0)
+            elif node_choice:
                 prior_geodesic_deltas.append(
                     prior_maze.distances_dictionary[node_choice][row.goal]
                     - prior_maze.distances_dictionary[row.location][row.goal]
@@ -1205,18 +1242,19 @@ def prior_maze_overlap_vals(session_df, mazes_dict, prior_dict):
 
         prior_geodesic_deltas = []
         for node_choice in cardinal_dict.values():
-            if node_choice:
+            if prior_maze is None:
+                prior_geodesic_deltas.append(0.0)
+            elif node_choice:
                 prior_maze_geodesic_delta = (
                     prior_maze.distances_dictionary[node_choice][row.goal]
                     - prior_maze.distances_dictionary[row.location][row.goal]
                 )
                 if abs(prior_maze_geodesic_delta) == 1:
-                    prior_geodesic_deltas.append(
-                        prior_maze.distances_dictionary[node_choice][row.goal]
-                        - prior_maze.distances_dictionary[row.location][row.goal]
-                    )
+                    # this means that these two locations were connected in the previous maze
+                    prior_geodesic_deltas.append(prior_maze_geodesic_delta)
                 else:
-                    prior_geodesic_deltas.append(0)
+                    # if they weren't connected then we just set them to 0
+                    prior_geodesic_deltas.append(0.0)
             else:
                 prior_geodesic_deltas.append(np.nan)
 
@@ -1253,7 +1291,7 @@ def prior_maze_overlap_vals(session_df, mazes_dict, prior_dict):
     return (chosen_vals, vals)
 
 
-def betweenness_vals(session_df, mazes_dict):
+def betweenness_vals(session_df, mazes_dict, min_max_scaled):
     chosen_vals = []
 
     vals = list_to_cardinal_columns(
@@ -1263,29 +1301,119 @@ def betweenness_vals(session_df, mazes_dict):
     maze_name = session_df.maze_name.unique().tolist()[0]
     maze = mazes_dict[maze_name]
 
-    def loc_to_betweenness_scaled(loc):
+    def loc_to_centrality_scaled(loc, min_max_scaled=min_max_scaled):
         if loc is np.nan:
             return np.nan
         else:
-            min_betweenness = min(list(maze.betweenness_centrality.values()))
-            max_betweenness = max(list(maze.betweenness_centrality.values()))
-            loc_betweenness = maze.betweenness_centrality[loc]
-            # we bring it to scale of [0, 1]
-            scaled_betweenness = loc_betweenness - min_betweenness
-            scaled_betweenness = scaled_betweenness / (
-                max_betweenness - min_betweenness
-            )
-            # we bring it to scale [-1, 1]
-            scaled_betweenness = (scaled_betweenness * 2) - 1
+            loc_centrality = maze.betweenness_centrality[loc]
 
-            return scaled_betweenness
+            if min_max_scaled:
+                min_centrality = min(list(maze.betweenness_centrality.values()))
+                max_centrality = max(list(maze.betweenness_centrality.values()))
+                # we bring it to scale of [0, 1]
+                scaled_centrality = loc_centrality - min_centrality
+                scaled_centrality = scaled_centrality / (
+                    max_centrality - min_centrality
+                )
+                # we bring it to scale [-1, 1]
+                scaled_centrality = (scaled_centrality * 2) - 1
 
-    vals = vals.map(loc_to_betweenness_scaled)
+                return scaled_centrality
+            else:
+                return loc_centrality
+
+    vals = vals.map(loc_to_centrality_scaled)
 
     for i, row in session_df.iterrows():
         chosen_vals.append(vals.loc[i, ("betweenness", row.cardinal_choice)])
 
     chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="betweenness")
+
+    return (chosen_vals, vals)
+
+
+def closeness_vals(session_df, mazes_dict, min_max_scaled):
+    chosen_vals = []
+
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="closeness"
+    )
+
+    maze_name = session_df.maze_name.unique().tolist()[0]
+    maze = mazes_dict[maze_name]
+
+    def loc_to_centrality_scaled(loc, min_max_scaled=min_max_scaled):
+        if loc is np.nan:
+            return np.nan
+        else:
+            loc_centrality = maze.closeness_centrality[loc]
+
+            if min_max_scaled:
+                min_centrality = min(list(maze.closeness_centrality.values()))
+                max_centrality = max(list(maze.closeness_centrality.values()))
+                # we bring it to scale of [0, 1]
+                scaled_centrality = loc_centrality - min_centrality
+                scaled_centrality = scaled_centrality / (
+                    max_centrality - min_centrality
+                )
+                # we bring it to scale [-1, 1]
+                scaled_centrality = (scaled_centrality * 2) - 1
+
+                return scaled_centrality
+            else:
+                return loc_centrality
+
+    vals = vals.map(loc_to_centrality_scaled)
+
+    for i, row in session_df.iterrows():
+        chosen_vals.append(vals.loc[i, ("closeness", row.cardinal_choice)])
+
+    chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="closeness")
+
+    return (chosen_vals, vals)
+
+
+def expected_cost_vals(session_df, mazes_dict, min_max_scaled):
+    chosen_vals = []
+
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="expected_cost"
+    )
+
+    maze_name = session_df.maze_name.unique().tolist()[0]
+    maze = mazes_dict[maze_name]
+
+    def loc_to_centrality_scaled(loc, min_max_scaled=min_max_scaled):
+        if loc is np.nan:
+            return np.nan
+        else:
+            loc_centrality = -1 / maze.closeness_centrality[loc]
+
+            if min_max_scaled:
+                min_centrality = min(
+                    -1 / np.array(list(maze.closeness_centrality.values()))
+                )
+                max_centrality = max(
+                    -1 / np.array(list(maze.closeness_centrality.values()))
+                )
+                # we bring it to scale of [0, 1]
+                scaled_centrality = loc_centrality - min_centrality
+                scaled_centrality = scaled_centrality / (
+                    max_centrality - min_centrality
+                )
+                # we bring it to scale [-1, 1]
+                scaled_centrality = (scaled_centrality * 2) - 1
+
+                return scaled_centrality
+            else:
+                return loc_centrality
+
+    vals = vals.map(loc_to_centrality_scaled)
+
+    for i, row in session_df.iterrows():
+        chosen_vals.append(vals.loc[i, ("expected_cost", row.cardinal_choice)])
+
+    chosen_vals = pd.Series(chosen_vals, index=session_df.index, name="expected_cost")
 
     return (chosen_vals, vals)
 
@@ -1304,17 +1432,6 @@ def degree_vals(session_df, mazes_dict):
         if loc is np.nan:
             return np.nan
         else:
-            # min_betweenness = min(list(maze.betweenness_centrality.values()))
-            # max_betweenness = max(list(maze.betweenness_centrality.values()))
-            # loc_betweenness = maze.betweenness_centrality[loc]
-            # # we bring it to scale of [0, 1]
-            # scaled_betweenness = loc_betweenness - min_betweenness
-            # scaled_betweenness = scaled_betweenness / (
-            #     max_betweenness - min_betweenness
-            # )
-            # # we bring it to scale [-1, 1]
-            # scaled_betweenness = (scaled_betweenness * 2) - 1
-
             return maze.degree[loc]
 
     vals = vals.map(loc_to_degree)
@@ -1548,7 +1665,82 @@ def bias_S(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
-def vals_retriever(df, feature, mazes_dict, prior_dict):
+def bias_F(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "all_signed_angle_to_heading", mazes_dict, new_column_name="bias_F"
+    )
+
+    vals[vals == 0.0] = 1.0
+    vals[vals == -90.0] = 0.0
+    vals[vals == 90.0] = 0.0
+    vals[vals == 180.0] = 0.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_F")
+
+    return (chosen_vals, vals)
+
+
+def bias_R(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "all_signed_angle_to_heading", mazes_dict, new_column_name="bias_R"
+    )
+
+    vals[vals == 0.0] = 0.0
+    vals[vals == -90.0] = 1.0
+    vals[vals == 90.0] = 0.0
+    vals[vals == 180.0] = 0.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_R")
+
+    return (chosen_vals, vals)
+
+
+def bias_L(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "all_signed_angle_to_heading", mazes_dict, new_column_name="bias_L"
+    )
+
+    vals[vals == 0.0] = 0.0
+    vals[vals == -90.0] = 0.0
+    vals[vals == 90.0] = 1.0
+    vals[vals == 180.0] = 0.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_L")
+
+    return (chosen_vals, vals)
+
+
+def bias_LR(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "all_signed_angle_to_heading", mazes_dict, new_column_name="bias_LR"
+    )
+
+    vals[vals == 0.0] = 0.0
+    vals[vals == -90.0] = 1.0
+    vals[vals == 90.0] = 1.0
+    vals[vals == 180.0] = 0.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_LR")
+
+    return (chosen_vals, vals)
+
+
+def bias_B(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "all_signed_angle_to_heading", mazes_dict, new_column_name="bias_B"
+    )
+
+    vals[vals == 0.0] = 0.0
+    vals[vals == -90.0] = 0.0
+    vals[vals == 90.0] = 0.0
+    vals[vals == 180.0] = 1.0
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="bias_B")
+
+    return (chosen_vals, vals)
+
+
+def vals_retriever(df, feature, mazes_dict, prior_dict, min_max_scaled=False):
     """Retrieves values for a given feature from a DataFrame, potentially incorporating maze-specific data and prior information.
 
     Handles both single features and interaction features (combinations of two features).
@@ -1585,16 +1777,33 @@ def vals_retriever(df, feature, mazes_dict, prior_dict):
         ),
         "visited_node_exp": partial(visited_node_exp_vals, mazes_dict=mazes_dict),
         "optimal": partial(optimal_vals, mazes_dict=mazes_dict),
+        "geodesic_delta_euclidean": partial(
+            geodesic_delta_euclidean_vals, mazes_dict=mazes_dict
+        ),
         "prior_maze": partial(
             prior_maze_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
         ),
         "prior_maze_overlap": partial(
             prior_maze_overlap_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
         ),
-        "betweenness": partial(betweenness_vals, mazes_dict=mazes_dict),
-        "degree": partial(degree_vals, mazes_dict=mazes_dict),
+        "betweenness": partial(
+            betweenness_vals, mazes_dict=mazes_dict, min_max_scaled=min_max_scaled
+        ),
+        "closeness": partial(
+            closeness_vals, mazes_dict=mazes_dict, min_max_scaled=min_max_scaled
+        ),
+        "expected_cost": partial(
+            expected_cost_vals, mazes_dict=mazes_dict, min_max_scaled=min_max_scaled
+        ),
+        "degree": partial(
+            degree_vals,
+            mazes_dict=mazes_dict,
+        ),
         "euclidean": partial(euclidean_vals, mazes_dict=mazes_dict),
-        "vnav": partial(vnav_vals, mazes_dict=mazes_dict, func=None),
+        "manhattan": partial(manhattan_vals, mazes_dict=mazes_dict),
+        "vnav": partial(
+            vnav_vals, mazes_dict=mazes_dict, func=None, min_max_scaled=min_max_scaled
+        ),
         "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
         "thigmotaxis": partial(thigmotaxis_vals, mazes_dict=mazes_dict),
         "maze_day": partial(maze_day_multiplier, mazes_dict=mazes_dict),
@@ -1626,6 +1835,11 @@ def vals_retriever(df, feature, mazes_dict, prior_dict):
         "bias_S": partial(bias_S, mazes_dict=mazes_dict),
         "antiR": partial(antiR_vals, mazes_dict=mazes_dict),
         "antiL": partial(antiL_vals, mazes_dict=mazes_dict),
+        "bias_F": partial(bias_F, mazes_dict=mazes_dict),
+        "bias_R": partial(bias_R, mazes_dict=mazes_dict),
+        "bias_L": partial(bias_L, mazes_dict=mazes_dict),
+        "bias_LR": partial(bias_LR, mazes_dict=mazes_dict),
+        "bias_B": partial(bias_B, mazes_dict=mazes_dict),
     }
     if "&" in feature:
         # it's an interaction feature
