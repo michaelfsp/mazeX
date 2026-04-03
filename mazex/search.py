@@ -43,7 +43,7 @@ def strict_topology_optimization(maze, distance='euclidian', min_avail_nodes=3,
                     n_discordant_points +=1
 
     if as_fraction:
-        total_trials = len(maze.nodes()) * len(maze.nodes())-1
+        total_trials = len(maze.nodes()) * (len(maze.nodes()) - 1)
         n_discordant_points /= total_trials
 
     return n_discordant_points
