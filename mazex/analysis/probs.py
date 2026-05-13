@@ -1,6 +1,11 @@
 """
 Analysis methods that don't rely on fitting should come here
 """
+from concurrent.futures import ProcessPoolExecutor
+import multiprocessing as mp
+import os
+import random
+
 from mazex.exceptions import *
 from mazex.analysis.iterators import (
     first_exit,
@@ -24,6 +29,73 @@ import shapely.ops as so
 import descartes
 from tqdm import tqdm
 import matplotlib as mpl
+
+
+_ARROWS_PLOT2_PARALLEL_STATE = {}
+
+
+def _arrows_plot2_simulation_coords(session, spatial_distance, first_exit_only):
+    if first_exit_only:
+        return prob_plan_prob_vec(first_exit(session), spatial_distance=spatial_distance)
+    return prob_plan_prob_vec(
+        session.steps(),
+        spatial_distance=spatial_distance,
+        discard_backtracked=False,
+        only_forward=False,
+    )
+
+
+def _arrows_plot2_simulate_beta(args):
+    beta, max_total_steps, seed = args
+    maze = _ARROWS_PLOT2_PARALLEL_STATE["maze"]
+    goalz = _ARROWS_PLOT2_PARALLEL_STATE["goalz"]
+    spatial_distance = _ARROWS_PLOT2_PARALLEL_STATE["spatial_distance"]
+    first_exit_only = _ARROWS_PLOT2_PARALLEL_STATE["first_exit_only"]
+
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed % (2**32 - 1))
+
+    hcoords = []
+    mcoords = []
+
+    for goals in goalz:
+        hagent = HeuristicAgent(
+            beta=beta, xi=5, penalty_type="exponential", heading="^", loc=(0, 0)
+        )
+        hsession = mx.SimSessionGivenGoals(
+            hagent, maze, goals, max_total_steps=max_total_steps
+        )
+        hsession.run(progress_bar=False)
+        hcoords.append(
+            _arrows_plot2_simulation_coords(
+                hsession, spatial_distance, first_exit_only
+            )
+        )
+
+        magent = OmniscientAgent(maze, beta=beta, xi=5, heading="^", loc=(0, 0))
+        msession = mx.SimSessionGivenGoals(
+            magent, maze, goals, max_total_steps=max_total_steps
+        )
+        msession.run(progress_bar=False)
+        mcoords.append(
+            _arrows_plot2_simulation_coords(
+                msession, spatial_distance, first_exit_only
+            )
+        )
+
+    return beta, np.array(hcoords), np.array(mcoords)
+
+
+def _arrows_plot2_default_n_jobs():
+    cpu_count = os.cpu_count() or 1
+    return max(1, cpu_count - 1)
+
+
+def _arrows_plot2_process_pool(n_jobs):
+    return ProcessPoolExecutor(
+        max_workers=n_jobs, mp_context=mp.get_context("fork")
+    )
 
 
 def shapely_ellipse(center, major_axis, minor_axis, rotation=0.0):
@@ -405,7 +477,14 @@ def arrows_plot(sessions, maze, controls="greedy", colors="dark"):
 
 
 def arrows_plot2(
-    sessions, maze, spatial_distance="euclidian", first_exit_only=True, colors="dark"
+    sessions,
+    maze,
+    spatial_distance="euclidian",
+    first_exit_only=True,
+    colors="dark",
+    n_jobs=None,
+    ctrl_size=100,
+    show_progress=True,
 ):
     # TODO: let user input control msession and hsession as function inputs
 
@@ -425,6 +504,9 @@ def arrows_plot2(
     # Analyze and plot data
     pl.figure()
     indices = []
+
+    n_jobs = _arrows_plot2_default_n_jobs() if n_jobs is None else n_jobs
+    n_jobs = max(1, int(n_jobs))
 
     for session in sessions:
         if first_exit_only:
@@ -467,8 +549,6 @@ def arrows_plot2(
     print(" ", max_total_steps)
     # n_goals = 1000
     # ctrl_size = 20
-    ctrl_size = 100
-
     goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
 
     # for the confidence region
@@ -482,108 +562,79 @@ def arrows_plot2(
 
     hellipses = []
     mellipses = []
-    for beta in tqdm(betas, desc="betas"):
-        # print(beta)
-        n_sims = 0
-        hsims = []
-        msims = []
+    seeds = np.random.SeedSequence().generate_state(len(betas), dtype=np.uint32)
+    simulation_args = [
+        (beta, max_total_steps, int(seed))
+        for beta, seed in zip(betas, seeds)
+    ]
+    _ARROWS_PLOT2_PARALLEL_STATE.clear()
+    _ARROWS_PLOT2_PARALLEL_STATE.update(
+        {
+            "maze": maze,
+            "goalz": goalz,
+            "spatial_distance": spatial_distance,
+            "first_exit_only": first_exit_only,
+        }
+    )
 
-        hcoords = []
-        mcoords = []
+    if n_jobs == 1:
+        simulation_results = map(_arrows_plot2_simulate_beta, simulation_args)
+    else:
+        pool = _arrows_plot2_process_pool(n_jobs)
+        simulation_results = pool.map(_arrows_plot2_simulate_beta, simulation_args)
 
-        for goals in tqdm(goalz, desc="goals"):
-            # print(beta)
-            # TODO: adapt xi per beta
-            hagent = HeuristicAgent(
-                beta=beta, xi=5, penalty_type="exponential", heading="^", loc=(0, 0)
-            )
-            hsession = mx.SimSessionGivenGoals(
-                hagent, maze, goals, max_total_steps=max_total_steps
-            )
-            hsession.run()
-            hsims.append(hsession)
-            if first_exit_only:
-                hcoords.append(
-                    prob_plan_prob_vec(
-                        first_exit(hsession), spatial_distance=spatial_distance
-                    )
-                )
-            else:
-                hcoords.append(
-                    prob_plan_prob_vec(
-                        hsession.steps(),
-                        spatial_distance=spatial_distance,
-                        discard_backtracked=False,
-                        only_forward=False,
-                    )
-                )
-
-            magent = OmniscientAgent(maze, beta=beta, xi=5, heading="^", loc=(0, 0))
-
-            msession = mx.SimSessionGivenGoals(
-                magent, maze, goals, max_total_steps=max_total_steps
-            )
-            msession.run()
-            msims.append(msession)
-            if first_exit_only:
-                mcoords.append(
-                    prob_plan_prob_vec(
-                        first_exit(msession), spatial_distance=spatial_distance
-                    )
-                )
-            else:
-                mcoords.append(
-                    prob_plan_prob_vec(
-                        msession.steps(),
-                        spatial_distance=spatial_distance,
-                        discard_backtracked=False,
-                        only_forward=False,
-                    )
-                )
-
-        hcoords = np.array(hcoords)
-        # h_indices = np.argsort(hcoords[:,0])
-        mcoords = np.array(mcoords)
-
-        # pl.plot(hcoords[:,0], hcoords[:,1], linewidth=0, marker='o',
-        #        color=heuristic_color)
-        # pl.plot(mcoords[:,0], mcoords[:,1], linewidth=0, marker='o',
-        #        color=planning_color)
-
-        hcov = np.cov(hcoords[:, 0], hcoords[:, 1])
-        hlambda, hv = np.linalg.eig(hcov)
-        hlambda = np.sqrt(hlambda)
-        hlambdas.append(hlambda)
-        hvecs.append(hv)
-        hcenters.append(np.mean(hcoords, axis=0))
-
-        mcov = np.cov(mcoords[:, 0], mcoords[:, 1])
-        mlambda, mv = np.linalg.eig(mcov)
-        mlambda = np.sqrt(mlambda)
-        mlambdas.append(mlambda)
-        mvecs.append(mv)
-        mcenters.append(np.mean(mcoords, axis=0))
-
-        # borrowing code from http://stackoverflow.com/questions/34702067/how-can-i-get-the-outline-of-the-overlapping-patches-in-matplotlib-without-maths
-        # useful codes:
-        # https://gist.github.com/urschrei/6436526
-        # http://stackoverflow.com/questions/28732845/combine-two-pyplot-patches-for-legend
-        j = 2
-        hell_shapely = shapely_ellipse(
-            np.mean(hcoords, axis=0),
-            hlambda[0] * j * 2,
-            hlambda[1] * j * 2,
-            np.rad2deg(np.arccos(hv[0, 0])),
+    if show_progress:
+        simulation_results = tqdm(
+            simulation_results, total=len(simulation_args), desc="betas"
         )
-        hellipses.append(hell_shapely)
 
-        mell_shapely = shapely_ellipse(
-            np.mean(mcoords, axis=0),
-            (mlambda[0] * j * 2) + 1e-10,
-            (mlambda[1] * j * 2) + 1e-10,
-            np.rad2deg(np.arccos(mv[0, 0])),
-        )
-        mellipses.append(mell_shapely)
+    try:
+        for beta, hcoords, mcoords in simulation_results:
+            # h_indices = np.argsort(hcoords[:,0])
+
+            # pl.plot(hcoords[:,0], hcoords[:,1], linewidth=0, marker='o',
+            #        color=heuristic_color)
+            # pl.plot(mcoords[:,0], mcoords[:,1], linewidth=0, marker='o',
+            #        color=planning_color)
+
+            hcov = np.cov(hcoords[:, 0], hcoords[:, 1])
+            hlambda, hv = np.linalg.eig(hcov)
+            hlambda = np.sqrt(hlambda)
+            hlambdas.append(hlambda)
+            hvecs.append(hv)
+            hcenters.append(np.mean(hcoords, axis=0))
+
+            mcov = np.cov(mcoords[:, 0], mcoords[:, 1])
+            mlambda, mv = np.linalg.eig(mcov)
+            mlambda = np.sqrt(mlambda)
+            mlambdas.append(mlambda)
+            mvecs.append(mv)
+            mcenters.append(np.mean(mcoords, axis=0))
+
+            # borrowing code from http://stackoverflow.com/questions/34702067/how-can-i-get-the-outline-of-the-overlapping-patches-in-matplotlib-without-maths
+            # useful codes:
+            # https://gist.github.com/urschrei/6436526
+            # http://stackoverflow.com/questions/28732845/combine-two-pyplot-patches-for-legend
+            j = 2
+            hell_shapely = shapely_ellipse(
+                np.mean(hcoords, axis=0),
+                hlambda[0] * j * 2,
+                hlambda[1] * j * 2,
+                np.rad2deg(np.arccos(hv[0, 0])),
+            )
+            hellipses.append(hell_shapely)
+
+            mell_shapely = shapely_ellipse(
+                np.mean(mcoords, axis=0),
+                (mlambda[0] * j * 2) + 1e-10,
+                (mlambda[1] * j * 2) + 1e-10,
+                np.rad2deg(np.arccos(mv[0, 0])),
+            )
+            mellipses.append(mell_shapely)
+    finally:
+        if n_jobs != 1:
+            pool.shutdown()
+        _ARROWS_PLOT2_PARALLEL_STATE.clear()
 
     sns.set_palette("Dark2", 8)
     xs = np.array([indices[:, 0]])
