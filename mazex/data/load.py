@@ -135,7 +135,7 @@ def load_session(
         # we are starting to iterate over goals[1:] so we need to add 1 to the enumeration counter
         # make up for the fact that we are starting iteration on the first and not the zeroth goal
         hardware_trial_count = i + 1
-        block_size = 35
+        block_size = 36
         goal_block = hardware_trial_count // block_size
 
         trial = Trial(
@@ -258,7 +258,7 @@ def load_session(
                         if trial.shortened:
                             shortened_trials += 1
 
-                        if len(trial.steps) >= 3:
+                        if len(trial.steps) >= 1:
                             # discard empty trials where all previous steps to goal were discarded
                             session.trials.append(trial)
 
