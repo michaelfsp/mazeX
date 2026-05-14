@@ -1291,6 +1291,31 @@ def prior_maze_overlap_vals(session_df, mazes_dict, prior_dict):
     return (chosen_vals, vals)
 
 
+def swapped_prior_maze_vals(session_df, mazes_dict, prior_dict):
+    # Control feature: pair each maze_name with another maze's prior so any
+    # explanatory power from prior_maze that comes from the specific prior/current
+    # pairing (rather than prior structure in general) should vanish here.
+    unique_priors = [p for p in set(prior_dict.values()) if p is not None]
+    if len(unique_priors) != 2:
+        raise ValueError(
+            "swapped_prior_maze requires prior_dict values to contain exactly "
+            "2 distinct non-None prior mazes"
+        )
+    prior_a, prior_b = unique_priors
+    swap_map = {prior_a: prior_b, prior_b: prior_a}
+    swapped_prior_dict = {
+        k: (None if v is None else swap_map[v]) for k, v in prior_dict.items()
+    }
+    chosen_vals, vals = prior_maze_vals(session_df, mazes_dict, swapped_prior_dict)
+
+    chosen_vals = chosen_vals.rename("swapped_prior_maze")
+    vals.columns = pd.MultiIndex.from_tuples(
+        [("swapped_prior_maze", d) for d in ("W", "S", "N", "E")]
+    )
+
+    return (chosen_vals, vals)
+
+
 def betweenness_vals(session_df, mazes_dict, min_max_scaled):
     chosen_vals = []
 
@@ -1487,6 +1512,22 @@ def maze_day_multiplier(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def maze_log_day_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df, "available_nodes", mazes_dict, new_column_name="maze_log_day"
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.maze_day.to_numpy("float")[:, np.newaxis] * vals
+    # we add one so that we can take the log for the very first day
+    vals[~pd.isna(vals)] += 1.0
+    vals = vals.map(np.log)
+
+    chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="maze_log_day")
+
+    return (chosen_vals, vals)
+
+
 def maze_loc_count_multiplier(session_df, mazes_dict):
     vals = list_to_cardinal_columns(
         session_df, "available_nodes", mazes_dict, new_column_name="maze_loc_count"
@@ -1496,6 +1537,27 @@ def maze_loc_count_multiplier(session_df, mazes_dict):
     vals = session_df.maze_loc_count.to_numpy("float")[:, np.newaxis] * vals
 
     chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="maze_loc_count")
+
+    return (chosen_vals, vals)
+
+
+def maze_loc_log_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df,
+        "available_nodes",
+        mazes_dict,
+        new_column_name="maze_loc_log_count",
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.maze_loc_count.to_numpy("float")[:, np.newaxis] * vals
+    # we add one so that we can take the log for the very first location visit
+    vals[~pd.isna(vals)] += 1.0
+    vals = vals.map(np.log)
+
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="maze_loc_log_count"
+    )
 
     return (chosen_vals, vals)
 
@@ -1541,6 +1603,27 @@ def maze_step_count_multiplier(session_df, mazes_dict):
     return (chosen_vals, vals)
 
 
+def maze_step_log_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df,
+        "available_nodes",
+        mazes_dict,
+        new_column_name="maze_step_log_count",
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.maze_step_count.to_numpy("float")[:, np.newaxis] * vals
+    # we add one so that we can take the log for the very first step
+    vals[~pd.isna(vals)] += 1.0
+    vals = vals.map(np.log)
+
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="maze_step_log_count"
+    )
+
+    return (chosen_vals, vals)
+
+
 def maze_trial_count_multiplier(session_df, mazes_dict):
     vals = list_to_cardinal_columns(
         session_df, "available_nodes", mazes_dict, new_column_name="maze_trial_count"
@@ -1550,6 +1633,27 @@ def maze_trial_count_multiplier(session_df, mazes_dict):
     vals = session_df.maze_trial_count.to_numpy("float")[:, np.newaxis] * vals
 
     chosen_vals = get_chosen_vals_from_vals(vals, session_df, label="maze_trial_count")
+
+    return (chosen_vals, vals)
+
+
+def maze_trial_log_count_multiplier(session_df, mazes_dict):
+    vals = list_to_cardinal_columns(
+        session_df,
+        "available_nodes",
+        mazes_dict,
+        new_column_name="maze_trial_log_count",
+    )
+    vals[~pd.isna(vals)] = 1.0
+
+    vals = session_df.maze_trial_count.to_numpy("float")[:, np.newaxis] * vals
+    # we add one so that we can take the log for the very first trial
+    vals[~pd.isna(vals)] += 1.0
+    vals = vals.map(np.log)
+
+    chosen_vals = get_chosen_vals_from_vals(
+        vals, session_df, label="maze_trial_log_count"
+    )
 
     return (chosen_vals, vals)
 
@@ -1786,6 +1890,9 @@ def vals_retriever(df, feature, mazes_dict, prior_dict, min_max_scaled=False):
         "prior_maze_overlap": partial(
             prior_maze_overlap_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
         ),
+        "swapped_prior_maze": partial(
+            swapped_prior_maze_vals, mazes_dict=mazes_dict, prior_dict=prior_dict
+        ),
         "betweenness": partial(
             betweenness_vals, mazes_dict=mazes_dict, min_max_scaled=min_max_scaled
         ),
@@ -1807,6 +1914,7 @@ def vals_retriever(df, feature, mazes_dict, prior_dict, min_max_scaled=False):
         "antiturn": partial(antiturn_vals, mazes_dict=mazes_dict),
         "thigmotaxis": partial(thigmotaxis_vals, mazes_dict=mazes_dict),
         "maze_day": partial(maze_day_multiplier, mazes_dict=mazes_dict),
+        "maze_log_day": partial(maze_log_day_multiplier, mazes_dict=mazes_dict),
         "session_goal_block": partial(
             session_goal_block_multiplier, mazes_dict=mazes_dict
         ),
@@ -1814,12 +1922,21 @@ def vals_retriever(df, feature, mazes_dict, prior_dict, min_max_scaled=False):
             manhattan_distance_multiplier, mazes_dict=mazes_dict
         ),
         "maze_loc_count": partial(maze_loc_count_multiplier, mazes_dict=mazes_dict),
+        "maze_loc_log_count": partial(
+            maze_loc_log_count_multiplier, mazes_dict=mazes_dict
+        ),
         "maze_loc_goal_count": partial(
             maze_loc_goal_count_multiplier, mazes_dict=mazes_dict
         ),
         "maze_goal_count": partial(maze_goal_count_multiplier, mazes_dict=mazes_dict),
         "maze_step_count": partial(maze_step_count_multiplier, mazes_dict=mazes_dict),
+        "maze_step_log_count": partial(
+            maze_step_log_count_multiplier, mazes_dict=mazes_dict
+        ),
         "maze_trial_count": partial(maze_trial_count_multiplier, mazes_dict=mazes_dict),
+        "maze_trial_log_count": partial(
+            maze_trial_log_count_multiplier, mazes_dict=mazes_dict
+        ),
         "session_step_count": partial(
             session_step_count_multiplier, mazes_dict=mazes_dict
         ),
