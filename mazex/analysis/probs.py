@@ -20,6 +20,7 @@ import networkx as nx
 import numpy as np
 import pylab as pl
 import scipy.optimize
+from scipy.stats import chi2
 
 import seaborn as sns
 
@@ -644,29 +645,31 @@ def arrows_plot2(
             #        color=planning_color)
 
             cov = np.cov(coords[:, 0], coords[:, 1])
-            lambdas, vecs = np.linalg.eig(cov)
-            lambdas = np.sqrt(lambdas)
+            eigvals, eigvecs = np.linalg.eigh(cov)
+            eig_order = np.argsort(eigvals)[::-1]
+            eigvals = eigvals[eig_order]
+            eigvecs = eigvecs[:, eig_order]
+            lambdas = np.sqrt(np.clip(eigvals, 0, None))
             center = np.mean(coords, axis=0)
 
-            # borrowing code from http://stackoverflow.com/questions/34702067/how-can-i-get-the-outline-of-the-overlapping-patches-in-matplotlib-without-maths
-            # useful codes:
-            # https://gist.github.com/urschrei/6436526
-            # http://stackoverflow.com/questions/28732845/combine-two-pyplot-patches-for-legend
-            j = 2
+            # 95% density region of a 2D Gaussian: semi-axes = k * sigma_i
+            # with k = sqrt(chi2.ppf(0.95, df=2)) ≈ 2.4477.
+            k = np.sqrt(chi2.ppf(0.95, df=2))
+            angle_deg = np.rad2deg(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
             ellipse = shapely_ellipse(
                 center,
-                (lambdas[0] * j * 2) + 1e-10,
-                (lambdas[1] * j * 2) + 1e-10,
-                np.rad2deg(np.arccos(vecs[0, 0])),
+                (lambdas[0] * k * 2) + 1e-10,
+                (lambdas[1] * k * 2) + 1e-10,
+                angle_deg,
             )
             if agent_type == "heuristic":
                 hlambdas.append(lambdas)
-                hvecs.append(vecs)
+                hvecs.append(eigvecs)
                 hcenters.append(center)
                 hellipses.append(ellipse)
             elif agent_type == "omniscient":
                 mlambdas.append(lambdas)
-                mvecs.append(vecs)
+                mvecs.append(eigvecs)
                 mcenters.append(center)
                 mellipses.append(ellipse)
     finally:
