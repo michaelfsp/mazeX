@@ -45,46 +45,67 @@ def _arrows_plot2_simulation_coords(session, spatial_distance, first_exit_only):
     )
 
 
+def _arrows_plot2_default_betas():
+    return np.logspace(-2, 3.5, 40, base=np.e)
+
+
 def _arrows_plot2_simulate_beta(args):
-    beta, max_total_steps, seed = args
+    agent_type, beta, max_total_steps, seed = args
     maze = _ARROWS_PLOT2_PARALLEL_STATE["maze"]
     goalz = _ARROWS_PLOT2_PARALLEL_STATE["goalz"]
     spatial_distance = _ARROWS_PLOT2_PARALLEL_STATE["spatial_distance"]
     first_exit_only = _ARROWS_PLOT2_PARALLEL_STATE["first_exit_only"]
+    xi = _ARROWS_PLOT2_PARALLEL_STATE["xi"]
+    penalty_type = _ARROWS_PLOT2_PARALLEL_STATE["penalty_type"]
+    max_trial_steps = _ARROWS_PLOT2_PARALLEL_STATE["max_trial_steps"]
+    heuristic_distribution = _ARROWS_PLOT2_PARALLEL_STATE[
+        "heuristic_distribution"
+    ]
 
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed % (2**32 - 1))
 
-    hcoords = []
-    mcoords = []
+    coords = []
 
     for goals in goalz:
-        hagent = HeuristicAgent(
-            beta=beta, xi=5, penalty_type="exponential", heading="^", loc=(0, 0)
+        if agent_type == "heuristic":
+            agent = HeuristicAgent(
+                beta=beta,
+                xi=xi,
+                penalty_type=penalty_type,
+                heading="^",
+                loc=(0, 0),
+                distribution=heuristic_distribution,
+            )
+        elif agent_type == "omniscient":
+            agent = OmniscientAgent(
+                maze,
+                beta=beta,
+                xi=xi,
+                penalty_type=penalty_type,
+                heading="^",
+                loc=(0, 0),
+            )
+        else:
+            raise ValueError(f"Unknown arrows_plot2 agent_type: {agent_type}")
+
+        session = mx.SimSessionGivenGoals(
+            agent,
+            maze,
+            goals,
+            max_steps=max_trial_steps,
+            max_total_steps=max_total_steps,
+            continue_from_goal_after_max_steps=bool(max_trial_steps),
         )
-        hsession = mx.SimSessionGivenGoals(
-            hagent, maze, goals, max_total_steps=max_total_steps
-        )
-        hsession.run(progress_bar=False)
-        hcoords.append(
+        session.run(progress_bar=False)
+        coords.append(
             _arrows_plot2_simulation_coords(
-                hsession, spatial_distance, first_exit_only
+                session, spatial_distance, first_exit_only
             )
         )
 
-        magent = OmniscientAgent(maze, beta=beta, xi=5, heading="^", loc=(0, 0))
-        msession = mx.SimSessionGivenGoals(
-            magent, maze, goals, max_total_steps=max_total_steps
-        )
-        msession.run(progress_bar=False)
-        mcoords.append(
-            _arrows_plot2_simulation_coords(
-                msession, spatial_distance, first_exit_only
-            )
-        )
-
-    return beta, np.array(hcoords), np.array(mcoords)
+    return agent_type, beta, np.array(coords)
 
 
 def _arrows_plot2_default_n_jobs():
@@ -485,6 +506,12 @@ def arrows_plot2(
     n_jobs=None,
     ctrl_size=100,
     show_progress=True,
+    xi=5,
+    penalty_type="exponential",
+    heuristic_distribution="cos",
+    heuristic_betas=None,
+    omniscient_betas=None,
+    max_trial_steps=0,
 ):
     # TODO: let user input control msession and hsession as function inputs
 
@@ -528,7 +555,16 @@ def arrows_plot2(
     dx_err, dy_err = np.std(indices, axis=0)
 
     # Generate controls
-    betas = np.logspace(-2, 3.5, 40, base=np.e)
+    if heuristic_betas is None:
+        heuristic_betas = _arrows_plot2_default_betas()
+    else:
+        heuristic_betas = np.asarray(heuristic_betas, dtype=float)
+
+    if omniscient_betas is None:
+        omniscient_betas = _arrows_plot2_default_betas()
+    else:
+        omniscient_betas = np.asarray(omniscient_betas, dtype=float)
+
     # betas = np.logspace(-3, 4, 20, base=np.e)
     # betas = np.logspace(-3, 2, 120, base=np.e)
 
@@ -562,10 +598,16 @@ def arrows_plot2(
 
     hellipses = []
     mellipses = []
-    seeds = np.random.SeedSequence().generate_state(len(betas), dtype=np.uint32)
+    simulation_betas = (
+        [("heuristic", beta) for beta in heuristic_betas]
+        + [("omniscient", beta) for beta in omniscient_betas]
+    )
+    seeds = np.random.SeedSequence().generate_state(
+        len(simulation_betas), dtype=np.uint32
+    )
     simulation_args = [
-        (beta, max_total_steps, int(seed))
-        for beta, seed in zip(betas, seeds)
+        (agent_type, beta, max_total_steps, int(seed))
+        for (agent_type, beta), seed in zip(simulation_betas, seeds)
     ]
     _ARROWS_PLOT2_PARALLEL_STATE.clear()
     _ARROWS_PLOT2_PARALLEL_STATE.update(
@@ -574,6 +616,10 @@ def arrows_plot2(
             "goalz": goalz,
             "spatial_distance": spatial_distance,
             "first_exit_only": first_exit_only,
+            "xi": xi,
+            "penalty_type": penalty_type,
+            "max_trial_steps": max_trial_steps,
+            "heuristic_distribution": heuristic_distribution,
         }
     )
 
@@ -589,7 +635,7 @@ def arrows_plot2(
         )
 
     try:
-        for beta, hcoords, mcoords in simulation_results:
+        for agent_type, beta, coords in simulation_results:
             # h_indices = np.argsort(hcoords[:,0])
 
             # pl.plot(hcoords[:,0], hcoords[:,1], linewidth=0, marker='o',
@@ -597,40 +643,32 @@ def arrows_plot2(
             # pl.plot(mcoords[:,0], mcoords[:,1], linewidth=0, marker='o',
             #        color=planning_color)
 
-            hcov = np.cov(hcoords[:, 0], hcoords[:, 1])
-            hlambda, hv = np.linalg.eig(hcov)
-            hlambda = np.sqrt(hlambda)
-            hlambdas.append(hlambda)
-            hvecs.append(hv)
-            hcenters.append(np.mean(hcoords, axis=0))
-
-            mcov = np.cov(mcoords[:, 0], mcoords[:, 1])
-            mlambda, mv = np.linalg.eig(mcov)
-            mlambda = np.sqrt(mlambda)
-            mlambdas.append(mlambda)
-            mvecs.append(mv)
-            mcenters.append(np.mean(mcoords, axis=0))
+            cov = np.cov(coords[:, 0], coords[:, 1])
+            lambdas, vecs = np.linalg.eig(cov)
+            lambdas = np.sqrt(lambdas)
+            center = np.mean(coords, axis=0)
 
             # borrowing code from http://stackoverflow.com/questions/34702067/how-can-i-get-the-outline-of-the-overlapping-patches-in-matplotlib-without-maths
             # useful codes:
             # https://gist.github.com/urschrei/6436526
             # http://stackoverflow.com/questions/28732845/combine-two-pyplot-patches-for-legend
             j = 2
-            hell_shapely = shapely_ellipse(
-                np.mean(hcoords, axis=0),
-                hlambda[0] * j * 2,
-                hlambda[1] * j * 2,
-                np.rad2deg(np.arccos(hv[0, 0])),
+            ellipse = shapely_ellipse(
+                center,
+                (lambdas[0] * j * 2) + 1e-10,
+                (lambdas[1] * j * 2) + 1e-10,
+                np.rad2deg(np.arccos(vecs[0, 0])),
             )
-            hellipses.append(hell_shapely)
-
-            mell_shapely = shapely_ellipse(
-                np.mean(mcoords, axis=0),
-                (mlambda[0] * j * 2) + 1e-10,
-                (mlambda[1] * j * 2) + 1e-10,
-                np.rad2deg(np.arccos(mv[0, 0])),
-            )
-            mellipses.append(mell_shapely)
+            if agent_type == "heuristic":
+                hlambdas.append(lambdas)
+                hvecs.append(vecs)
+                hcenters.append(center)
+                hellipses.append(ellipse)
+            elif agent_type == "omniscient":
+                mlambdas.append(lambdas)
+                mvecs.append(vecs)
+                mcenters.append(center)
+                mellipses.append(ellipse)
     finally:
         if n_jobs != 1:
             pool.shutdown()
