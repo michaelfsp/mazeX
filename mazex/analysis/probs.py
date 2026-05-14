@@ -20,7 +20,7 @@ import networkx as nx
 import numpy as np
 import pylab as pl
 import scipy.optimize
-from scipy.stats import chi2
+from scipy.stats import chi2, gaussian_kde
 
 import seaborn as sns
 
@@ -126,6 +126,86 @@ def shapely_ellipse(center, major_axis, minor_axis, rotation=0.0):
     el = sa.rotate(el, rotation)
     el = sa.translate(el, *center)
     return el
+
+
+def _plot_kde_region(
+    points,
+    color,
+    level=0.95,
+    gridsize=200,
+    bw_method=None,
+    alpha=0.35,
+    ax=None,
+):
+    """Plot a filled highest-density KDE region for 2D points."""
+    if ax is None:
+        ax = pl.gca()
+
+    points = np.asarray(points, dtype=float)
+    points = points[np.isfinite(points).all(axis=1)]
+    if len(points) < 3 or np.linalg.matrix_rank(np.cov(points.T)) < 2:
+        ax.plot(
+            points[:, 0],
+            points[:, 1],
+            linewidth=0,
+            marker="o",
+            color=color,
+            alpha=alpha,
+            zorder=0,
+        )
+        return None
+
+    try:
+        kde = gaussian_kde(points.T, bw_method=bw_method)
+    except (ValueError, np.linalg.LinAlgError):
+        ax.plot(
+            points[:, 0],
+            points[:, 1],
+            linewidth=0,
+            marker="o",
+            color=color,
+            alpha=alpha,
+            zorder=0,
+        )
+        return None
+
+    x_grid = np.linspace(0, 1.02, gridsize)
+    y_grid = np.linspace(0, 1.02, gridsize)
+    x_mesh, y_mesh = np.meshgrid(x_grid, y_grid)
+    grid_points = np.vstack([x_mesh.ravel(), y_mesh.ravel()])
+    density = kde(grid_points).reshape(x_mesh.shape)
+
+    density_flat = density.ravel()
+    density_order = np.argsort(density_flat)[::-1]
+    density_sorted = density_flat[density_order]
+    density_mass = density_sorted / density_sorted.sum()
+    cumulative_mass = np.cumsum(density_mass)
+    threshold_index = np.searchsorted(cumulative_mass, level, side="left")
+    threshold_index = min(threshold_index, len(density_sorted) - 1)
+    threshold = density_sorted[threshold_index]
+    density_max = density_sorted[0]
+
+    if not np.isfinite(threshold) or threshold >= density_max:
+        ax.plot(
+            points[:, 0],
+            points[:, 1],
+            linewidth=0,
+            marker="o",
+            color=color,
+            alpha=alpha,
+            zorder=0,
+        )
+        return None
+
+    return ax.contourf(
+        x_mesh,
+        y_mesh,
+        density,
+        levels=[threshold, density_max],
+        colors=[color],
+        alpha=alpha,
+        zorder=0,
+    )
 
 
 def prob(step, null="random"):
@@ -513,6 +593,10 @@ def arrows_plot2(
     heuristic_betas=None,
     omniscient_betas=None,
     max_trial_steps=0,
+    simulation_region="ellipse",
+    kde_level=0.95,
+    kde_gridsize=200,
+    kde_bw_method=None,
 ):
     # TODO: let user input control msession and hsession as function inputs
 
@@ -599,6 +683,8 @@ def arrows_plot2(
 
     hellipses = []
     mellipses = []
+    hpoints = []
+    mpoints = []
     simulation_betas = (
         [("heuristic", beta) for beta in heuristic_betas]
         + [("omniscient", beta) for beta in omniscient_betas]
@@ -644,34 +730,41 @@ def arrows_plot2(
             # pl.plot(mcoords[:,0], mcoords[:,1], linewidth=0, marker='o',
             #        color=planning_color)
 
-            cov = np.cov(coords[:, 0], coords[:, 1])
-            eigvals, eigvecs = np.linalg.eigh(cov)
-            eig_order = np.argsort(eigvals)[::-1]
-            eigvals = eigvals[eig_order]
-            eigvecs = eigvecs[:, eig_order]
-            lambdas = np.sqrt(np.clip(eigvals, 0, None))
             center = np.mean(coords, axis=0)
 
-            # 95% density region of a 2D Gaussian: semi-axes = k * sigma_i
-            # with k = sqrt(chi2.ppf(0.95, df=2)) ≈ 2.4477.
-            k = np.sqrt(chi2.ppf(0.95, df=2))
-            angle_deg = np.rad2deg(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
-            ellipse = shapely_ellipse(
-                center,
-                (lambdas[0] * k * 2) + 1e-10,
-                (lambdas[1] * k * 2) + 1e-10,
-                angle_deg,
-            )
             if agent_type == "heuristic":
-                hlambdas.append(lambdas)
-                hvecs.append(eigvecs)
                 hcenters.append(center)
-                hellipses.append(ellipse)
+                hpoints.append(coords)
             elif agent_type == "omniscient":
-                mlambdas.append(lambdas)
-                mvecs.append(eigvecs)
                 mcenters.append(center)
-                mellipses.append(ellipse)
+                mpoints.append(coords)
+
+            if simulation_region == "ellipse":
+                cov = np.cov(coords[:, 0], coords[:, 1])
+                eigvals, eigvecs = np.linalg.eigh(cov)
+                eig_order = np.argsort(eigvals)[::-1]
+                eigvals = eigvals[eig_order]
+                eigvecs = eigvecs[:, eig_order]
+                lambdas = np.sqrt(np.clip(eigvals, 0, None))
+
+                # 95% density region of a 2D Gaussian: semi-axes = k * sigma_i
+                # with k = sqrt(chi2.ppf(0.95, df=2)) ≈ 2.4477.
+                k = np.sqrt(chi2.ppf(0.95, df=2))
+                angle_deg = np.rad2deg(np.arctan2(eigvecs[1, 0], eigvecs[0, 0]))
+                ellipse = shapely_ellipse(
+                    center,
+                    (lambdas[0] * k * 2) + 1e-10,
+                    (lambdas[1] * k * 2) + 1e-10,
+                    angle_deg,
+                )
+                if agent_type == "heuristic":
+                    hlambdas.append(lambdas)
+                    hvecs.append(eigvecs)
+                    hellipses.append(ellipse)
+                elif agent_type == "omniscient":
+                    mlambdas.append(lambdas)
+                    mvecs.append(eigvecs)
+                    mellipses.append(ellipse)
     finally:
         if n_jobs != 1:
             pool.shutdown()
@@ -684,24 +777,38 @@ def arrows_plot2(
     pmarkers = pl.plot(xs, ys, linewidth=0, marker="o", label="Data")
     p3 = pmarkers[-1]
 
-    all_hellipses = so.cascaded_union(hellipses)
-    if type(all_hellipses) is sg.multipolygon.MultiPolygon:
-        hcollection = [
-            descartes.PolygonPatch(
-                h, ec="none", fc=heuristic_color, alpha=0.5, zorder=0
+    if simulation_region == "ellipse":
+        all_hellipses = so.cascaded_union(hellipses)
+        if type(all_hellipses) is sg.multipolygon.MultiPolygon:
+            hcollection = [
+                descartes.PolygonPatch(
+                    h, ec="none", fc=heuristic_color, alpha=0.5, zorder=0
+                )
+                for h in all_hellipses
+            ]
+            ax = pl.gca()
+            ax.add_collection(
+                mpl.collections.PatchCollection(hcollection, match_original=True)
             )
-            for h in all_hellipses
-        ]
-        ax = pl.gca()
-        ax.add_collection(
-            mpl.collections.PatchCollection(hcollection, match_original=True)
+        else:
+            hell = descartes.PolygonPatch(
+                all_hellipses, ec="none", fc=heuristic_color, alpha=0.5, zorder=0
+            )
+            ax = pl.gca()
+            ax.add_artist(hell)
+    elif simulation_region == "kde":
+        _plot_kde_region(
+            np.vstack(hpoints),
+            heuristic_color,
+            level=kde_level,
+            gridsize=kde_gridsize,
+            bw_method=kde_bw_method,
+            alpha=0.35,
         )
     else:
-        hell = descartes.PolygonPatch(
-            all_hellipses, ec="none", fc=heuristic_color, alpha=0.5, zorder=0
+        raise ValueError(
+            "simulation_region must be one of {'ellipse', 'kde'}"
         )
-        ax = pl.gca()
-        ax.add_artist(hell)
 
     hcenters = [c.tolist() for c in hcenters]
     hcenters.insert(0, (0, 0))
@@ -710,22 +817,34 @@ def arrows_plot2(
         hcenters[:, 0], hcenters[:, 1], color=heuristic_color, linestyle="--", zorder=1
     )
 
-    all_mellipses = so.cascaded_union(mellipses)
-    if type(all_mellipses) is sg.multipolygon.MultiPolygon:
-        mcollection = [
-            descartes.PolygonPatch(m, ec="none", fc=planning_color, alpha=0.5, zorder=0)
-            for m in all_mellipses
-        ]
-        ax = pl.gca()
-        ax.add_collection(
-            mpl.collections.PatchCollection(mcollection, match_original=True)
+    if simulation_region == "ellipse":
+        all_mellipses = so.cascaded_union(mellipses)
+        if type(all_mellipses) is sg.multipolygon.MultiPolygon:
+            mcollection = [
+                descartes.PolygonPatch(
+                    m, ec="none", fc=planning_color, alpha=0.5, zorder=0
+                )
+                for m in all_mellipses
+            ]
+            ax = pl.gca()
+            ax.add_collection(
+                mpl.collections.PatchCollection(mcollection, match_original=True)
+            )
+        else:
+            mell = descartes.PolygonPatch(
+                all_mellipses, ec="none", fc=planning_color, alpha=0.5, zorder=0
+            )
+            ax = pl.gca()
+            ax.add_artist(mell)
+    elif simulation_region == "kde":
+        _plot_kde_region(
+            np.vstack(mpoints),
+            planning_color,
+            level=kde_level,
+            gridsize=kde_gridsize,
+            bw_method=kde_bw_method,
+            alpha=0.35,
         )
-    else:
-        mell = descartes.PolygonPatch(
-            all_mellipses, ec="none", fc=planning_color, alpha=0.5, zorder=0
-        )
-        ax = pl.gca()
-        ax.add_artist(mell)
 
     mcenters = [c.tolist() for c in mcenters]
     mcenters.insert(0, (0, 0))
@@ -739,8 +858,11 @@ def arrows_plot2(
     p2 = pl.Rectangle((0, 0), 1, 1, fc=heuristic_color)
 
     # Legend and axis labels
+    region_label = "95% KDE" if simulation_region == "kde" else "95% CR"
     pl.legend(
-        [p1, p2, p3], ["Planning (95% CR)", "Vector nav. (95% CR)", "Data"], loc=2
+        [p1, p2, p3],
+        [f"Planning ({region_label})", f"Vector nav. ({region_label})", "Data"],
+        loc=2,
     )
 
     pl.xlabel("Planning index", weight="bold")
