@@ -101,7 +101,7 @@ class SimSession(Session):
 
 class SimSessionGivenGoals(SimSession):
     def __init__(self, agent, maze, goals, max_steps=0, max_total_steps=0,
-                 loc_start=(0,0),
+                 loc_start=(0,0), continue_from_goal_after_max_steps=False,
                  **kwargs):
         """
         Parameters:
@@ -115,6 +115,7 @@ class SimSessionGivenGoals(SimSession):
         self.goals = goals
         self.max_steps = max_steps
         self.max_total_steps = max_total_steps
+        self.continue_from_goal_after_max_steps = continue_from_goal_after_max_steps
         self.total_steps = 0
         self.loc_start = loc_start
         self.trials = []
@@ -146,6 +147,13 @@ class SimSessionGivenGoals(SimSession):
                                                max_steps=self.max_steps))
 
                     self.trials[-1].solve()
+                    if (
+                        self.continue_from_goal_after_max_steps
+                        and self.max_steps
+                        and self.trials[-1].step.loc != goal
+                        and len(self.trials[-1].steps) >= self.max_steps
+                    ):
+                        self.agent.__reset_loc_to__(goal)
                     if verbose:
                         print('Solved trial %i' %len(self.trials))
                     self.total_steps += len(self.trials[-1].steps) - 1
@@ -164,6 +172,13 @@ class SimSessionGivenGoals(SimSession):
                                              max_steps=self.max_steps))
 
                     self.trials[-1].solve()
+                    if (
+                        self.continue_from_goal_after_max_steps
+                        and self.max_steps
+                        and self.trials[-1].step.loc != goal
+                        and len(self.trials[-1].steps) >= self.max_steps
+                    ):
+                        self.agent.__reset_loc_to__(goal)
                     if verbose:
                         print('Solved trial %i' %len(self.trials))
                     self.total_steps += len(self.trials[-1].steps) - 1
