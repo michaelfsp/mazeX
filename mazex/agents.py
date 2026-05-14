@@ -899,6 +899,28 @@ class Agent:
 
         return penalties
 
+    def _last_penalty_factor(self, nodeslist):
+        """Penalize only the node visited immediately before the current one."""
+        penalties = np.zeros(len(nodeslist))
+
+        if self.penalty_criterium in ("node", "node_lag2"):
+            visited_nodes = list(self.node_visit_cache.keys())
+            if len(visited_nodes) >= 2:
+                previous_node = visited_nodes[-2]
+                for i, n in enumerate(nodeslist):
+                    if n == previous_node:
+                        penalties[i] = self.xi
+
+        elif self.penalty_criterium == "edge_unidir":
+            visited_edges = list(self.edge_visit_cache.keys())
+            if visited_edges:
+                previous_edge = visited_edges[-1]
+                for i, n in enumerate(nodeslist):
+                    if (self.loc, n) == previous_edge:
+                        penalties[i] = self.xi
+
+        return penalties
+
     def evaluate_penalties_session(self, session):
         """Return a vector with value of each chosen step and a matrix with
         values for every choice at every given step such that it can be fed to
@@ -1017,6 +1039,9 @@ class Agent:
         elif self.penalty_type == 'exponential':
             return self._exponential_penalty_factor(nodeslist)
 
+        elif self.penalty_type == 'last':
+            return self._last_penalty_factor(nodeslist)
+
     def simulate_session(self, maze, goals, init_loc=(0,0)):
         trials = []
         self.node_visit_cache.clear()
@@ -1097,16 +1122,15 @@ class HeuristicAgent(Agent):
         except InvalidNode:
             pass
 
-        #angles = [angle_between_nodes(self.loc, n, goal) for n in nodeslist]
-        angles = []
-        for n in nodeslist:
-            if self.loc == goal:
-                # if the agent is at the goal already we define all angles as 1rad as it is the equivalent of moving in the opposite direction
-                angles.append(np.pi)
-            else:
-                angles.append(angle_between_nodes(self.loc, n, goal))
-
         if distribution == 'vonmises':
+            angles = []
+            for n in nodeslist:
+                if self.loc == goal:
+                    # if the agent is at the goal already we define all angles as 1rad as it is the equivalent of moving in the opposite direction
+                    angles.append(np.pi)
+                else:
+                    angles.append(angle_between_nodes(self.loc, n, goal))
+
             # since what is stored in self.vm_dist is a 2D array with angles
             # and values, we first determine the index of the closes angle entry
             # in the matrix and then retrieve the distribution value
@@ -1117,10 +1141,25 @@ class HeuristicAgent(Agent):
             dist_max = self.max_vm # deprecated
 
         elif distribution == 'cos':
+            angles = []
+            for n in nodeslist:
+                if self.loc == goal:
+                    # if the agent is at the goal already we define all angles as 1rad as it is the equivalent of moving in the opposite direction
+                    angles.append(np.pi)
+                else:
+                    angles.append(angle_between_nodes(self.loc, n, goal))
+
             dist_val = np.cos(angles)
 
             # deprecated: formerly used for relative penalties
             dist_max = 1 # deprecated
+
+        elif distribution == 'euclidean_advantage':
+            current_distance_to_goal = euclidian_distance(self.loc, goal)
+            dist_val = np.array(
+                [current_distance_to_goal - euclidian_distance(n, goal)
+                 for n in nodeslist]
+            )
 
         if penalties:
             penalties = self.penalty_factor(nodeslist)
