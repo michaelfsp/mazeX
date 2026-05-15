@@ -453,7 +453,11 @@ def arrows_plot(sessions, maze, controls="greedy", colors="dark"):
             )
         else:
             hell = descartes.PolygonPatch(
-                all_hellipses, ec="none", fc=heuristic_color, alpha=0.5, zorder=0
+                all_hellipses,
+                ec="none",
+                fc=heuristic_color,
+                alpha=0.5,
+                zorder=0,
             )
             ax = pl.gca()
             ax.add_artist(hell)
@@ -597,6 +601,11 @@ def arrows_plot2(
     kde_level=0.95,
     kde_gridsize=200,
     kde_bw_method=None,
+    simulation_reference_sessions=None,
+    plot_data=True,
+    show_legend=True,
+    axes_facecolor=None,
+    random_seed=None,
 ):
     # TODO: let user input control msession and hsession as function inputs
 
@@ -606,38 +615,64 @@ def arrows_plot2(
     if colors == "dark":
         data_color = sns.color_palette("Dark2")[3]
         planning_color = sns.color_palette("Dark2")[0]
+        planning_fill_color = planning_color
         heuristic_color = sns.color_palette("Dark2")[1]
+        heuristic_fill_color = heuristic_color
 
     elif colors == "light":
         data_color = "#E78CC4"
         planning_color = "#3CCF97"
+        planning_fill_color = planning_color
         heuristic_color = "#F97F42"
+        heuristic_fill_color = heuristic_color
+
+    elif colors == "purple_olive":
+        data_color = sns.color_palette("Dark2")[3]
+        planning_color = "#9467bd"
+        planning_fill_color = planning_color
+        heuristic_color = "#bcbd22"
+        heuristic_fill_color = heuristic_color
+
+    elif colors == "cyan_pink":
+        data_color = sns.color_palette("Dark2")[3]
+        planning_color = "#17becf"
+        planning_fill_color = planning_color
+        heuristic_color = "#e377c2"
+        heuristic_fill_color = heuristic_color
+
+    else:
+        raise ValueError(
+            "colors must be one of {'dark', 'light', 'purple_olive', 'cyan_pink'}"
+        )
 
     # Analyze and plot data
     pl.figure()
+    if axes_facecolor is not None:
+        pl.gca().set_facecolor(axes_facecolor)
     indices = []
 
     n_jobs = _arrows_plot2_default_n_jobs() if n_jobs is None else n_jobs
     n_jobs = max(1, int(n_jobs))
 
-    for session in sessions:
-        if first_exit_only:
-            dx_dy = prob_plan_prob_vec(
-                first_exit(session), spatial_distance=spatial_distance
-            )
-        else:
-            dx_dy = prob_plan_prob_vec(
-                session.steps(),
-                spatial_distance=spatial_distance,
-                discard_backtracked=False,
-                only_forward=False,
-            )
+    if plot_data:
+        for session in sessions:
+            if first_exit_only:
+                dx_dy = prob_plan_prob_vec(
+                    first_exit(session), spatial_distance=spatial_distance
+                )
+            else:
+                dx_dy = prob_plan_prob_vec(
+                    session.steps(),
+                    spatial_distance=spatial_distance,
+                    discard_backtracked=False,
+                    only_forward=False,
+                )
 
-        indices.append(dx_dy)
+            indices.append(dx_dy)
 
-    indices = np.array(indices)
-    dx, dy = np.mean(indices, axis=0)
-    dx_err, dy_err = np.std(indices, axis=0)
+        indices = np.array(indices)
+        dx, dy = np.mean(indices, axis=0)
+        dx_err, dy_err = np.std(indices, axis=0)
 
     # Generate controls
     if heuristic_betas is None:
@@ -656,7 +691,10 @@ def arrows_plot2(
     n_goals_sessions = []
     n_steps_sessions = []
     # goals_base = []
-    for session in sessions:
+    if simulation_reference_sessions is None:
+        simulation_reference_sessions = sessions
+
+    for session in simulation_reference_sessions:
         n_goals_sessions.append(len(session.trials))
         n_steps_sessions.append(session.count_total_steps())
         # sessions_goals = []
@@ -670,7 +708,17 @@ def arrows_plot2(
     print(" ", max_total_steps)
     # n_goals = 1000
     # ctrl_size = 20
-    goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
+    if random_seed is None:
+        goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
+        seed_sequence = np.random.SeedSequence()
+    else:
+        random_state = random.getstate()
+        try:
+            random.seed(random_seed)
+            goalz = [list(maze.randomgoals(n_goals)) for x in range(ctrl_size)]
+        finally:
+            random.setstate(random_state)
+        seed_sequence = np.random.SeedSequence(random_seed)
 
     # for the confidence region
     hcenters = []
@@ -689,9 +737,7 @@ def arrows_plot2(
         [("heuristic", beta) for beta in heuristic_betas]
         + [("omniscient", beta) for beta in omniscient_betas]
     )
-    seeds = np.random.SeedSequence().generate_state(
-        len(simulation_betas), dtype=np.uint32
-    )
+    seeds = seed_sequence.generate_state(len(simulation_betas), dtype=np.uint32)
     simulation_args = [
         (agent_type, beta, max_total_steps, int(seed))
         for (agent_type, beta), seed in zip(simulation_betas, seeds)
@@ -771,18 +817,19 @@ def arrows_plot2(
         _ARROWS_PLOT2_PARALLEL_STATE.clear()
 
     sns.set_palette("Dark2", 8)
-    xs = np.array([indices[:, 0]])
-    ys = np.array([indices[:, 1]])
+    if plot_data:
+        xs = np.array([indices[:, 0]])
+        ys = np.array([indices[:, 1]])
 
-    pmarkers = pl.plot(xs, ys, linewidth=0, marker="o", label="Data")
-    p3 = pmarkers[-1]
+        pmarkers = pl.plot(xs, ys, linewidth=0, marker="o", label="Data")
+        p3 = pmarkers[-1]
 
     if simulation_region == "ellipse":
         all_hellipses = so.cascaded_union(hellipses)
         if type(all_hellipses) is sg.multipolygon.MultiPolygon:
             hcollection = [
                 descartes.PolygonPatch(
-                    h, ec="none", fc=heuristic_color, alpha=0.5, zorder=0
+                    h, ec="none", fc=heuristic_fill_color, alpha=0.5, zorder=0
                 )
                 for h in all_hellipses
             ]
@@ -792,14 +839,18 @@ def arrows_plot2(
             )
         else:
             hell = descartes.PolygonPatch(
-                all_hellipses, ec="none", fc=heuristic_color, alpha=0.5, zorder=0
+                all_hellipses,
+                ec="none",
+                fc=heuristic_fill_color,
+                alpha=0.5,
+                zorder=0,
             )
             ax = pl.gca()
             ax.add_artist(hell)
     elif simulation_region == "kde":
         _plot_kde_region(
             np.vstack(hpoints),
-            heuristic_color,
+            heuristic_fill_color,
             level=kde_level,
             gridsize=kde_gridsize,
             bw_method=kde_bw_method,
@@ -822,7 +873,7 @@ def arrows_plot2(
         if type(all_mellipses) is sg.multipolygon.MultiPolygon:
             mcollection = [
                 descartes.PolygonPatch(
-                    m, ec="none", fc=planning_color, alpha=0.5, zorder=0
+                    m, ec="none", fc=planning_fill_color, alpha=0.5, zorder=0
                 )
                 for m in all_mellipses
             ]
@@ -832,14 +883,18 @@ def arrows_plot2(
             )
         else:
             mell = descartes.PolygonPatch(
-                all_mellipses, ec="none", fc=planning_color, alpha=0.5, zorder=0
+                all_mellipses,
+                ec="none",
+                fc=planning_fill_color,
+                alpha=0.5,
+                zorder=0,
             )
             ax = pl.gca()
             ax.add_artist(mell)
     elif simulation_region == "kde":
         _plot_kde_region(
             np.vstack(mpoints),
-            planning_color,
+            planning_fill_color,
             level=kde_level,
             gridsize=kde_gridsize,
             bw_method=kde_bw_method,
@@ -854,23 +909,25 @@ def arrows_plot2(
     )
 
     # Generate objects so legend can be autogenerated
-    p1 = pl.Rectangle((0, 0), 1, 1, fc=planning_color)
-    p2 = pl.Rectangle((0, 0), 1, 1, fc=heuristic_color)
+    p1 = pl.Rectangle((0, 0), 1, 1, fc=planning_fill_color)
+    p2 = pl.Rectangle((0, 0), 1, 1, fc=heuristic_fill_color)
 
     # Legend and axis labels
-    region_label = "95% KDE" if simulation_region == "kde" else "95% CR"
-    pl.legend(
-        [p1, p2, p3],
-        [f"Planning ({region_label})", f"Vector nav. ({region_label})", "Data"],
-        loc=2,
-    )
+    if show_legend:
+        region_label = "95% KDE" if simulation_region == "kde" else "95% CR"
+        handles = [p1, p2]
+        labels = [f"Planning ({region_label})", f"Vector nav. ({region_label})"]
+        if plot_data:
+            handles.append(p3)
+            labels.append("Data")
+        pl.legend(handles, labels, loc=2)
 
     pl.xlabel("Planning index", weight="bold")
     pl.ylabel("Vector navigation index", weight="bold")
     pl.title("Planning vs vector navigation choice index")
     pl.gca().set_aspect("equal")
-    pl.xlim(0, 1.02)
-    pl.ylim(0, 1.02)
+    pl.xlim(0, 1)
+    pl.ylim(0, 1)
 
 
 def orthogonal_arrows_plot(sessions, maze, colors="dark"):
