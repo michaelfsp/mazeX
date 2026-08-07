@@ -121,7 +121,7 @@ def load_session(
     # iterate over trials
     trial_count = 0
     search_t_start = None  # for the very first trial of the session the time to reconstruct past steps from, as for determininig the previous_loc of the initial step, is the beginning of the session. For that we need to pass None
-    for i, tgoal in enumerate(zip(arduino_data.reward_event_times[1:-1], goals[1:-1])):
+    for i, tgoal in enumerate(zip(arduino_data.reward_event_times[1:], goals[1:])):
         # counters
         trial_count += 1
 
