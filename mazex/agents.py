@@ -757,6 +757,9 @@ class Agent:
 
     def choice_probs(self, values, debug=False):
         """Return choice probabilities given edge_values.
+
+        Use beta=1 for fitted additive logits. Other softmax temperatures
+        rescale every term in the evaluated action values together.
         Inputs:
         -------
         values : list or Numpy array
@@ -1064,10 +1067,18 @@ class Agent:
         return session
 
 
+def navigation_action_values(advantage, navigation_weight, penalties):
+    """Combine navigation and already-weighted action costs before choice."""
+    return navigation_weight * np.asarray(advantage) - penalties
+
+
 class HeuristicAgent(Agent):
+    # Pickles written before navigation weights were introduced use unit weight.
+    navigation_weight = 1.0
+
     def __init__(self, beta=1, xi=0, loc=None, penalty_criterium='node',
             penalty_type='exponential', heading=None, distribution='cos',
-            kappa=None, maze_size=6):
+            kappa=None, maze_size=6, navigation_weight=1.):
         """Creates an agent that follows a directional heuristic.
 
         Parameters:
@@ -1083,6 +1094,7 @@ class HeuristicAgent(Agent):
                 penalty_criterium=penalty_criterium, penalty_type=penalty_type,
                 heading=heading)
 
+        self.navigation_weight = navigation_weight
         self.distribution = distribution
         self.kappa = kappa
         if self.kappa and distribution == 'vonmises':
@@ -1161,15 +1173,8 @@ class HeuristicAgent(Agent):
                  for n in nodeslist]
             )
 
-        if penalties:
-            penalties = self.penalty_factor(nodeslist)
-
-            values = dist_val - penalties
-
-        else:
-            values = dist_val
-
-        return values
+        costs = self.penalty_factor(nodeslist) if penalties else 0.
+        return navigation_action_values(dist_val, self.navigation_weight, costs)
 
 class ManhattanAgent(Agent):
     def __init__(self, beta=1, xi=0, loc=None, penalty_criterium='node',
@@ -1376,9 +1381,12 @@ class AStarAgent(Agent):
         return values
 
 class OmniscientAgent(Agent):
+    # Pickles written before navigation weights were introduced use unit weight.
+    navigation_weight = 1.0
+
     def __init__(self, maze, loc=None, beta=1, xi=0,
             penalty_criterium='node', penalty_type='exponential',
-            heading=None):
+            heading=None, navigation_weight=1.):
         """Creates an agent that has full knowledge of the maze and
         uses Graph Theory algorithms to determine the shortest path
         to goal"""
@@ -1387,6 +1395,7 @@ class OmniscientAgent(Agent):
                 penalty_criterium=penalty_criterium,
                 penalty_type=penalty_type, heading=heading)
 
+        self.navigation_weight = navigation_weight
         self.maze = maze
 
     def evaluate(self, nodeslist, goal, penalties=True):
@@ -1405,16 +1414,8 @@ class OmniscientAgent(Agent):
             else:
                 values.append(-1)
 
-        # penalties are only relevant when there is exploration, i.e.,
-        #  beta < +inf
-        if penalties:
-            penalties = self.penalty_factor(nodeslist)
-
-            values -= penalties
-
-        values = np.array(values)
-
-        return values
+        costs = self.penalty_factor(nodeslist) if penalties else 0.
+        return navigation_action_values(values, self.navigation_weight, costs)
 
     def plan_path(self, goal, maze):
         """Populates _step_cache with a series of nodes along the

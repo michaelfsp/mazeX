@@ -69,10 +69,14 @@ def _arrows_plot2_simulate_beta(args):
 
     coords = []
 
+    weighted = _ARROWS_PLOT2_PARALLEL_STATE["sweep_navigation_weight"]
+    temperature = 1.0 if weighted else beta
+    navigation_weight = beta if weighted else 1.0
     for goals in goalz:
         if agent_type == "heuristic":
             agent = HeuristicAgent(
-                beta=beta,
+                beta=temperature,
+                navigation_weight=navigation_weight,
                 xi=xi,
                 penalty_type=penalty_type,
                 heading="^",
@@ -82,7 +86,8 @@ def _arrows_plot2_simulate_beta(args):
         elif agent_type == "omniscient":
             agent = OmniscientAgent(
                 maze,
-                beta=beta,
+                beta=temperature,
+                navigation_weight=navigation_weight,
                 xi=xi,
                 penalty_type=penalty_type,
                 heading="^",
@@ -606,7 +611,23 @@ def arrows_plot2(
     show_legend=True,
     axes_facecolor=None,
     random_seed=None,
+    heuristic_navigation_weights=None,
+    omniscient_navigation_weights=None,
 ):
+    """Sweep inverse temperatures or supply both independent navigation-weight grids.
+
+    Navigation-weight sweeps apply the unit-temperature softmax to weighted
+    action values. With penalty_type="last", xi is the fixed U-turn cost.
+    """
+    sweep_navigation_weight = heuristic_navigation_weights is not None
+    if sweep_navigation_weight != (omniscient_navigation_weights is not None):
+        raise ValueError("Supply both navigation-weight grids")
+    if sweep_navigation_weight:
+        if heuristic_betas is not None or omniscient_betas is not None:
+            raise ValueError("Choose navigation weights or inverse temperatures")
+        heuristic_betas = heuristic_navigation_weights
+        omniscient_betas = omniscient_navigation_weights
+
     # TODO: let user input control msession and hsession as function inputs
 
     sns.set(context="notebook", font_scale=1.3, rc={"axes.titleweight": "bold"})
@@ -749,6 +770,7 @@ def arrows_plot2(
             "goalz": goalz,
             "spatial_distance": spatial_distance,
             "first_exit_only": first_exit_only,
+            "sweep_navigation_weight": sweep_navigation_weight,
             "xi": xi,
             "penalty_type": penalty_type,
             "max_trial_steps": max_trial_steps,
@@ -862,7 +884,8 @@ def arrows_plot2(
         )
 
     hcenters = [c.tolist() for c in hcenters]
-    hcenters.insert(0, (0, 0))
+    if not sweep_navigation_weight:
+        hcenters.insert(0, (0, 0))
     hcenters = np.array(hcenters)
     (p2_,) = pl.plot(
         hcenters[:, 0], hcenters[:, 1], color=heuristic_color, linestyle="--", zorder=1
@@ -902,7 +925,8 @@ def arrows_plot2(
         )
 
     mcenters = [c.tolist() for c in mcenters]
-    mcenters.insert(0, (0, 0))
+    if not sweep_navigation_weight:
+        mcenters.insert(0, (0, 0))
     mcenters = np.array(mcenters)
     (p1_,) = pl.plot(
         mcenters[:, 0], mcenters[:, 1], color=planning_color, linestyle="--", zorder=1
