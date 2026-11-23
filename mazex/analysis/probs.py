@@ -133,6 +133,28 @@ def shapely_ellipse(center, major_axis, minor_axis, rotation=0.0):
     return el
 
 
+def _kde_mass_threshold(kde, level, gridsize):
+    """Density cutoff enclosing level of a bivariate Gaussian KDE on its full support."""
+    from scipy.ndimage import gaussian_filter
+
+    # In kernel principal coordinates the Gaussian is separable. Pad every
+    # sample by six marginal SDs and retain at least eight bins per kernel SD.
+    eigenvalues, axes = np.linalg.eigh(kde.covariance)
+    sd = np.sqrt(eigenvalues)
+    samples = kde.dataset.T @ axes
+    low = samples.min(axis=0) - 6 * sd
+    high = samples.max(axis=0) + 6 * sd
+    bins = np.maximum(gridsize, np.ceil(8 * (high - low) / sd).astype(int))
+    width = (high - low) / bins
+    mass, _, _ = np.histogram2d(
+        *samples.T, bins=bins, range=list(zip(low, high)), weights=kde.weights
+    )
+    mass = gaussian_filter(mass, sd / width, mode="constant", truncate=6)
+    ordered = np.sort(mass.ravel())[::-1]
+    index = np.searchsorted(ordered.cumsum(), level * ordered.sum())
+    return ordered[min(index, len(ordered) - 1)] / width.prod()
+
+
 def _plot_kde_region(
     points,
     color,
@@ -174,23 +196,19 @@ def _plot_kde_region(
         )
         return None
 
+    threshold = _kde_mass_threshold(kde, level, gridsize)
     x_grid = np.linspace(0, 1.02, gridsize)
     y_grid = np.linspace(0, 1.02, gridsize)
     x_mesh, y_mesh = np.meshgrid(x_grid, y_grid)
     grid_points = np.vstack([x_mesh.ravel(), y_mesh.ravel()])
     density = kde(grid_points).reshape(x_mesh.shape)
+    density_max = density.max()
 
-    density_flat = density.ravel()
-    density_order = np.argsort(density_flat)[::-1]
-    density_sorted = density_flat[density_order]
-    density_mass = density_sorted / density_sorted.sum()
-    cumulative_mass = np.cumsum(density_mass)
-    threshold_index = np.searchsorted(cumulative_mass, level, side="left")
-    threshold_index = min(threshold_index, len(density_sorted) - 1)
-    threshold = density_sorted[threshold_index]
-    density_max = density_sorted[0]
+    if threshold >= density_max:
+        # The full-plane region lies outside the plotting grid.
+        return None
 
-    if not np.isfinite(threshold) or threshold >= density_max:
+    if not np.isfinite(threshold):
         ax.plot(
             points[:, 0],
             points[:, 1],
