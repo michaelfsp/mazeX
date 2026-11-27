@@ -1,5 +1,33 @@
-[tool.pyright]
-venvPath = "/home/michael/micromamba/envs/"
-venv = "m311"
-pythonVersion = "3.11"
-pythonPlatform = "Linux"
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mazex"
+version = "1.0.0"
+description = "NetworkX-derived library for maze topologies, navigation agents, and behavioural analysis"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "Michael Pereira", email = "michael.fsp@gmail.com" }]
+dependencies = [
+    "descartes",
+    "h5py",
+    "matplotlib",
+    "networkx",
+    "numba",
+    "numpy<2",
+    "pandas<3",
+    "pillow",
+    "ray",
+    "scikit-learn",
+    "scipy",
+    "seaborn",
+    "shapely<2",
+    "svgpath2mpl<1",
+    "tqdm",
+]
+
+[tool.setuptools.packages.find]
+include = ["mazex*"]
+exclude = ["*.tests*", "*ipynb_checkpoints*"]

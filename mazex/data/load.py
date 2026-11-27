@@ -3,7 +3,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
-import rsync
+from mazex.data import rsync
 from tqdm import tqdm
 from tqdm.contrib import tenumerate
 
